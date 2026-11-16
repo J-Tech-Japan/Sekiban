@@ -56,9 +56,9 @@ public partial class ObservedPositionClockSkewTests
         var largest = await rig.IncrementAsync(fast, b, "b");
         if (serialized)
         {
-            var result = await ((ISerializedSekibanDcbExecutor)slow).CommitSerializableEventsAsync(
+            var result = await ResultBox.WrapTry(() => ((ISerializedSekibanDcbExecutor)slow).CommitSerializableEventsAsync(
                 new SerializedCommitRequest([Candidate(rig, a, "one"), Candidate(rig, b, "two")],
-                    [new(a.GetTag(), first.EventId), new(b.GetTag(), largest.EventId)]));
+                    [new(a.GetTag(), first.EventId), new(b.GetTag(), largest.EventId)])));
             Assert.True(result.IsSuccess);
         }
         else
@@ -74,7 +74,7 @@ public partial class ObservedPositionClockSkewTests
         }
         Assert.Equal(new[] { long.Parse(largest.EventId[..19]) }, generator.Seeds);
         var events = (await rig.Store.ReadAllSerializableEventsAsync().AsResultBoxAsync()).GetValue()
-            .Where(e => ((ProbeCounterIncremented)e.ToEvent(rig.Domain.EventTypes).GetValue().Payload).Label is "one" or "two");
+            .Where(e => ((ProbeCounterIncremented)e.ToEvent(rig.Domain.EventTypes).Payload).Label is "one" or "two");
         Assert.Equal(2, events.Count());
         Assert.All(events, e => Assert.True(string.CompareOrdinal(e.SortableUniqueIdValue, largest.EventId) > 0));
     }
@@ -97,8 +97,8 @@ public partial class ObservedPositionClockSkewTests
         var fabricated = Position(T0.AddYears(1).Ticks);
         if (serialized)
         {
-            var result = await ((ISerializedSekibanDcbExecutor)slow).CommitSerializableEventsAsync(
-                new SerializedCommitRequest([Candidate(rig, tag, "blocked")], [new(tag.GetTag(), fabricated)]));
+            var result = await ResultBox.WrapTry(() => ((ISerializedSekibanDcbExecutor)slow).CommitSerializableEventsAsync(
+                new SerializedCommitRequest([Candidate(rig, tag, "blocked")], [new(tag.GetTag(), fabricated)])));
             Assert.False(result.IsSuccess);
         }
         else
@@ -126,8 +126,8 @@ public partial class ObservedPositionClockSkewTests
         async Task<bool> Write()
         {
             if (serialized)
-                return (await ((ISerializedSekibanDcbExecutor)slow).CommitSerializableEventsAsync(
-                    new SerializedCommitRequest([Candidate(rig, tag, "retry")], [new(tag.GetTag(), head.EventId)]))).IsSuccess;
+                return (await ResultBox.WrapTry(() => ((ISerializedSekibanDcbExecutor)slow).CommitSerializableEventsAsync(
+                    new SerializedCommitRequest([Candidate(rig, tag, "retry")], [new(tag.GetTag(), head.EventId)])))).IsSuccess;
             return (await slow.ExecuteAsync(new ProbeIncrement(), async (_, ctx) =>
             {
                 Assert.True((await ctx.GetStateAsync<ProbeCounterProjector>(tag)).IsSuccess);

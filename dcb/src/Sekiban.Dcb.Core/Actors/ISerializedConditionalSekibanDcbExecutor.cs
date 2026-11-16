@@ -1,4 +1,3 @@
-using ResultBoxes;
 using Sekiban.Dcb.Commands;
 namespace Sekiban.Dcb.Actors;
 
@@ -11,7 +10,7 @@ namespace Sekiban.Dcb.Actors;
 /// </summary>
 public interface ISerializedConditionalSekibanDcbExecutor
 {
-    Task<ResultBox<SerializedConditionalCommitResult>> CommitSerializableEventConditionallyAsync(
+    Task<SerializedConditionalCommitResult> CommitSerializableEventConditionallyAsync(
         SerializedConditionalCommitRequest request,
         CancellationToken cancellationToken = default);
 }

@@ -52,8 +52,8 @@ public class SafeUnsafeStateAccessorTests
         await actor.AddEventsAsync(new[] { oldEvent, recentEvent });
 
         // Get both safe and unsafe states
-        var safeStateResult = await actor.GetStateAsync(canGetUnsafeState: false);
-        var unsafeStateResult = await actor.GetUnsafeStateAsync();
+        var safeStateResult = await ResultBox.WrapTry(() => actor.GetStateAsync(canGetUnsafeState: false));
+        var unsafeStateResult = await ResultBox.WrapTry(() => actor.GetUnsafeStateAsync());
 
         // Assert
         Assert.True(safeStateResult.IsSuccess);
@@ -92,8 +92,8 @@ public class SafeUnsafeStateAccessorTests
         await actor.AddEventsAsync(new[] { recentEvent });
 
         // Get initial states
-        var initialSafeResult = await actor.GetStateAsync(canGetUnsafeState: false);
-        var initialUnsafeResult = await actor.GetUnsafeStateAsync();
+        var initialSafeResult = await ResultBox.WrapTry(() => actor.GetStateAsync(canGetUnsafeState: false));
+        var initialUnsafeResult = await ResultBox.WrapTry(() => actor.GetUnsafeStateAsync());
 
         var initialSafePayload = initialSafeResult.GetValue().Payload as EfficientTestProjector;
         var initialUnsafePayload = initialUnsafeResult.GetValue().Payload as EfficientTestProjector;
@@ -113,8 +113,8 @@ public class SafeUnsafeStateAccessorTests
         await actor.AddEventsAsync(new[] { oldEvent });
 
         // Get final states
-        var finalSafeResult = await actor.GetStateAsync(canGetUnsafeState: false);
-        var finalUnsafeResult = await actor.GetUnsafeStateAsync();
+        var finalSafeResult = await ResultBox.WrapTry(() => actor.GetStateAsync(canGetUnsafeState: false));
+        var finalUnsafeResult = await ResultBox.WrapTry(() => actor.GetUnsafeStateAsync());
 
         var finalSafePayload = finalSafeResult.GetValue().Payload as EfficientTestProjector;
         var finalUnsafePayload = finalUnsafeResult.GetValue().Payload as EfficientTestProjector;
@@ -144,8 +144,8 @@ public class SafeUnsafeStateAccessorTests
         await actor.AddEventsAsync(new[] { updateEvent });
 
         // Get states
-        var safeStateResult = await actor.GetStateAsync(canGetUnsafeState: false);
-        var unsafeStateResult = await actor.GetUnsafeStateAsync();
+        var safeStateResult = await ResultBox.WrapTry(() => actor.GetStateAsync(canGetUnsafeState: false));
+        var unsafeStateResult = await ResultBox.WrapTry(() => actor.GetUnsafeStateAsync());
 
         var safePayload = safeStateResult.GetValue().Payload as EfficientTestProjector;
         var unsafePayload = unsafeStateResult.GetValue().Payload as EfficientTestProjector;
@@ -181,7 +181,7 @@ public class SafeUnsafeStateAccessorTests
         await actor.AddEventsAsync(new[] { event1 }); // Duplicate
 
         // Get state
-        var stateResult = await actor.GetStateAsync();
+        var stateResult = await ResultBox.WrapTry(() => actor.GetStateAsync());
         var payload = stateResult.GetValue().Payload as EfficientTestProjector;
 
         // Should only have one item (duplicate prevented)

@@ -1,4 +1,3 @@
-using ResultBoxes;
 using Sekiban.Dcb.Boundaries;
 using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Capabilities;
@@ -15,7 +14,7 @@ namespace Sekiban.Dcb.Actors;
 
 /// <summary>
 ///     Exception-based implementation of ISekibanExecutor
-///     Wraps CoreGeneralSekibanExecutor and unwraps ResultBox, throwing exceptions on errors
+///     Wraps CoreGeneralSekibanExecutor; failures are thrown as the exceptions the core raises
 ///     This implementation uses exceptions for all error handling
 /// </summary>
 public class GeneralSekibanExecutor : ISekibanExecutor, ISerializedSekibanDcbExecutor, IExecutorRuntimeDescriptorProvider,
@@ -165,22 +164,11 @@ public class GeneralSekibanExecutor : ISekibanExecutor, ISerializedSekibanDcbExe
         TCommand command,
         CancellationToken cancellationToken = default) where TCommand : ICommandWithHandler<TCommand>
     {
-        // Create a wrapper that converts ICommandContext to ICoreCommandContext and handles exceptions
-        Func<TCommand, ICoreCommandContext, Task<ResultBox<EventOrNone>>> coreHandler = async (cmd, coreCtx) =>
-        {
-            try
-            {
-                var contextAdapter = new CommandContextAdapter(coreCtx);
-                var result = await TCommand.HandleAsync(cmd, contextAdapter);
-                return ResultBox.FromValue(result);
-            }
-            catch (Exception ex)
-            {
-                return ResultBox<EventOrNone>.Error(ex);
-            }
-        };
+        // Create a wrapper that converts ICommandContext to ICoreCommandContext
+        Func<TCommand, ICoreCommandContext, Task<EventOrNone>> coreHandler = (cmd, coreCtx) =>
+            TCommand.HandleAsync(cmd, new CommandContextAdapter(coreCtx));
 
-        return await GuardedUnwrap.UnwrapAsync(
+        return await GuardedUnwrap.AwaitAsync(
             _core.ExecuteAsync(command, coreHandler, cancellationToken),
             new BoundaryContext("ISekibanExecutor.ExecuteAsync", typeof(TCommand).Name));
     }
@@ -193,22 +181,11 @@ public class GeneralSekibanExecutor : ISekibanExecutor, ISerializedSekibanDcbExe
         Func<TCommand, ICommandContext, Task<EventOrNone>> handlerFunc,
         CancellationToken cancellationToken = default) where TCommand : ICommand
     {
-        // Wrap the handler to convert ICommandContext to ICoreCommandContext and handle exceptions
-        Func<TCommand, ICoreCommandContext, Task<ResultBox<EventOrNone>>> coreHandler = async (cmd, coreCtx) =>
-        {
-            try
-            {
-                var contextAdapter = new CommandContextAdapter(coreCtx);
-                var result = await handlerFunc(cmd, contextAdapter);
-                return ResultBox.FromValue(result);
-            }
-            catch (Exception ex)
-            {
-                return ResultBox<EventOrNone>.Error(ex);
-            }
-        };
+        // Wrap the handler to convert ICommandContext to ICoreCommandContext
+        Func<TCommand, ICoreCommandContext, Task<EventOrNone>> coreHandler = (cmd, coreCtx) =>
+            handlerFunc(cmd, new CommandContextAdapter(coreCtx));
 
-        return await GuardedUnwrap.UnwrapAsync(
+        return await GuardedUnwrap.AwaitAsync(
             _core.ExecuteAsync(command, coreHandler, cancellationToken),
             new BoundaryContext("ISekibanExecutor.ExecuteAsync", typeof(TCommand).Name));
     }
@@ -220,21 +197,10 @@ public class GeneralSekibanExecutor : ISekibanExecutor, ISerializedSekibanDcbExe
         Func<ICommandContext, Task<EventOrNone>> handlerFunc,
         CancellationToken cancellationToken = default)
     {
-        Func<AnonymousCommand, ICoreCommandContext, Task<ResultBox<EventOrNone>>> coreHandler = async (_, coreCtx) =>
-        {
-            try
-            {
-                var contextAdapter = new CommandContextAdapter(coreCtx);
-                var result = await handlerFunc(contextAdapter);
-                return ResultBox.FromValue(result);
-            }
-            catch (Exception ex)
-            {
-                return ResultBox<EventOrNone>.Error(ex);
-            }
-        };
+        Func<AnonymousCommand, ICoreCommandContext, Task<EventOrNone>> coreHandler = (_, coreCtx) =>
+            handlerFunc(new CommandContextAdapter(coreCtx));
 
-        return await GuardedUnwrap.UnwrapAsync(
+        return await GuardedUnwrap.AwaitAsync(
             _core.ExecuteAsync(NoCommandInstance, coreHandler, cancellationToken),
             new BoundaryContext("ISekibanExecutor.ExecuteCommandAsync"));
     }
@@ -244,14 +210,14 @@ public class GeneralSekibanExecutor : ISekibanExecutor, ISerializedSekibanDcbExe
     /// </summary>
     public async Task<TagState> GetTagStateAsync(TagStateId tagStateId)
     {
-        return await GuardedUnwrap.UnwrapAsync(
+        return await GuardedUnwrap.AwaitAsync(
             _core.GetTagStateAsync(tagStateId),
             new BoundaryContext("ISekibanExecutor.GetTagStateAsync", tagStateId.GetTagStateId()));
     }
 
     public async Task<TagState> GetTagStateAsync(TagStateId tagStateId, CancellationToken cancellationToken)
     {
-        return await GuardedUnwrap.UnwrapAsync(
+        return await GuardedUnwrap.AwaitAsync(
             _core.GetTagStateAsync(tagStateId, cancellationToken),
             new BoundaryContext("ISekibanExecutor.GetTagStateAsync", tagStateId.GetTagStateId()));
     }
@@ -261,7 +227,7 @@ public class GeneralSekibanExecutor : ISekibanExecutor, ISerializedSekibanDcbExe
     /// </summary>
     public async Task<TResult> QueryAsync<TResult>(IQueryCommon<TResult> queryCommon) where TResult : notnull
     {
-        return await GuardedUnwrap.UnwrapAsync(
+        return await GuardedUnwrap.AwaitAsync(
             _core.QueryAsync(queryCommon),
             new BoundaryContext("ISekibanExecutor.QueryAsync", queryCommon?.GetType().Name));
     }
@@ -272,43 +238,49 @@ public class GeneralSekibanExecutor : ISekibanExecutor, ISerializedSekibanDcbExe
     public async Task<ListQueryResult<TResult>> QueryAsync<TResult>(IListQueryCommon<TResult> queryCommon)
         where TResult : notnull
     {
-        return await GuardedUnwrap.UnwrapAsync(
+        return await GuardedUnwrap.AwaitAsync(
             _core.QueryAsync(queryCommon),
             new BoundaryContext("ISekibanExecutor.QueryAsync (list)", queryCommon?.GetType().Name));
     }
 
     public async Task<string> GetLatestSortableUniqueIdAsync()
     {
-        return await GuardedUnwrap.UnwrapAsync(_core.GetLatestSortableUniqueIdAsync(), new BoundaryContext("ISekibanExecutor.GetLatestSortableUniqueIdAsync"));
+        return await GuardedUnwrap.AwaitAsync(_core.GetLatestSortableUniqueIdAsync(), new BoundaryContext("ISekibanExecutor.GetLatestSortableUniqueIdAsync"));
     }
 
     public async Task<ProjectionHeadStatus> GetProjectionHeadStatusAsync(
         string projectorName,
         string? expectedProjectorVersion = null)
     {
-        return await GuardedUnwrap.UnwrapAsync(
+        return await GuardedUnwrap.AwaitAsync(
             _core.GetProjectionHeadStatusAsync(projectorName, expectedProjectorVersion),
             new BoundaryContext("ISekibanExecutor.GetProjectionHeadStatusAsync", projectorName));
     }
 
     public async Task<EventStoreHeadStatus> GetEventStoreHeadStatusAsync(bool includeTotalEventCount = false)
     {
-        return await GuardedUnwrap.UnwrapAsync(_core.GetEventStoreHeadStatusAsync(includeTotalEventCount), new BoundaryContext("ISekibanExecutor.GetEventStoreHeadStatusAsync"));
+        return await GuardedUnwrap.AwaitAsync(_core.GetEventStoreHeadStatusAsync(includeTotalEventCount), new BoundaryContext("ISekibanExecutor.GetEventStoreHeadStatusAsync"));
     }
 
-    public Task<ResultBox<SerializableTagState>> GetSerializableTagStateAsync(TagStateId tagStateId) =>
-        _core.GetSerializableTagStateAsync(tagStateId);
+    public Task<SerializableTagState> GetSerializableTagStateAsync(TagStateId tagStateId) =>
+        GuardedUnwrap.AwaitAsync(
+            _core.GetSerializableTagStateAsync(tagStateId),
+            new BoundaryContext("ISerializedSekibanDcbExecutor.GetSerializableTagStateAsync", tagStateId.GetTagStateId()));
 
-    public Task<ResultBox<SerializedCommitResult>> CommitSerializableEventsAsync(
+    public Task<SerializedCommitResult> CommitSerializableEventsAsync(
         SerializedCommitRequest request,
         CancellationToken cancellationToken = default) =>
-        _core.CommitSerializableEventsAsync(request, cancellationToken);
+        GuardedUnwrap.AwaitAsync(
+            _core.CommitSerializableEventsAsync(request, cancellationToken),
+            new BoundaryContext("ISerializedSekibanDcbExecutor.CommitSerializableEventsAsync"));
 
     /// <summary>Opt-in V2 serialized commit with PostgreSQL's durable expected-tag-position protocol.</summary>
-    public Task<ResultBox<SerializedCommitResult>> CommitSerializableEventsWithExpectedTagPositionsAsync(
+    public Task<SerializedCommitResult> CommitSerializableEventsWithExpectedTagPositionsAsync(
         VersionedExpectedTagPositionSerializedCommitRequest request,
         CancellationToken cancellationToken = default) =>
-        _core.CommitSerializableEventsWithExpectedTagPositionsAsync(request, cancellationToken);
+        GuardedUnwrap.AwaitAsync(
+            _core.CommitSerializableEventsWithExpectedTagPositionsAsync(request, cancellationToken),
+            new BoundaryContext("ISerializedExpectedTagPositionSekibanDcbExecutor.CommitSerializableEventsWithExpectedTagPositionsAsync"));
 
     /// <summary>Opt-in: execute a self-handling command with conditional (unique-key) append options.</summary>
     public async Task<ExecutionResult> ExecuteAsync<TCommand>(
@@ -316,20 +288,9 @@ public class GeneralSekibanExecutor : ISekibanExecutor, ISerializedSekibanDcbExe
         CommandExecutionOptions options,
         CancellationToken cancellationToken = default) where TCommand : ICommandWithHandler<TCommand>
     {
-        Func<TCommand, ICoreCommandContext, Task<ResultBox<EventOrNone>>> coreHandler = async (cmd, coreCtx) =>
-        {
-            try
-            {
-                var contextAdapter = new CommandContextAdapter(coreCtx);
-                var result = await TCommand.HandleAsync(cmd, contextAdapter);
-                return ResultBox.FromValue(result);
-            }
-            catch (Exception ex)
-            {
-                return ResultBox<EventOrNone>.Error(ex);
-            }
-        };
-        return await GuardedUnwrap.UnwrapAsync(
+        Func<TCommand, ICoreCommandContext, Task<EventOrNone>> coreHandler = (cmd, coreCtx) =>
+            TCommand.HandleAsync(cmd, new CommandContextAdapter(coreCtx));
+        return await GuardedUnwrap.AwaitAsync(
             _core.ExecuteAsync(command, coreHandler, options, cancellationToken),
             new BoundaryContext("ISekibanExecutor.ExecuteAsync", typeof(TCommand).Name));
     }
@@ -341,29 +302,20 @@ public class GeneralSekibanExecutor : ISekibanExecutor, ISerializedSekibanDcbExe
         CommandExecutionOptions options,
         CancellationToken cancellationToken = default) where TCommand : ICommand
     {
-        Func<TCommand, ICoreCommandContext, Task<ResultBox<EventOrNone>>> coreHandler = async (cmd, coreCtx) =>
-        {
-            try
-            {
-                var contextAdapter = new CommandContextAdapter(coreCtx);
-                var result = await handlerFunc(cmd, contextAdapter);
-                return ResultBox.FromValue(result);
-            }
-            catch (Exception ex)
-            {
-                return ResultBox<EventOrNone>.Error(ex);
-            }
-        };
-        return await GuardedUnwrap.UnwrapAsync(
+        Func<TCommand, ICoreCommandContext, Task<EventOrNone>> coreHandler = (cmd, coreCtx) =>
+            handlerFunc(cmd, new CommandContextAdapter(coreCtx));
+        return await GuardedUnwrap.AwaitAsync(
             _core.ExecuteAsync(command, coreHandler, options, cancellationToken),
             new BoundaryContext("ISekibanExecutor.ExecuteAsync", typeof(TCommand).Name));
     }
 
     /// <summary>Opt-in WASM boundary: conditional (unique-key) single-event serialized commit.</summary>
-    public Task<ResultBox<SerializedConditionalCommitResult>> CommitSerializableEventConditionallyAsync(
+    public Task<SerializedConditionalCommitResult> CommitSerializableEventConditionallyAsync(
         SerializedConditionalCommitRequest request,
         CancellationToken cancellationToken = default) =>
-        _core.CommitSerializableEventConditionallyAsync(request, cancellationToken);
+        GuardedUnwrap.AwaitAsync(
+            _core.CommitSerializableEventConditionallyAsync(request, cancellationToken),
+            new BoundaryContext("ISerializedConditionalSekibanDcbExecutor.CommitSerializableEventConditionallyAsync"));
 
     private sealed record AnonymousCommand : ICommand;
 }

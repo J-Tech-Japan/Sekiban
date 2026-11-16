@@ -176,8 +176,8 @@ public class DualStateProjectionWrapperInputMutationTests
 
         await ApplyReportedTrace(actor);
 
-        var safe = await actor.GetStateAsync(canGetUnsafeState: false);
-        var served = await actor.GetStateAsync(canGetUnsafeState: true);
+        var safe = await ResultBox.WrapTry(() => actor.GetStateAsync(canGetUnsafeState: false));
+        var served = await ResultBox.WrapTry(() => actor.GetStateAsync(canGetUnsafeState: true));
         Assert.Equal(0, Assert.IsType<MarkedMutatingCounter>(safe.GetValue().Payload).Total);
         Assert.Equal(3, Assert.IsType<MarkedMutatingCounter>(served.GetValue().Payload).Total);
     }
@@ -219,8 +219,8 @@ public class DualStateProjectionWrapperInputMutationTests
 
         await ApplyReportedTrace(actor);
 
-        var safe = await actor.GetStateAsync(canGetUnsafeState: false);
-        var served = await actor.GetStateAsync(canGetUnsafeState: true);
+        var safe = await ResultBox.WrapTry(() => actor.GetStateAsync(canGetUnsafeState: false));
+        var served = await ResultBox.WrapTry(() => actor.GetStateAsync(canGetUnsafeState: true));
         Assert.Equal(5, Assert.IsType<UnmarkedMutatingCounter>(safe.GetValue().Payload).Total);
         Assert.Equal(5, Assert.IsType<UnmarkedMutatingCounter>(served.GetValue().Payload).Total);
         Assert.Equal(0, UnmarkedMutatingCounter.SerializeCount);
@@ -313,8 +313,8 @@ public class DualStateProjectionWrapperInputMutationTests
 
         await ApplyReportedTrace(actor);
 
-        var safe = await actor.GetStateAsync(canGetUnsafeState: false);
-        var served = await actor.GetStateAsync(canGetUnsafeState: true);
+        var safe = await ResultBox.WrapTry(() => actor.GetStateAsync(canGetUnsafeState: false));
+        var served = await ResultBox.WrapTry(() => actor.GetStateAsync(canGetUnsafeState: true));
         Assert.Equal(0, Assert.IsType<PureCounter>(safe.GetValue().Payload).Total);
         Assert.Equal(3, Assert.IsType<PureCounter>(served.GetValue().Payload).Total);
     }

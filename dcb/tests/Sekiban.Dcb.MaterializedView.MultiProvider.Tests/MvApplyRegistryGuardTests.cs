@@ -431,7 +431,7 @@ public abstract class MvApplyRegistryGuardTests(MultiProviderFixtureBase fixture
     };
 
     private Task<MvCatchUpResult> CompleteCoreAsync<T>(MvExecutorBase<T> executor, IMvApplyHost host, IReadOnlyList<SerializableEvent> events, IReadOnlyList<MvRegistryEntry> original) where T : DbConnection =>
-        executor.CompleteCatchUpInternalAsync(host, Service, ResultBox.FromValue<IEnumerable<SerializableEvent>>(events),
+        executor.CompleteCatchUpInternalAsync(host, Service, events, null,
             MvProjectionStatusSnapshot.FromEntries(original), Token, true, original);
 
     private Task<MvCatchUpResult> StreamAsync(IMvExecutor executor, IMvApplyHost host, IReadOnlyList<SerializableEvent> events, IReadOnlyList<MvRegistryEntry> original) => executor switch
@@ -510,8 +510,8 @@ public abstract class MvApplyRegistryGuardTests(MultiProviderFixtureBase fixture
         protected override MvDbType DatabaseType => fixture.DatabaseTypeForTests;
         public Task<MvCatchUpResult> CompleteAsync(IMvApplyHost host, MvProjectionStatusSnapshot snapshot, bool additiveOverload, CancellationToken ct) =>
             additiveOverload
-                ? CompleteCatchUpAsync(host, Service, ResultBox.FromValue<IEnumerable<SerializableEvent>>([]), snapshot, ct, classifyFailures: true)
-                : CompleteCatchUpAsync(host, Service, ResultBox.FromValue<IEnumerable<SerializableEvent>>([]), snapshot, ct);
+                ? CompleteCatchUpAsync(host, Service, Array.Empty<SerializableEvent>(), snapshot, ct, classifyFailures: true)
+                : CompleteCatchUpAsync(host, Service, Array.Empty<SerializableEvent>(), snapshot, ct);
         public override Task<MvCatchUpResult> CatchUpOnceAsync(IMvApplyHost host, string? serviceId = null, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         protected override Task<DbConnection> OpenConnectionAsync(CancellationToken ct) => fixture.OpenConnectionAsync();
         protected override IMvApplyQueryPort CreateQueryPort(DbConnection connection, IDbTransaction transaction) => throw new NotSupportedException();

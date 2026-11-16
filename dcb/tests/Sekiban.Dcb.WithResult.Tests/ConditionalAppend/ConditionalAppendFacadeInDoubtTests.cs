@@ -110,8 +110,8 @@ public class ConditionalAppendFacadeInDoubtTests
             "TestProvider", "svc-42", Guid.NewGuid(), ConditionalAppendInDoubtReason.AmbiguousAfterWrite, cause);
         var (executor, _) = NewExecutor(_ => ResultBox.Error<ConditionalAppendReceipt>(indoubt));
 
-        var result = await ((ISerializedConditionalSekibanDcbExecutor)executor)
-            .CommitSerializableEventConditionallyAsync(SerializedRequest());
+        var result = await ResultBox.WrapTry(() => ((ISerializedConditionalSekibanDcbExecutor)executor)
+            .CommitSerializableEventConditionallyAsync(SerializedRequest()));
 
         Assert.False(result.IsSuccess);
         var ex = Assert.IsType<ConditionalAppendInDoubtException>(result.GetException());
@@ -139,8 +139,8 @@ public class ConditionalAppendFacadeInDoubtTests
         core.GetType().GetProperty("ConditionalSortableIdFactory", nonPublicInstance)!
             .SetValue(core, (Func<string>)(() => { sortableAllocations++; return SortableUniqueId.GenerateNew(); }));
 
-        var result = await ((ISerializedConditionalSekibanDcbExecutor)executor)
-            .CommitSerializableEventConditionallyAsync(SerializedRequest(version: 999));
+        var result = await ResultBox.WrapTry(() => ((ISerializedConditionalSekibanDcbExecutor)executor)
+            .CommitSerializableEventConditionallyAsync(SerializedRequest(version: 999)));
 
         Assert.False(result.IsSuccess);
         Assert.IsType<UnsupportedSerializedCommitVersionException>(result.GetException());

@@ -1,5 +1,3 @@
-using ResultBoxes;
-
 namespace Sekiban.Dcb.Actors;
 
 /// <summary>
@@ -8,11 +6,11 @@ namespace Sekiban.Dcb.Actors;
 /// </summary>
 public interface IProjectionStatusReader
 {
-    Task<ResultBox<IReadOnlyList<ProjectionStatusSnapshot>>> ReadAsync(
+    Task<IReadOnlyList<ProjectionStatusSnapshot>> ReadAsync(
         ProjectionStatusReadRequest? request = null,
         CancellationToken cancellationToken = default);
 
-    Task<ResultBox<IReadOnlyList<ProjectionStatusSnapshot>>> GetSnapshotsAsync(
+    Task<IReadOnlyList<ProjectionStatusSnapshot>> GetSnapshotsAsync(
         ProjectionStatusReadRequest? request = null,
         CancellationToken cancellationToken = default) =>
         ReadAsync(request, cancellationToken);
@@ -28,11 +26,11 @@ public interface ISerializedProjectionStatusReader
     ///     Accepts a raw V1 request envelope. The version discriminator and request shape are validated before the
     ///     underlying reader is invoked, so rejected input performs zero status-store or event-store reads.
     /// </summary>
-    Task<ResultBox<byte[]>> AcceptAsync(
+    Task<byte[]> AcceptAsync(
         ReadOnlyMemory<byte> utf8Json,
         CancellationToken cancellationToken = default);
 
-    Task<ResultBox<byte[]>> ReadSerializedAsync(
+    Task<byte[]> ReadSerializedAsync(
         ProjectionStatusReadRequest? request = null,
         CancellationToken cancellationToken = default);
 
@@ -40,14 +38,14 @@ public interface ISerializedProjectionStatusReader
     ///     Optional V2 serialized observation surface. Existing implementers remain binary compatible; implementations
     ///     that do not support V2 report a typed unsupported-version error rather than changing V1 behavior.
     /// </summary>
-    Task<ResultBox<byte[]>> ReadSerializedV2Async(
+    Task<byte[]> ReadSerializedV2Async(
         ProjectionStatusReadRequest? request = null,
         CancellationToken cancellationToken = default) =>
-        Task.FromResult(ResultBox.Error<byte[]>(
+        Task.FromException<byte[]>(
             new UnsupportedSerializedProjectionStatusVersionException(
-                SerializedProjectionStatusEnvelopeV2.CurrentVersion)));
+                SerializedProjectionStatusEnvelopeV2.CurrentVersion));
 
-    Task<ResultBox<byte[]>> GetSerializedSnapshotsAsync(
+    Task<byte[]> GetSerializedSnapshotsAsync(
         ProjectionStatusReadRequest? request = null,
         CancellationToken cancellationToken = default) =>
         ReadSerializedAsync(request, cancellationToken);

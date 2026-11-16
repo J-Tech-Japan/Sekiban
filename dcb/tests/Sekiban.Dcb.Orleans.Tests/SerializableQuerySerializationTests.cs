@@ -46,7 +46,7 @@ public class SerializableQuerySerializationTests
         var roundTripBox = await serialized.ToQueryResultAsync(_domainTypes);
 
         Assert.True(roundTripBox.IsSuccess);
-        var typedBox = roundTripBox.GetValue().ToTypedResult<TestResult>();
+        var typedBox = ResultBox.WrapTry(() => roundTripBox.GetValue().ToTypedResult<TestResult>());
         Assert.True(typedBox.IsSuccess);
         Assert.Equal(result, typedBox.GetValue());
     }

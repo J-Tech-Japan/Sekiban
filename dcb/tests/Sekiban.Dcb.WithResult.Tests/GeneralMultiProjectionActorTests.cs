@@ -3,6 +3,7 @@ using Dcb.Domain.Student;
 using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Events;
+using ResultBoxes;
 namespace Sekiban.Dcb.Tests;
 
 public class GeneralMultiProjectionActorTests
@@ -41,7 +42,7 @@ public class GeneralMultiProjectionActorTests
         await actor.AddEventsAsync(new[] { MakeEvent(new StudentDroppedFromClassRoom(s1, Guid.NewGuid())) });
         await actor.AddEventsAsync(new[] { MakeEvent(new StudentCreated(s2, "Hanako", 1)) });
         await actor.AddEventsAsync(new[] { MakeEvent(new StudentEnrolledInClassRoom(s2, Guid.NewGuid())) });
-        var envRb = await actor.GetSnapshotAsync();
+        var envRb = await ResultBox.WrapTry(() => actor.GetSnapshotAsync());
         Assert.True(envRb.IsSuccess);
         var env = envRb.GetValue();
         Assert.False(env.IsOffloaded);
@@ -73,7 +74,7 @@ public class GeneralMultiProjectionActorTests
         var s1 = Guid.NewGuid();
         await actor.AddEventsAsync(new[] { MakeEvent(new StudentCreated(s1, "Hanako", 1)) });
         await actor.AddEventsAsync(new[] { MakeEvent(new StudentEnrolledInClassRoom(s1, Guid.NewGuid())) });
-        var savedEnvRb = await actor.GetSnapshotAsync();
+        var savedEnvRb = await ResultBox.WrapTry(() => actor.GetSnapshotAsync());
         Assert.True(savedEnvRb.IsSuccess);
         var savedEnv = savedEnvRb.GetValue();
         Assert.False(savedEnv.IsOffloaded);
@@ -83,7 +84,7 @@ public class GeneralMultiProjectionActorTests
         await actor2.SetSnapshotAsync(new Sekiban.Dcb.Snapshots.SerializableMultiProjectionStateEnvelope(false, saved, null));
 
         await actor2.AddEventsAsync(new[] { MakeEvent(new StudentDroppedFromClassRoom(s1, Guid.NewGuid())) });
-        var envRb2 = await actor2.GetSnapshotAsync();
+        var envRb2 = await ResultBox.WrapTry(() => actor2.GetSnapshotAsync());
         Assert.True(envRb2.IsSuccess);
         var env2 = envRb2.GetValue();
         Assert.False(env2.IsOffloaded);

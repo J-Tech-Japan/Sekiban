@@ -18,7 +18,17 @@ public interface IEventFilter
     /// </summary>
     bool ShouldInclude(SerializableEvent evt, DcbDomainTypes domainTypes)
     {
-        var eventResult = evt.ToEvent(domainTypes.EventTypes);
-        return eventResult.IsSuccess && ShouldInclude(eventResult.GetValue());
+        // An event that cannot be deserialized is excluded; an exception from the filter itself propagates.
+        Event domainEvent;
+        try
+        {
+            domainEvent = evt.ToEvent(domainTypes.EventTypes);
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+
+        return ShouldInclude(domainEvent);
     }
 }

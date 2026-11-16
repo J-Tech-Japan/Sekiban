@@ -26,7 +26,7 @@ public sealed class TaggedStreamMemoryTests
     public async Task GeneratedTaggedHistory_FoldsOneEventAtATimeWithoutTheListApi()
     {
         var store = new GeneratedStreamingTagStore(NormalEventCount, NormalPayloadBytes);
-        var result = await CreateService(store).ProjectTagStateAsync(MemoryTag.Instance, MemoryFoldProjector.ProjectorName);
+        var result = await ResultBox.WrapTry(() => CreateService(store).ProjectTagStateAsync(MemoryTag.Instance, MemoryFoldProjector.ProjectorName));
 
         Assert.True(result.IsSuccess, result.IsSuccess ? string.Empty : result.GetException().ToString());
         var state = Assert.IsType<MemoryFoldState>(result.GetValue().State);
@@ -63,8 +63,8 @@ public sealed class TaggedStreamMemoryTests
         process.Refresh();
         var peakBefore = process.PeakWorkingSet64;
 
-        var streamingResult = await CreateService(streamingStore)
-            .ProjectTagStateAsync(MemoryTag.Instance, MemoryFoldProjector.ProjectorName);
+        var streamingResult = await ResultBox.WrapTry(() => CreateService(streamingStore)
+            .ProjectTagStateAsync(MemoryTag.Instance, MemoryFoldProjector.ProjectorName));
 
         process.Refresh();
         var streamingAllocatedBytes = GC.GetTotalAllocatedBytes(precise: true) - allocatedBefore;
@@ -91,8 +91,8 @@ public sealed class TaggedStreamMemoryTests
         var bufferedAllocatedBefore = GC.GetTotalAllocatedBytes(precise: true);
         process.Refresh();
         var bufferedPeakBefore = process.PeakWorkingSet64;
-        var bufferedResult = await CreateService(bufferingControl)
-            .ProjectTagStateAsync(MemoryTag.Instance, MemoryFoldProjector.ProjectorName);
+        var bufferedResult = await ResultBox.WrapTry(() => CreateService(bufferingControl)
+            .ProjectTagStateAsync(MemoryTag.Instance, MemoryFoldProjector.ProjectorName));
         var bufferedAllocatedBytes = GC.GetTotalAllocatedBytes(precise: true) - bufferedAllocatedBefore;
         process.Refresh();
         var bufferedPeakDeltaBytes = Math.Max(0, process.PeakWorkingSet64 - bufferedPeakBefore);
@@ -137,7 +137,7 @@ public sealed class TaggedStreamMemoryTests
         process.Refresh();
         var peakBefore = process.PeakWorkingSet64;
 
-        var result = await CreateService(store).ProjectTagStateAsync(MemoryTag.Instance, MemoryFoldProjector.ProjectorName);
+        var result = await ResultBox.WrapTry(() => CreateService(store).ProjectTagStateAsync(MemoryTag.Instance, MemoryFoldProjector.ProjectorName));
 
         stopwatch.Stop();
         process.Refresh();

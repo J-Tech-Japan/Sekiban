@@ -28,17 +28,17 @@ public class SekG22StaleEmptyReservationRefreshTests
         var store = new CountingLatestTagEventStore(inner);
         var actor = NewActor(tag, store);
 
-        Assert.Equal(string.Empty, (await actor.GetLatestSortableUniqueIdAsync()).GetValue());
+        Assert.Equal(string.Empty, (await ResultBox.WrapTry(() => actor.GetLatestSortableUniqueIdAsync())).GetValue());
         store.ResetLatestTagCalls();
 
         var committed = EventTestHelper.CreateEvent(new StudentCreated(studentId, "remote"), tag);
         await inner.WriteEventAsync(committed, _domainTypes.EventTypes).AsResultBoxAsync();
 
-        var result = await actor.MakeReservationAsync(committed.SortableUniqueIdValue);
+        var result = await ResultBox.WrapTry(() => actor.MakeReservationAsync(committed.SortableUniqueIdValue));
 
         Assert.True(result.IsSuccess);
         Assert.Equal(1, store.LatestTagCalls);
-        Assert.Equal(committed.SortableUniqueIdValue, (await actor.GetLatestSortableUniqueIdAsync()).GetValue());
+        Assert.Equal(committed.SortableUniqueIdValue, (await ResultBox.WrapTry(() => actor.GetLatestSortableUniqueIdAsync())).GetValue());
     }
 
     [Fact]
@@ -50,7 +50,7 @@ public class SekG22StaleEmptyReservationRefreshTests
         await actor.GetLatestSortableUniqueIdAsync();
         store.ResetLatestTagCalls();
 
-        var result = await actor.MakeReservationAsync(SortableUniqueId.GenerateNew());
+        var result = await ResultBox.WrapTry(() => actor.MakeReservationAsync(SortableUniqueId.GenerateNew()));
 
         Assert.False(result.IsSuccess);
         Assert.Contains("has been modified", result.GetException().Message);
@@ -72,12 +72,12 @@ public class SekG22StaleEmptyReservationRefreshTests
         Assert.NotEqual(expected, authoritative);
         store.LatestTagOutcome = _ => ResultBox.FromValue(StateFor(tag, authoritative));
 
-        var mismatch = await actor.MakeReservationAsync(expected);
-        var laterExpectEmpty = await actor.MakeReservationAsync(string.Empty);
+        var mismatch = await ResultBox.WrapTry(() => actor.MakeReservationAsync(expected));
+        var laterExpectEmpty = await ResultBox.WrapTry(() => actor.MakeReservationAsync(string.Empty));
 
         Assert.False(mismatch.IsSuccess);
         Assert.False(laterExpectEmpty.IsSuccess);
-        Assert.Equal(authoritative, (await actor.GetLatestSortableUniqueIdAsync()).GetValue());
+        Assert.Equal(authoritative, (await ResultBox.WrapTry(() => actor.GetLatestSortableUniqueIdAsync())).GetValue());
         Assert.Equal(1, store.LatestTagCalls);
         Assert.Empty(await actor.GetActiveReservationsAsync());
     }
@@ -93,7 +93,7 @@ public class SekG22StaleEmptyReservationRefreshTests
         var failure = new IOException("authoritative read failed");
         store.LatestTagOutcome = _ => ResultBox.Error<TagState>(failure);
 
-        var result = await actor.MakeReservationAsync(SortableUniqueId.GenerateNew());
+        var result = await ResultBox.WrapTry(() => actor.MakeReservationAsync(SortableUniqueId.GenerateNew()));
 
         Assert.False(result.IsSuccess);
         Assert.Contains("has been modified", result.GetException().Message);
@@ -114,14 +114,14 @@ public class SekG22StaleEmptyReservationRefreshTests
         var matchingActor = NewActor(populatedTag, matchingStore);
         await matchingActor.GetLatestSortableUniqueIdAsync();
         matchingStore.ResetLatestTagCalls();
-        Assert.True((await matchingActor.MakeReservationAsync(committed.SortableUniqueIdValue)).IsSuccess);
+        Assert.True((await ResultBox.WrapTry(() => matchingActor.MakeReservationAsync(committed.SortableUniqueIdValue))).IsSuccess);
         Assert.Equal(0, matchingStore.LatestTagCalls);
 
         var mismatchStore = new CountingLatestTagEventStore(inner);
         var mismatchActor = NewActor(populatedTag, mismatchStore);
         await mismatchActor.GetLatestSortableUniqueIdAsync();
         mismatchStore.ResetLatestTagCalls();
-        Assert.False((await mismatchActor.MakeReservationAsync(SortableUniqueId.GenerateNew())).IsSuccess);
+        Assert.False((await ResultBox.WrapTry(() => mismatchActor.MakeReservationAsync(SortableUniqueId.GenerateNew()))).IsSuccess);
         Assert.Equal(0, mismatchStore.LatestTagCalls);
 
         var emptyTag = new StudentTag(Guid.NewGuid());
@@ -129,14 +129,14 @@ public class SekG22StaleEmptyReservationRefreshTests
         var emptyActor = NewActor(emptyTag, emptyStore);
         await emptyActor.GetLatestSortableUniqueIdAsync();
         emptyStore.ResetLatestTagCalls();
-        Assert.True((await emptyActor.MakeReservationAsync(string.Empty)).IsSuccess);
+        Assert.True((await ResultBox.WrapTry(() => emptyActor.MakeReservationAsync(string.Empty))).IsSuccess);
         Assert.Equal(0, emptyStore.LatestTagCalls);
 
         var populatedEmptyExpectedStore = new CountingLatestTagEventStore(inner);
         var populatedEmptyExpectedActor = NewActor(populatedTag, populatedEmptyExpectedStore);
         await populatedEmptyExpectedActor.GetLatestSortableUniqueIdAsync();
         populatedEmptyExpectedStore.ResetLatestTagCalls();
-        Assert.False((await populatedEmptyExpectedActor.MakeReservationAsync(string.Empty)).IsSuccess);
+        Assert.False((await ResultBox.WrapTry(() => populatedEmptyExpectedActor.MakeReservationAsync(string.Empty))).IsSuccess);
         Assert.Equal(0, populatedEmptyExpectedStore.LatestTagCalls);
     }
 
@@ -148,17 +148,17 @@ public class SekG22StaleEmptyReservationRefreshTests
         var inner = new CoreInMemoryEventStore(_domainTypes.EventTypes);
         var store = new CountingLatestTagEventStore(inner);
         var actor = NewActor(tag, store);
-        Assert.Equal(string.Empty, (await actor.GetLatestSortableUniqueIdAsync()).GetValue());
+        Assert.Equal(string.Empty, (await ResultBox.WrapTry(() => actor.GetLatestSortableUniqueIdAsync())).GetValue());
 
         var remote = EventTestHelper.CreateEvent(new StudentCreated(studentId, "remote"), tag);
         await inner.WriteEventAsync(remote, _domainTypes.EventTypes).AsResultBoxAsync();
         store.ResetLatestTagCalls();
 
-        var result = await actor.MakeReservationAsync(null);
+        var result = await ResultBox.WrapTry(() => actor.MakeReservationAsync(null));
 
         Assert.True(result.IsSuccess);
         Assert.Equal(0, store.LatestTagCalls);
-        Assert.Equal(string.Empty, (await actor.GetLatestSortableUniqueIdAsync()).GetValue());
+        Assert.Equal(string.Empty, (await ResultBox.WrapTry(() => actor.GetLatestSortableUniqueIdAsync())).GetValue());
         Assert.Single(await actor.GetActiveReservationsAsync());
     }
 
@@ -172,7 +172,7 @@ public class SekG22StaleEmptyReservationRefreshTests
             new TagConsistentActorOptions(),
             _domainTypes.TagTypes);
 
-        var result = await actor.MakeReservationAsync(SortableUniqueId.GenerateNew());
+        var result = await ResultBox.WrapTry(() => actor.MakeReservationAsync(SortableUniqueId.GenerateNew()));
 
         Assert.False(result.IsSuccess);
         Assert.Contains("has been modified", result.GetException().Message);

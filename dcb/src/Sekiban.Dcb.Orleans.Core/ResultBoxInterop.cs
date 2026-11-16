@@ -3,9 +3,9 @@ using ResultBoxes;
 namespace Sekiban.Dcb.Common;
 
 /// <summary>
-///     Bridges between the exception-based Core.Model and storage contracts and the ResultBox flow that the not-yet-ported parts
-///     of Core still use internally. A failed box is rethrown as the exception it carries (same instance and stack).
-///     Later 11.0 slices remove these call sites together with the internal ResultBox flow.
+///     Bridges between the exception-based core contracts and the ResultBox flow that the Orleans grains and their grain
+///     interfaces still use. A failed box is rethrown as the exception it carries (same instance and stack).
+///     The Orleans slice of 11.0 removes these call sites together with the ResultBox grain contracts.
 /// </summary>
 internal static class ResultBoxInterop
 {

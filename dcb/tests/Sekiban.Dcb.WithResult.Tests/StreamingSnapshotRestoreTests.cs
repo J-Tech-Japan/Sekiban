@@ -50,7 +50,7 @@ public sealed partial class StreamingSnapshotRestoreTests
             Assert.Equal(0, stream.SeekCalls);
             Assert.False(stream.IsDisposed);
 
-            var state = await target.GetStateAsync();
+            var state = await ResultBox.WrapTry(() => target.GetStateAsync());
             Assert.True(state.IsSuccess);
             Assert.Equal(["one", "two", "three"], Payload(state.GetValue()));
         }
@@ -153,7 +153,7 @@ public sealed partial class StreamingSnapshotRestoreTests
         var stream = Assert.IsType<CappedNonSeekableStream>(resolved.PayloadStream);
         await target.SetResolvedSnapshotAsync(resolved);
 
-        var state = await target.GetStateAsync();
+        var state = await ResultBox.WrapTry(() => target.GetStateAsync());
         Assert.True(state.IsSuccess);
         Assert.Equal(["current-position"], Payload(state.GetValue()));
         Assert.True(stream.ReadCalls > 1);
@@ -170,7 +170,7 @@ public sealed partial class StreamingSnapshotRestoreTests
         blob.TruncateOpenedPayloadTo = 3;
         var target = CreateActor(new CountingStreamingRegistry(CreateReflectionRegistry()));
         await target.AddEventsAsync([CreateEvent("before")]);
-        var before = await target.GetStateAsync();
+        var before = await ResultBox.WrapTry(() => target.GetStateAsync());
         Assert.True(before.IsSuccess);
         var beforeState = before.GetValue();
         var beforeRawState = CaptureRestoreRollbackSnapshot(target);
@@ -178,7 +178,7 @@ public sealed partial class StreamingSnapshotRestoreTests
         await using var resolved = await SnapshotEnvelopeResolver.ResolveForRestoreAsync(envelope, blob);
         var exception = await Assert.ThrowsAnyAsync<Exception>(() => target.SetResolvedSnapshotAsync(resolved));
 
-        var after = await target.GetStateAsync();
+        var after = await ResultBox.WrapTry(() => target.GetStateAsync());
         Assert.False(after.IsSuccess);
         Assert.Same(exception, after.GetException());
         AssertRestoreRollbackSnapshotUnchanged(target, beforeRawState);
@@ -194,7 +194,7 @@ public sealed partial class StreamingSnapshotRestoreTests
         var targetTypes = new CountingStreamingRegistry(CreateReflectionRegistry());
         var target = CreateActor(targetTypes);
         await target.AddEventsAsync([CreateEvent("before-corrupt")]);
-        var before = (await target.GetStateAsync()).GetValue();
+        var before = (await ResultBox.WrapTry(() => target.GetStateAsync())).GetValue();
         var beforeRawState = CaptureRestoreRollbackSnapshot(target);
 
         await using var resolved = await SnapshotEnvelopeResolver.ResolveForRestoreAsync(envelope, blob);
@@ -202,7 +202,7 @@ public sealed partial class StreamingSnapshotRestoreTests
 
         Assert.Equal(1, targetTypes.StreamDeserializeCalls);
         Assert.Equal(0, targetTypes.BufferedDeserializeCalls);
-        var after = await target.GetStateAsync();
+        var after = await ResultBox.WrapTry(() => target.GetStateAsync());
         Assert.False(after.IsSuccess);
         Assert.Same(exception, after.GetException());
         AssertRestoreRollbackSnapshotUnchanged(target, beforeRawState);
@@ -231,7 +231,7 @@ public sealed partial class StreamingSnapshotRestoreTests
 
         await actor.SetSnapshotAsync(new SerializableMultiProjectionStateEnvelope(false, state, null));
 
-        var restored = await actor.GetStateAsync();
+        var restored = await ResultBox.WrapTry(() => actor.GetStateAsync());
         Assert.True(restored.IsSuccess);
         Assert.Equal(["legacy"], Payload(restored.GetValue()));
         Assert.Equal(7, restored.GetValue().Version);
@@ -249,7 +249,7 @@ public sealed partial class StreamingSnapshotRestoreTests
 
         await using var resolved = await SnapshotEnvelopeResolver.ResolveForRestoreAsync(envelope, blob);
         await target.SetResolvedSnapshotAsync(resolved);
-        var restored = await target.GetStateAsync();
+        var restored = await ResultBox.WrapTry(() => target.GetStateAsync());
 
         Assert.True(restored.IsSuccess);
         Assert.Equal(["aot"], Payload(restored.GetValue()));
@@ -293,7 +293,7 @@ public sealed partial class StreamingSnapshotRestoreTests
         await using var resolved = await SnapshotEnvelopeResolver.ResolveForRestoreAsync(envelope, blob);
         await target.SetResolvedSnapshotAsync(resolved);
 
-        var restored = await target.GetStateAsync();
+        var restored = await ResultBox.WrapTry(() => target.GetStateAsync());
         Assert.True(restored.IsSuccess);
         Assert.Equal(["legacy-raw"], Payload(restored.GetValue()));
         Assert.Equal(2, targetTypes.StreamDeserializeCalls);
@@ -319,7 +319,7 @@ public sealed partial class StreamingSnapshotRestoreTests
 
         await using var resolved = await SnapshotEnvelopeResolver.ResolveForRestoreAsync(envelope, blob);
         await target.SetResolvedSnapshotAsync(resolved);
-        var restored = await target.GetStateAsync();
+        var restored = await ResultBox.WrapTry(() => target.GetStateAsync());
 
         Assert.True(restored.IsSuccess);
         Assert.Equal(["custom"], Assert.IsType<CustomStreamPayloadProjector>(restored.GetValue().Payload).Values);
@@ -346,7 +346,7 @@ public sealed partial class StreamingSnapshotRestoreTests
         await using var resolved = await SnapshotEnvelopeResolver.ResolveForRestoreAsync(envelope, blob);
         await target.SetResolvedSnapshotAsync(resolved);
 
-        var restored = await target.GetStateAsync();
+        var restored = await ResultBox.WrapTry(() => target.GetStateAsync());
         Assert.True(restored.IsSuccess);
         Assert.Equal(
             [payloadSecret],
@@ -510,7 +510,7 @@ public sealed partial class StreamingSnapshotRestoreTests
         Assert.Equal(2, targetTypes.StreamDeserializeCalls);
         Assert.Equal(0, targetTypes.BufferedDeserializeCalls);
         Assert.Equal(0, GetLastStreamingRestoreWholePayloadAggregationCount(target));
-        var restored = await target.GetStateAsync(canGetUnsafeState: true);
+        var restored = await ResultBox.WrapTry(() => target.GetStateAsync(canGetUnsafeState: true));
         Assert.True(restored.IsSuccess);
         Assert.Equal(["small-graph"], Payload(restored.GetValue()));
 
@@ -637,10 +637,10 @@ public sealed partial class StreamingSnapshotRestoreTests
             await actor.AddEventsAsync([CreateEvent(value)]);
         }
 
-        var result = await actor.BuildSnapshotEnvelopeAsync(
+        var result = await ResultBox.WrapTry(() => actor.BuildSnapshotEnvelopeAsync(
             canGetUnsafeState: true,
             blobAccessor: blob,
-            offloadThresholdBytes: 1);
+            offloadThresholdBytes: 1));
         Assert.True(result.IsSuccess, result.IsSuccess ? "" : result.GetException().ToString());
         Assert.True(result.GetValue().IsOffloaded);
         return (result.GetValue(), blob);

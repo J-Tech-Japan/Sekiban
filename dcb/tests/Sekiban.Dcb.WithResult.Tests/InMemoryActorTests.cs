@@ -3,6 +3,7 @@ using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Tags;
 using System.Globalization;
+using ResultBoxes;
 namespace Sekiban.Dcb.Tests;
 
 /// <summary>
@@ -38,7 +39,7 @@ public class InMemoryActorTests
         var actor = new GeneralTagConsistentActor(tagName, null, new TagConsistentActorOptions(), _domainTypes.TagTypes);
 
         // Act — SEK-G19: a first write on an empty tag expects the tag to be empty ("")
-        var result = await actor.MakeReservationAsync("");
+        var result = await ResultBox.WrapTry(() => actor.MakeReservationAsync(""));
 
         // Assert
         Assert.True(result.IsSuccess);
@@ -62,11 +63,11 @@ public class InMemoryActorTests
         var actor = new GeneralTagConsistentActor(tagName, null, new TagConsistentActorOptions(), _domainTypes.TagTypes);
 
         // SEK-G19: first write on an empty tag = expect-empty (""); the SECOND reservation is rejected as already-reserved
-        var firstResult = await actor.MakeReservationAsync("");
+        var firstResult = await ResultBox.WrapTry(() => actor.MakeReservationAsync(""));
         Assert.True(firstResult.IsSuccess);
 
         // Act - Try to make second reservation
-        var secondResult = await actor.MakeReservationAsync("");
+        var secondResult = await ResultBox.WrapTry(() => actor.MakeReservationAsync(""));
 
         // Assert
         Assert.False(secondResult.IsSuccess);
@@ -81,7 +82,7 @@ public class InMemoryActorTests
             null,
             new TagConsistentActorOptions(),
             _domainTypes.TagTypes);
-        var reservation = (await actor.MakeReservationAsync("")).GetValue();
+        var reservation = (await ResultBox.WrapTry(() => actor.MakeReservationAsync(""))).GetValue();
 
         // Act
         var confirmed = await actor.ConfirmReservationAsync(reservation);
@@ -91,7 +92,7 @@ public class InMemoryActorTests
         Assert.Empty(await actor.GetActiveReservationsAsync());
 
         // Should be able to make new reservation after confirmation
-        var newReservation = await actor.MakeReservationAsync("");
+        var newReservation = await ResultBox.WrapTry(() => actor.MakeReservationAsync(""));
         Assert.True(newReservation.IsSuccess);
     }
 
@@ -125,7 +126,7 @@ public class InMemoryActorTests
             null,
             new TagConsistentActorOptions(),
             _domainTypes.TagTypes);
-        var reservation = (await actor.MakeReservationAsync("")).GetValue();
+        var reservation = (await ResultBox.WrapTry(() => actor.MakeReservationAsync(""))).GetValue();
 
         // Act
         var cancelled = await actor.CancelReservationAsync(reservation);
@@ -135,7 +136,7 @@ public class InMemoryActorTests
         Assert.Empty(await actor.GetActiveReservationsAsync());
 
         // Should be able to make new reservation after cancellation
-        var newReservation = await actor.MakeReservationAsync("");
+        var newReservation = await ResultBox.WrapTry(() => actor.MakeReservationAsync(""));
         Assert.True(newReservation.IsSuccess);
     }
 
@@ -148,7 +149,7 @@ public class InMemoryActorTests
         var actor = new GeneralTagConsistentActor(tagName, null, new TagConsistentActorOptions(), _domainTypes.TagTypes);
 
         // Create reservation
-        var reservationResult = await actor.MakeReservationAsync("");
+        var reservationResult = await ResultBox.WrapTry(() => actor.MakeReservationAsync(""));
         Assert.True(reservationResult.IsSuccess);
         var reservation = reservationResult.GetValue();
 
@@ -167,7 +168,7 @@ public class InMemoryActorTests
         // Cancel the reservation to allow new one
         await actor.CancelReservationAsync(reservation);
 
-        var newReservation = await actor.MakeReservationAsync("");
+        var newReservation = await ResultBox.WrapTry(() => actor.MakeReservationAsync(""));
 
         // Assert
         Assert.True(newReservation.IsSuccess);

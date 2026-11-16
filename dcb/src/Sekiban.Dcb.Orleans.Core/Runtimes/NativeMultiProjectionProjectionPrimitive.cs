@@ -165,39 +165,41 @@ public sealed class NativeMultiProjectionProjectionPrimitive : IMultiProjectionP
             }
         }
 
-        public ResultBox<SerializableMultiProjectionStateEnvelope> GetSnapshot()
+        public SerializableMultiProjectionStateEnvelope GetSnapshot()
         {
             return _actor.GetSnapshotAsync(canGetUnsafeState: true)
                 .GetAwaiter().GetResult();
         }
 
-        public ResultBox<MultiProjectionStateMetadata> GetMetadata()
+        public MultiProjectionStateMetadata GetMetadata()
         {
-            var unsafeResult = _actor.GetStateAsync(canGetUnsafeState: true)
-                .GetAwaiter().GetResult();
-            var safeResult = _actor.GetStateAsync(canGetUnsafeState: false)
-                .GetAwaiter().GetResult();
-
-            if (!safeResult.IsSuccess)
+            // An unavailable unsafe state only leaves the unsafe fields empty; an unavailable safe state is the failure.
+            var unsafeRead = _actor.GetStateAsync(canGetUnsafeState: true);
+            MultiProjectionState? unsafeState;
+            try
             {
-                return ResultBox.Error<MultiProjectionStateMetadata>(safeResult.GetException());
+                unsafeState = unsafeRead.GetAwaiter().GetResult();
+            }
+            catch (Exception)
+            {
+                unsafeState = null;
             }
 
-            var safeState = safeResult.GetValue();
+            var safeState = _actor.GetStateAsync(canGetUnsafeState: false)
+                .GetAwaiter().GetResult();
 
             int unsafeVersion = 0;
             string? unsafeLastSortableUniqueId = null;
             Guid? unsafeLastEventId = null;
 
-            if (unsafeResult.IsSuccess)
+            if (unsafeState is not null)
             {
-                var unsafeState = unsafeResult.GetValue();
                 unsafeVersion = unsafeState.Version;
                 unsafeLastSortableUniqueId = unsafeState.LastSortableUniqueId;
                 unsafeLastEventId = unsafeState.LastEventId;
             }
 
-            return ResultBox.FromValue(new MultiProjectionStateMetadata(
+            return new MultiProjectionStateMetadata(
                 ProjectorName: _projectorName,
                 ProjectorVersion: _projectorVersion,
                 IsCatchedUp: safeState.IsCatchedUp,
@@ -206,7 +208,7 @@ public sealed class NativeMultiProjectionProjectionPrimitive : IMultiProjectionP
                 UnsafeVersion: unsafeVersion,
                 UnsafeLastSortableUniqueId: unsafeLastSortableUniqueId,
                 UnsafeLastEventId: unsafeLastEventId,
-                IsSafeState: safeState.IsSafeState));
+                IsSafeState: safeState.IsSafeState);
         }
     }
 }

@@ -425,7 +425,7 @@ public class ConditionalAppendContractTests
         var json = Encoding.UTF8.GetBytes(
             """{"version":2,"eventCandidates":[{"payload":"AQID","eventPayloadName":"UniqueMarkerEvent","tags":["Marker:m"]}],"consistencyTags":[{"tag":"Marker:m","lastSortableUniqueId":""}],"expectedTagPositions":[{"serviceId":"default","tag":"Marker:m","expectation":{"kind":2,"position":null}}]}""");
 
-        var result = await acceptor.AcceptAsync(json);
+        var result = await ResultBox.WrapTry(() => acceptor.AcceptAsync(json));
 
         Assert.False(result.IsSuccess);
         Assert.IsType<ConditionNotSupportedException>(result.GetException());

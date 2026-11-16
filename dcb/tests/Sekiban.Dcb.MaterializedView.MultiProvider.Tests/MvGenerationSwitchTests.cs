@@ -11,6 +11,7 @@ using Sekiban.Dcb.MaterializedView;
 using Sekiban.Dcb.ServiceId;
 using Xunit;
 using Sekiban.Dcb.TestSupport;
+using ResultBoxes;
 
 namespace Sekiban.Dcb.MaterializedView.MultiProvider.Tests;
 
@@ -271,19 +272,19 @@ internal static class MvGenerationSwitchAssertions
             fixture.EventStore,
             new FixedServiceIdProvider(ServiceId),
             statusOptions);
-        var typed = await reader.ReadAsync(new ProjectionStatusReadRequest(
+        var typed = await ResultBox.WrapTry(() => reader.ReadAsync(new ProjectionStatusReadRequest(
             ServiceId,
             identity.ProjectorName,
-            identity.ProjectorVersion)).ConfigureAwait(false);
+            identity.ProjectorVersion)));
         var observation = Assert.Single(typed.GetValue());
         Assert.Equal("forced", observation.SwitchKind);
         Assert.Equal(reason, observation.SwitchReason);
         Assert.Equal(active.SwitchedAtUtc, observation.SwitchedAtUtc);
 
         var serialized = new SerializedProjectionStatusReader(reader, new FixedServiceIdProvider(ServiceId));
-        var bytes = await serialized.AcceptAsync(SerializedProjectionStatusReader.SerializeRequest(
-            new ProjectionStatusReadRequest(ServiceId, identity.ProjectorName, identity.ProjectorVersion))).ConfigureAwait(false);
-        var envelope = SerializedProjectionStatusReader.Deserialize(bytes.GetValue()).GetValue();
+        var bytes = await ResultBox.WrapTry(() => serialized.AcceptAsync(SerializedProjectionStatusReader.SerializeRequest(
+            new ProjectionStatusReadRequest(ServiceId, identity.ProjectorName, identity.ProjectorVersion))));
+        var envelope = SerializedProjectionStatusReader.Deserialize(bytes.GetValue());
         var serializedObservation = Assert.Single(envelope.Snapshots!);
         Assert.Equal("forced", serializedObservation.SwitchKind);
         Assert.Equal(reason, serializedObservation.SwitchReason);

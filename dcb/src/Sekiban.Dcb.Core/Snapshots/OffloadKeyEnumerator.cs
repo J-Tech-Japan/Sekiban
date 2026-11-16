@@ -29,10 +29,19 @@ public static class OffloadKeyEnumerator
         [EnumeratorCancellation] CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested();
-        var listed = await store.ListAllAsync(ct).ToResultBoxAsync().ConfigureAwait(false);
+        var list = store.ListAllAsync(ct);
+        IReadOnlyList<ProjectorStateInfo> entries;
+        try
+        {
+            entries = await list.ConfigureAwait(false);
+        }
+        catch (Exception)
+        {
+            // Caller cancellation is observed before a failed list is reported.
+            ct.ThrowIfCancellationRequested();
+            throw;
+        }
         ct.ThrowIfCancellationRequested();
-        if (!listed.IsSuccess) throw listed.GetException();
-        var entries = listed.GetValue();
         // Slot reads go through the sole checkpoint owner (SEK-G20); this read-only coordinator never mutates or adopts.
         var checkpoints = new CheckpointMutationCoordinator(store, static () => { });
         foreach (var entry in entries)
@@ -44,10 +53,8 @@ public static class OffloadKeyEnumerator
             {
                 try
                 {
-                    var result = await checkpoints.ReadSlotAsync(entry.ProjectorName, entry.ProjectorVersion, ct).ConfigureAwait(false);
+                    var slot = await checkpoints.ReadSlotAsync(entry.ProjectorName, entry.ProjectorVersion, ct).ConfigureAwait(false);
                     ct.ThrowIfCancellationRequested();
-                    if (!result.IsSuccess) throw result.GetException();
-                    var slot = result.GetValue();
                     if (slot.Exists) lifecycle = slot.Lifecycle;
                     else detail = "Checkpoint slot does not exist.";
                 }
@@ -62,12 +69,9 @@ public static class OffloadKeyEnumerator
             string? failure = null;
             try
             {
-                var result = await store.GetLatestForVersionAsync(entry.ProjectorName, entry.ProjectorVersion, ct).ToOptionalResultBoxAsync().ConfigureAwait(false);
+                record = await store.GetLatestForVersionAsync(entry.ProjectorName, entry.ProjectorVersion, ct).ConfigureAwait(false);
                 ct.ThrowIfCancellationRequested();
-                if (!result.IsSuccess) throw result.GetException();
-                var optional = result.GetValue();
-                if (optional.HasValue) record = optional.GetValue();
-                else failure = "Listed row no longer exists.";
+                if (record is null) failure = "Listed row no longer exists.";
             }
             catch (Exception ex) { ct.ThrowIfCancellationRequested(); failure = "Lookup: " + ex.Message; }
             if (record is null)
@@ -85,10 +89,8 @@ public static class OffloadKeyEnumerator
             Stream? stream = null;
             try
             {
-                var result = await store.OpenStateDataReadStreamAsync(record, ct).ToResultBoxAsync().ConfigureAwait(false);
-                if (result.IsSuccess) stream = result.GetValue();
+                stream = await store.OpenStateDataReadStreamAsync(record, ct).ConfigureAwait(false);
                 ct.ThrowIfCancellationRequested();
-                if (!result.IsSuccess) throw result.GetException();
                 if (stream is null) failure = "Open returned no stream.";
             }
             catch (Exception ex)

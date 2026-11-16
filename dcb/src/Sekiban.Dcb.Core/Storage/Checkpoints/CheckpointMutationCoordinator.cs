@@ -1,7 +1,18 @@
-using ResultBoxes;
-using Sekiban.Dcb.Common;
 using Sekiban.Dcb.MultiProjections;
 namespace Sekiban.Dcb.Storage.Checkpoints;
+
+/// <summary>
+///     Outcome of a checkpoint persist: saved, or not saved with the reason. A rejected or failed CAS is an expected
+///     outcome the caller branches on (it takes the not-saved branch), so it is a value rather than an exception.
+/// </summary>
+internal readonly record struct CheckpointPersistOutcome(Exception? Failure)
+{
+    public bool Saved => Failure is null;
+
+    public static CheckpointPersistOutcome Committed => default;
+
+    public static CheckpointPersistOutcome NotSaved(Exception failure) => new(failure);
+}
 
 /// <summary>
 ///     SEK-G20 SOLE checkpoint-mutation coordinator. This is the ONE production type that holds the generation-aware CAS
@@ -38,8 +49,8 @@ internal sealed class CheckpointMutationCoordinator
     public bool PendingRebuiltCommit { get; private set; }
 
     /// <summary>Reads the control-plane slot (capable stores only). Callers gate on this BEFORE binding any payload.</summary>
-    public Task<ResultBox<CheckpointSlot>> ReadSlotAsync(string projectorName, string projectorVersion, CancellationToken ct = default) =>
-        _cas!.ReadCheckpointSlotAsync(projectorName, projectorVersion, ct).ToResultBoxAsync();
+    public Task<CheckpointSlot> ReadSlotAsync(string projectorName, string projectorVersion, CancellationToken ct = default) =>
+        _cas!.ReadCheckpointSlotAsync(projectorName, projectorVersion, ct);
 
     /// <summary>Adopts an ACTIVE slot on restore so the first persist CASes on its exact token (stale writers rejected).</summary>
     public void AdoptActive(CheckpointSlot slot)
@@ -59,16 +70,15 @@ internal sealed class CheckpointMutationCoordinator
     ///     The stateful product persist (grain). On a capable store this is an EXPECTED-TOKEN CAS — a stale writer is
     ///     ConditionRejected and NEVER re-contaminates the row; a rebuilt commit is one atomic same-row CAS on the exact
     ///     tombstone token; a rejection refetches + adopts and, on a tombstone, arms the query barrier. Non-capable stores
-    ///     keep the legacy unconditional upsert. Returns Error on a rejected/failed CAS so the caller takes the not-saved
-    ///     branch. MUST run inside the caller's external-store serialisation gate.
+    ///     keep the legacy unconditional upsert. Returns a not-saved outcome on a rejected/failed CAS so the caller takes the
+    ///     not-saved branch. MUST run inside the caller's external-store serialisation gate.
     /// </summary>
-    public async Task<ResultBox<bool>> PersistAsync(MultiProjectionStateWriteRequest request, Stream stream, int offloadThreshold)
+    public async Task<CheckpointPersistOutcome> PersistAsync(MultiProjectionStateWriteRequest request, Stream stream, int offloadThreshold)
     {
         if (_cas is null)
         {
             // LEGACY-FALLBACK (non-capable): unconditional upsert (byte-for-byte).
-            return await _store.UpsertFromStreamAsync(request, stream, offloadThreshold, CancellationToken.None)
-                .ToResultBoxAsync();
+            return await LegacyUpsertAsync(request, stream, offloadThreshold, CancellationToken.None);
         }
 
         // The adopted slot is per (projectorName, projectorVersion). A request that targets a DIFFERENT version (a version
@@ -80,18 +90,18 @@ internal sealed class CheckpointMutationCoordinator
 
         if (!adoptedMatchesRequest)
         {
-            var freshResult = await _cas.ReadCheckpointSlotAsync(request.ProjectorName, request.ProjectorVersion, CancellationToken.None)
-                .ToResultBoxAsync();
-            var freshExpectation = freshResult.IsSuccess && freshResult.GetValue() is { IsActive: true } freshActive
+            var freshSlot = await ReadSlotOrNullAsync(
+                _cas.ReadCheckpointSlotAsync(request.ProjectorName, request.ProjectorVersion, CancellationToken.None));
+            var freshExpectation = freshSlot is { IsActive: true } freshActive
                 ? CheckpointExpectation.FromSlot(freshActive)
                 : CheckpointExpectation.Absent;
             var freshOutcome = await _cas.ConditionalUpsertAsync(request, stream, freshExpectation, offloadThreshold, CancellationToken.None);
             if (freshOutcome.Status == CheckpointCasStatus.Committed)
             {
                 AdoptedSlot = freshOutcome.ResultingSlot;
-                return ResultBox.FromValue(true);
+                return CheckpointPersistOutcome.Committed;
             }
-            return ResultBox.Error<bool>(freshOutcome.Cause ?? new InvalidOperationException(
+            return CheckpointPersistOutcome.NotSaved(freshOutcome.Cause ?? new InvalidOperationException(
                 $"Checkpoint CAS for version {request.ProjectorVersion} was {freshOutcome.Status}."));
         }
 
@@ -105,15 +115,15 @@ internal sealed class CheckpointMutationCoordinator
                 case CheckpointCasStatus.Committed:
                     AdoptedSlot = commit.ResultingSlot;
                     PendingRebuiltCommit = false;
-                    return ResultBox.FromValue(true);
+                    return CheckpointPersistOutcome.Committed;
                 case CheckpointCasStatus.ConditionRejected:
                     // A peer rebuilt first (row is now Active at the bumped generation) OR re-tombstoned. Adopt the
                     // current slot; if it is Active a peer's rebuilt commit is authoritative and ours is unnecessary.
                     AdoptAfterRejection(commit.CurrentSlot);
-                    return ResultBox.Error<bool>(new InvalidOperationException(
+                    return CheckpointPersistOutcome.NotSaved(new InvalidOperationException(
                         "Rebuilt-commit CAS was rejected (a peer moved the checkpoint); refetched and will re-evaluate."));
                 default:
-                    return ResultBox.Error<bool>(commit.Cause ?? new InvalidOperationException("Rebuilt-commit CAS failed."));
+                    return CheckpointPersistOutcome.NotSaved(commit.Cause ?? new InvalidOperationException("Rebuilt-commit CAS failed."));
             }
         }
 
@@ -126,13 +136,13 @@ internal sealed class CheckpointMutationCoordinator
         {
             case CheckpointCasStatus.Committed:
                 AdoptedSlot = outcome.ResultingSlot;
-                return ResultBox.FromValue(true);
+                return CheckpointPersistOutcome.Committed;
             case CheckpointCasStatus.ConditionRejected:
                 AdoptAfterRejection(outcome.CurrentSlot);
-                return ResultBox.Error<bool>(new InvalidOperationException(
+                return CheckpointPersistOutcome.NotSaved(new InvalidOperationException(
                     "Checkpoint CAS was rejected (a peer moved the shared row); refetched — no stale write applied."));
             default:
-                return ResultBox.Error<bool>(outcome.Cause ?? new InvalidOperationException("Checkpoint CAS failed."));
+                return CheckpointPersistOutcome.NotSaved(outcome.Cause ?? new InvalidOperationException("Checkpoint CAS failed."));
         }
     }
 
@@ -147,17 +157,19 @@ internal sealed class CheckpointMutationCoordinator
     {
         if (_cas is not null)
         {
-            var slotResult = await _cas.ReadCheckpointSlotAsync(projectorName, projectorVersion, cancellationToken)
-                .ToResultBoxAsync()
+            // The read's own failure is captured (not thrown) so that only the caller's cancellation of the wait
+            // propagates as itself; a failed read is reported below after that cancellation check.
+            var slotRead = await CaptureSlotReadAsync(
+                    _cas.ReadCheckpointSlotAsync(projectorName, projectorVersion, cancellationToken))
                 .WaitAsync(cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
-            if (!slotResult.IsSuccess)
+            if (slotRead.Failure is { } readFailure)
             {
                 throw new InvalidOperationException(
-                    $"Failed to read the checkpoint slot for tombstone invalidation: {slotResult.GetException().Message}",
-                    slotResult.GetException());
+                    $"Failed to read the checkpoint slot for tombstone invalidation: {readFailure.Message}",
+                    readFailure);
             }
-            var slot = slotResult.GetValue();
+            var slot = slotRead.Slot!;
             if (slot.IsActive)
             {
                 cancellationToken.ThrowIfCancellationRequested();
@@ -182,12 +194,16 @@ internal sealed class CheckpointMutationCoordinator
 
         // Non-capable store: legacy delete-based invalidation (byte-for-byte unchanged). LEGACY-FALLBACK (non-capable).
         cancellationToken.ThrowIfCancellationRequested();
-        var deleteResult = await _store.DeleteAsync(projectorName, projectorVersion, cancellationToken).ToResultBoxAsync();
-        if (!deleteResult.IsSuccess)
+        var delete = _store.DeleteAsync(projectorName, projectorVersion, cancellationToken);
+        try
+        {
+            await delete;
+        }
+        catch (Exception deleteFailure)
         {
             throw new InvalidOperationException(
-                $"Failed to invalidate the external derived snapshot for a full rebuild: {deleteResult.GetException().Message}",
-                deleteResult.GetException());
+                $"Failed to invalidate the external derived snapshot for a full rebuild: {deleteFailure.Message}",
+                deleteFailure);
         }
     }
 
@@ -197,18 +213,17 @@ internal sealed class CheckpointMutationCoordinator
     ///     -> expected-absence create) so it cannot re-contaminate a shared row outside the tombstone protocol. Non-capable
     ///     stores keep the legacy unconditional upsert.
     /// </summary>
-    public async Task<ResultBox<bool>> PersistOnceAsync(
+    public async Task<CheckpointPersistOutcome> PersistOnceAsync(
         MultiProjectionStateWriteRequest request, Stream stream, int offloadThreshold, CancellationToken ct)
     {
         if (_cas is null)
         {
             // LEGACY-FALLBACK (non-capable): unconditional upsert (byte-for-byte).
-            return await _store.UpsertFromStreamAsync(request, stream, offloadThreshold, ct).ToResultBoxAsync();
+            return await LegacyUpsertAsync(request, stream, offloadThreshold, ct);
         }
 
-        var slotResult = await _cas.ReadCheckpointSlotAsync(request.ProjectorName, request.ProjectorVersion, ct)
-            .ToResultBoxAsync();
-        var slot = slotResult.IsSuccess ? slotResult.GetValue() : CheckpointSlot.Absent;
+        var slot = await ReadSlotOrNullAsync(_cas.ReadCheckpointSlotAsync(request.ProjectorName, request.ProjectorVersion, ct))
+            ?? CheckpointSlot.Absent;
         var outcome = slot.IsTombstoned
             ? await _cas.CommitRebuiltAsync(request, stream, CheckpointExpectation.FromSlot(slot), offloadThreshold, ct)
             : await _cas.ConditionalUpsertAsync(
@@ -216,9 +231,50 @@ internal sealed class CheckpointMutationCoordinator
                 slot.IsActive ? CheckpointExpectation.FromSlot(slot) : CheckpointExpectation.Absent,
                 offloadThreshold, ct);
         return outcome.Status == CheckpointCasStatus.Committed
-            ? ResultBox.FromValue(true)
-            : ResultBox.Error<bool>(outcome.Cause ?? new InvalidOperationException(
+            ? CheckpointPersistOutcome.Committed
+            : CheckpointPersistOutcome.NotSaved(outcome.Cause ?? new InvalidOperationException(
                 $"CLI checkpoint build CAS was {outcome.Status} for {request.ProjectorName}/{request.ProjectorVersion}."));
+    }
+
+    // LEGACY-FALLBACK (non-capable): a failed unconditional upsert is a not-saved outcome, as it always was.
+    private async Task<CheckpointPersistOutcome> LegacyUpsertAsync(
+        MultiProjectionStateWriteRequest request, Stream stream, int offloadThreshold, CancellationToken ct)
+    {
+        var upsert = _store.UpsertFromStreamAsync(request, stream, offloadThreshold, ct);
+        try
+        {
+            await upsert;
+            return CheckpointPersistOutcome.Committed;
+        }
+        catch (Exception ex)
+        {
+            return CheckpointPersistOutcome.NotSaved(ex);
+        }
+    }
+
+    // A failed slot read leaves the slot unknown (null); the persist then proceeds as for an absent slot.
+    private static async Task<CheckpointSlot?> ReadSlotOrNullAsync(Task<CheckpointSlot> read)
+    {
+        try
+        {
+            return await read;
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
+    private static async Task<(CheckpointSlot? Slot, Exception? Failure)> CaptureSlotReadAsync(Task<CheckpointSlot> read)
+    {
+        try
+        {
+            return (await read, null);
+        }
+        catch (Exception ex)
+        {
+            return (null, ex);
+        }
     }
 
     // After a rejected CAS, adopt the freshly-observed slot. A TOMBSTONE means a peer began a retrograde rebuild: flip to

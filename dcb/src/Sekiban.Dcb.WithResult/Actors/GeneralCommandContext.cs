@@ -37,7 +37,7 @@ public class GeneralCommandContext : ICommandContext, ICommandContextResultAcces
             var tagStateId = new TagStateId(tag, TProjector.ProjectorName);
             var tagStateActorId = tagStateId.GetTagStateId();
 
-            var actorResult = await _actorAccessor.GetActorAsync<ITagStateActorCommon>(tagStateActorId);
+            var actorResult = await ResultBoxBridge.CaptureAsync(_actorAccessor.GetActorAsync<ITagStateActorCommon>(tagStateActorId));
             if (!actorResult.IsSuccess)
             {
                 // If actor doesn't exist, return empty state with EmptyTagStatePayload
@@ -122,7 +122,7 @@ public class GeneralCommandContext : ICommandContext, ICommandContextResultAcces
             var tagStateId = new TagStateId(tag, TProjector.ProjectorName);
             var tagStateActorId = tagStateId.GetTagStateId();
 
-            var actorResult = await _actorAccessor.GetActorAsync<ITagStateActorCommon>(tagStateActorId);
+            var actorResult = await ResultBoxBridge.CaptureAsync(_actorAccessor.GetActorAsync<ITagStateActorCommon>(tagStateActorId));
             if (!actorResult.IsSuccess)
             {
                 // If actor doesn't exist, return empty state
@@ -186,7 +186,7 @@ public class GeneralCommandContext : ICommandContext, ICommandContextResultAcces
             // Get the TagConsistentActor for this tag
             var tagConsistentActorId = tag.GetTag();
 
-            var actorResult = await _actorAccessor.GetActorAsync<ITagConsistentActorCommon>(tagConsistentActorId);
+            var actorResult = await ResultBoxBridge.CaptureAsync(_actorAccessor.GetActorAsync<ITagConsistentActorCommon>(tagConsistentActorId));
             if (!actorResult.IsSuccess)
             {
                 // Actor doesn't exist means tag doesn't exist (not an error, just no data)
@@ -194,7 +194,7 @@ public class GeneralCommandContext : ICommandContext, ICommandContextResultAcces
             }
 
             var actor = actorResult.GetValue();
-            var latestSortableUniqueIdResult = await actor.GetLatestSortableUniqueIdAsync();
+            var latestSortableUniqueIdResult = await ResultBoxBridge.CaptureAsync(actor.GetLatestSortableUniqueIdAsync());
 
             if (!latestSortableUniqueIdResult.IsSuccess)
             {
@@ -234,7 +234,7 @@ public class GeneralCommandContext : ICommandContext, ICommandContextResultAcces
             // Get the TagConsistentActor for this tag
             var tagConsistentActorId = tag.GetTag();
 
-            var actorResult = await _actorAccessor.GetActorAsync<ITagConsistentActorCommon>(tagConsistentActorId);
+            var actorResult = await ResultBoxBridge.CaptureAsync(_actorAccessor.GetActorAsync<ITagConsistentActorCommon>(tagConsistentActorId));
             if (!actorResult.IsSuccess)
             {
                 // If actor doesn't exist, return empty string (not an error, just no data)
@@ -242,7 +242,7 @@ public class GeneralCommandContext : ICommandContext, ICommandContextResultAcces
             }
 
             var actor = actorResult.GetValue();
-            var latestSortableUniqueIdResult = await actor.GetLatestSortableUniqueIdAsync();
+            var latestSortableUniqueIdResult = await ResultBoxBridge.CaptureAsync(actor.GetLatestSortableUniqueIdAsync());
 
             if (!latestSortableUniqueIdResult.IsSuccess)
             {

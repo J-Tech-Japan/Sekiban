@@ -498,6 +498,69 @@ public class ColdExporterTests
         Assert.Equal("0", progress.ManifestVersion);
     }
 
+    [Theory]
+    [InlineData(100_000)]
+    [InlineData(0)]
+    public async Task ExportIncrementalAsync_should_wrap_only_a_failed_read_task(int maxEventsPerRun)
+    {
+        var options = new ColdEventStoreOptions
+        {
+            Enabled = true,
+            PullInterval = EnabledOptions.PullInterval,
+            SafeWindow = EnabledOptions.SafeWindow,
+            SegmentMaxEvents = EnabledOptions.SegmentMaxEvents,
+            SegmentMaxBytes = EnabledOptions.SegmentMaxBytes,
+            ExportMaxEventsPerRun = maxEventsPerRun
+        };
+        var storeFailure = new IOException("hot store unavailable");
+
+        var faulted = await CreateExporter(new ThrowingReadEventStore(storeFailure, throwSynchronously: false), options)
+            .ExportIncrementalAsync(ServiceId, CancellationToken.None)
+            .AsResultBoxAsync();
+        var wrapped = Assert.IsType<InvalidOperationException>(faulted.GetException());
+        Assert.Equal("Failed to read export candidates from event store.", wrapped.Message);
+        Assert.Same(storeFailure, wrapped.InnerException);
+
+        // A store that throws before returning its task was never reported as a failed read.
+        var thrown = await CreateExporter(new ThrowingReadEventStore(storeFailure, throwSynchronously: true), options)
+            .ExportIncrementalAsync(ServiceId, CancellationToken.None)
+            .AsResultBoxAsync();
+        Assert.Same(storeFailure, thrown.GetException());
+    }
+
+    private sealed class ThrowingReadEventStore(Exception failure, bool throwSynchronously) : IHotEventStore
+    {
+        private readonly StubEventStore _inner = new([]);
+
+        public Task<IEnumerable<TagStream>> ReadTagsAsync(ITag tag) => _inner.ReadTagsAsync(tag);
+        public Task<TagState> GetLatestTagAsync(ITag tag) => _inner.GetLatestTagAsync(tag);
+        public Task<bool> TagExistsAsync(ITag tag) => _inner.TagExistsAsync(tag);
+        public Task<long> GetEventCountAsync(SortableUniqueId? since = null) => _inner.GetEventCountAsync(since);
+
+        public Task<IEnumerable<TagInfo>> GetAllTagsAsync(string? tagGroup = null) =>
+            _inner.GetAllTagsAsync(tagGroup);
+
+        public Task<string> GetLatestSortableUniqueIdAsync() => _inner.GetLatestSortableUniqueIdAsync();
+        public Task<IEnumerable<SerializableEvent>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null) => Fail();
+
+        public Task<IEnumerable<SerializableEvent>> ReadAllSerializableEventsAsync(SortableUniqueId? since, int? maxCount) =>
+            Fail();
+
+        public Task<SerializableEvent?> ReadSerializableEventAsync(Guid eventId) =>
+            _inner.ReadSerializableEventAsync(eventId);
+
+        public Task<IEnumerable<SerializableEvent>> ReadSerializableEventsByTagAsync(
+            ITag tag,
+            SortableUniqueId? since = null) => _inner.ReadSerializableEventsByTagAsync(tag, since);
+
+        public Task<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>
+            WriteSerializableEventsAsync(IEnumerable<SerializableEvent> events) =>
+            _inner.WriteSerializableEventsAsync(events);
+
+        private Task<IEnumerable<SerializableEvent>> Fail() =>
+            throwSynchronously ? throw failure : Task.FromException<IEnumerable<SerializableEvent>>(failure);
+    }
+
     private sealed class StubEventStore : IHotEventStore
     {
         private readonly IReadOnlyList<SerializableEvent> _events;

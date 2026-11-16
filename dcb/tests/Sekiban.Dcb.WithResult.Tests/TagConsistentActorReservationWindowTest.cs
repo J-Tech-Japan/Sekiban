@@ -1,5 +1,6 @@
 using Dcb.Domain;
 using Sekiban.Dcb.Actors;
+using ResultBoxes;
 namespace Sekiban.Dcb.Tests;
 
 /// <summary>
@@ -22,19 +23,19 @@ public class TagConsistentActorReservationWindowTest
         // Act & Assert
 
         // Step 1: Make first reservation
-        var firstReservationResult = await actor.MakeReservationAsync("");
+        var firstReservationResult = await ResultBox.WrapTry(() => actor.MakeReservationAsync(""));
         Assert.True(firstReservationResult.IsSuccess);
         var firstReservation = firstReservationResult.GetValue();
 
         // Step 2: Try to make another reservation while first is active (should fail)
-        var secondReservationResult = await actor.MakeReservationAsync("");
+        var secondReservationResult = await ResultBox.WrapTry(() => actor.MakeReservationAsync(""));
         Assert.False(secondReservationResult.IsSuccess);
 
         // Step 3: Wait for the reservation window to expire
         await Task.Delay(TimeSpan.FromSeconds(2.5));
 
         // Step 4: Now we should be able to make a new reservation
-        var thirdReservationResult = await actor.MakeReservationAsync("");
+        var thirdReservationResult = await ResultBox.WrapTry(() => actor.MakeReservationAsync(""));
         Assert.True(thirdReservationResult.IsSuccess);
         var thirdReservation = thirdReservationResult.GetValue();
 
@@ -57,7 +58,7 @@ public class TagConsistentActorReservationWindowTest
         // Act & Assert
 
         // Make and confirm first reservation
-        var firstReservationResult = await actor.MakeReservationAsync("");
+        var firstReservationResult = await ResultBox.WrapTry(() => actor.MakeReservationAsync(""));
         Assert.True(firstReservationResult.IsSuccess);
         var firstReservation = firstReservationResult.GetValue();
 
@@ -65,7 +66,7 @@ public class TagConsistentActorReservationWindowTest
         Assert.True(confirmResult);
 
         // Should be able to make new reservation immediately after confirmation
-        var secondReservationResult = await actor.MakeReservationAsync("");
+        var secondReservationResult = await ResultBox.WrapTry(() => actor.MakeReservationAsync(""));
         Assert.True(secondReservationResult.IsSuccess);
     }
 
@@ -79,7 +80,7 @@ public class TagConsistentActorReservationWindowTest
         // Act & Assert
 
         // Make and cancel first reservation
-        var firstReservationResult = await actor.MakeReservationAsync("");
+        var firstReservationResult = await ResultBox.WrapTry(() => actor.MakeReservationAsync(""));
         Assert.True(firstReservationResult.IsSuccess);
         var firstReservation = firstReservationResult.GetValue();
 
@@ -87,7 +88,7 @@ public class TagConsistentActorReservationWindowTest
         Assert.True(cancelResult);
 
         // Should be able to make new reservation immediately after cancellation
-        var secondReservationResult = await actor.MakeReservationAsync("");
+        var secondReservationResult = await ResultBox.WrapTry(() => actor.MakeReservationAsync(""));
         Assert.True(secondReservationResult.IsSuccess);
     }
 
@@ -103,7 +104,7 @@ public class TagConsistentActorReservationWindowTest
         var actor = new GeneralTagConsistentActor(tagName, null, options, _domainTypes.TagTypes);
 
         // Make reservation
-        var reservationResult = await actor.MakeReservationAsync("");
+        var reservationResult = await ResultBox.WrapTry(() => actor.MakeReservationAsync(""));
         Assert.True(reservationResult.IsSuccess);
 
         // Check active reservations before expiration

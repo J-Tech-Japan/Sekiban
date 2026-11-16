@@ -79,16 +79,15 @@ public class SerializedCommitNoMigrationTests
     private sealed class AcceptingExecutor : ISerializedSekibanDcbExecutor
     {
         public int Calls { get; private set; }
-        public Task<ResultBox<SerializableTagState>> GetSerializableTagStateAsync(TagStateId tagStateId) =>
+        public Task<SerializableTagState> GetSerializableTagStateAsync(TagStateId tagStateId) =>
             throw new NotSupportedException();
-        public Task<ResultBox<SerializedCommitResult>> CommitSerializableEventsAsync(
+        public Task<SerializedCommitResult> CommitSerializableEventsAsync(
             SerializedCommitRequest request, CancellationToken cancellationToken = default)
         {
             Calls++;
             return Task.FromResult(
-                ResultBox.FromValue(
                     new SerializedCommitResult(
-                        Array.Empty<SerializableEvent>(), Array.Empty<TagWriteResult>(), TimeSpan.Zero)));
+                        Array.Empty<SerializableEvent>(), Array.Empty<TagWriteResult>(), TimeSpan.Zero));
         }
     }
 
@@ -106,7 +105,7 @@ public class SerializedCommitNoMigrationTests
     public async Task LegacyValidShapes_AreNotNarrowed_Unversioned(string json)
     {
         var exec = new AcceptingExecutor();
-        var result = await new SerializedCommitAcceptor(exec).AcceptAsync(Encoding.UTF8.GetBytes(json));
+        var result = await ResultBox.WrapTry(() => new SerializedCommitAcceptor(exec).AcceptAsync(Encoding.UTF8.GetBytes(json)));
         Assert.True(result.IsSuccess, result.IsSuccess ? "" : result.GetException().ToString());
         Assert.Equal(1, exec.Calls); // routed to the executor, not rejected
     }
@@ -118,7 +117,7 @@ public class SerializedCommitNoMigrationTests
         // Prefix an explicit "version":1 — the same shapes remain acceptable through the versioned path.
         var versioned = "{\"version\":1," + json.Substring(1);
         var exec = new AcceptingExecutor();
-        var result = await new SerializedCommitAcceptor(exec).AcceptAsync(Encoding.UTF8.GetBytes(versioned));
+        var result = await ResultBox.WrapTry(() => new SerializedCommitAcceptor(exec).AcceptAsync(Encoding.UTF8.GetBytes(versioned)));
         Assert.True(result.IsSuccess, result.IsSuccess ? "" : result.GetException().ToString());
         Assert.Equal(1, exec.Calls);
     }

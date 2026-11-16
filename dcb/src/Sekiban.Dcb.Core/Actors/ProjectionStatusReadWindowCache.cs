@@ -1,5 +1,4 @@
 using System.Collections.Concurrent;
-using ResultBoxes;
 
 namespace Sekiban.Dcb.Actors;
 
@@ -17,7 +16,7 @@ public sealed class ProjectionStatusReadWindowCache
     public async Task<(long TotalEventCount, DateTimeOffset SampledAtUtc)> GetOrSampleAsync(
         string serviceId,
         TimeSpan samplingWindow,
-        Func<Task<ResultBox<long>>> sampler,
+        Func<Task<long>> sampler,
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(serviceId);
@@ -45,12 +44,7 @@ public sealed class ProjectionStatusReadWindowCache
             }
 
             var sampled = await sampler().ConfigureAwait(false);
-            if (!sampled.IsSuccess)
-            {
-                throw sampled.GetException();
-            }
-
-            var sample = new Sample(Math.Max(0, sampled.GetValue()), DateTimeOffset.UtcNow);
+            var sample = new Sample(Math.Max(0, sampled), DateTimeOffset.UtcNow);
             if (samplingWindow > TimeSpan.Zero)
             {
                 _samples[serviceId] = sample;

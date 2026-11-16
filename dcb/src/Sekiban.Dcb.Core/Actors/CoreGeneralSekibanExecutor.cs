@@ -1,4 +1,3 @@
-using ResultBoxes;
 using Sekiban.Dcb.Commands;
 using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Events;
@@ -15,7 +14,7 @@ using CoreCommandContext = Sekiban.Dcb.Commands.CoreGeneralCommandContext;
 namespace Sekiban.Dcb.Actors;
 
 /// <summary>
-///     Core implementation of command executor logic using ResultBox for error handling.
+///     Core implementation of command executor logic. Failures are thrown as exceptions (the facades adapt them).
 ///     Orchestrates command execution including context creation, handler invocation,
 ///     tag reservation, and event/tag persistence.
 ///     Also provides tag state retrieval and query execution capabilities.
@@ -338,413 +337,412 @@ public class CoreGeneralSekibanExecutor
         await _eventPublisher.PublishAsync(publishEvents, CancellationToken.None);
     }
 
-    public Task<ResultBox<ExecutionResult>> ExecuteAsync<TCommand>(
+    public Task<ExecutionResult> ExecuteAsync<TCommand>(
         TCommand command,
-        Func<TCommand, ICoreCommandContext, Task<ResultBox<EventOrNone>>> handlerFunc,
+        Func<TCommand, ICoreCommandContext, Task<EventOrNone>> handlerFunc,
         CancellationToken cancellationToken = default) where TCommand : ICommand =>
         ExecuteAsyncCore(command, handlerFunc, null, cancellationToken);
+
+    // Requests every reservation and keeps each tag's own outcome, so one failed reservation never hides another.
+    private async Task<(TagWriteReservation? Reservation, Exception? Error)> TryRequestReservationAsync(
+        ITag tag,
+        string? lastSortableUniqueId)
+    {
+        try
+        {
+            return (await TagReservationHelper.RequestReservationAsync(_actorAccessor, tag, lastSortableUniqueId), null);
+        }
+        catch (Exception ex)
+        {
+            return (null, ex);
+        }
+    }
+
+    // Reserves every consistency tag. When any reservation fails, the successful ones are cancelled and one
+    // InvalidOperationException lists each failed tag, as before.
+    private async Task<Dictionary<ITag, TagWriteReservation>> ReserveConsistencyTagsAsync(
+        ITag[] consistencyTags,
+        Func<ITag, string?> positionOf)
+    {
+        var reservations = new Dictionary<ITag, TagWriteReservation>();
+        var reservationResults = await Task.WhenAll(consistencyTags
+            .Select(tag => TryRequestReservationAsync(tag, positionOf(tag)))
+            .ToArray());
+
+        // Check if all reservations succeeded
+        var failedReservations = new List<(ITag Tag, Exception Error)>();
+        for (var index = 0; index < consistencyTags.Length; index++)
+        {
+            var tag = consistencyTags[index];
+            var (reservation, error) = reservationResults[index];
+            if (error is null)
+            {
+                reservations[tag] = reservation!;
+            }
+            else
+            {
+                failedReservations.Add((tag, error));
+            }
+        }
+
+        // If any reservations failed, cancel all successful reservations
+        if (failedReservations.Any())
+        {
+            await TagReservationHelper.CancelReservationsAsync(_actorAccessor, reservations);
+
+            var errorMessage = string.Join(
+                "; ",
+                failedReservations.Select(f => $"Tag {f.Tag.GetTag()}: {f.Error.Message}"));
+            throw new InvalidOperationException($"Failed to reserve tags: {errorMessage}");
+        }
+
+        return reservations;
+    }
 
     /// <summary>
     ///     Shared ordinary-batch pipeline. Explicit expected positions take precedence over the optional reservation
     ///     fence. With the default Off mode, legacy calls retain unconditional semantics.
     /// </summary>
-    private async Task<ResultBox<ExecutionResult>> ExecuteAsyncCore<TCommand>(
+    private async Task<ExecutionResult> ExecuteAsyncCore<TCommand>(
         TCommand command,
-        Func<TCommand, ICoreCommandContext, Task<ResultBox<EventOrNone>>> handlerFunc,
+        Func<TCommand, ICoreCommandContext, Task<EventOrNone>> handlerFunc,
         ExpectedTagPositionSpecification? expectedTagPositions,
         CancellationToken cancellationToken, TagConsistencyFenceMode? fenceOverride = null) where TCommand : ICommand
     {
         var stopwatch = Stopwatch.StartNew();
 
-        try
+        // Step 0: Validate command using DataAnnotations attributes
+        var validationErrors = SekibanValidator.Validate(command);
+        if (validationErrors.Count > 0)
         {
-            // Step 0: Validate command using DataAnnotations attributes
-            var validationErrors = SekibanValidator.Validate(command);
-            if (validationErrors.Count > 0)
+            throw new SekibanValidationException(validationErrors);
+        }
+
+        // Expected-position is optional, but never best-effort. Validate its discriminated shape and the live
+        // descriptor before the handler can allocate ids, reserve a tag, or reach any provider write method.
+        var deriveFence = (fenceOverride ?? _tagConsistencyFenceOptions?.Mode) == TagConsistencyFenceMode.DeriveFromReservations;
+        IExpectedTagPositionEventStore? expectedPositionStore = null;
+        if (expectedTagPositions is not null || deriveFence)
+        {
+            var currentServiceId = ResolveExpectedTagPositionServiceId();
+            expectedTagPositions?.ValidateEntryShapes(currentServiceId);
+
+            var capability = Sekiban.Dcb.Capabilities.SekibanDcbCapabilityResolver.DescribeWriteConditions(
+                _eventStore, "event store");
+            if (!capability.Supports(Sekiban.Dcb.Capabilities.WriteConditionKind.ExpectedTagPosition) ||
+                _eventStore is not IExpectedTagPositionEventStore resolvedExpectedPositionStore)
             {
-                return ResultBox.Error<ExecutionResult>(new SekibanValidationException(validationErrors));
+                throw new ConditionNotSupportedException(
+                    Sekiban.Dcb.Capabilities.WriteConditionKind.ExpectedTagPosition,
+                    capability.ProviderName);
             }
 
-            // Expected-position is optional, but never best-effort. Validate its discriminated shape and the live
-            // descriptor before the handler can allocate ids, reserve a tag, or reach any provider write method.
-            var deriveFence = (fenceOverride ?? _tagConsistencyFenceOptions?.Mode) == TagConsistencyFenceMode.DeriveFromReservations;
-            IExpectedTagPositionEventStore? expectedPositionStore = null;
-            if (expectedTagPositions is not null || deriveFence)
+            expectedPositionStore = resolvedExpectedPositionStore;
+            if (deriveFence || expectedTagPositions?.RequiresEnforcement == true)
             {
-                var currentServiceId = ResolveExpectedTagPositionServiceId();
-                expectedTagPositions?.ValidateEntryShapes(currentServiceId);
-
-                var capability = Sekiban.Dcb.Capabilities.SekibanDcbCapabilityResolver.DescribeWriteConditions(
-                    _eventStore, "event store");
-                if (!capability.Supports(Sekiban.Dcb.Capabilities.WriteConditionKind.ExpectedTagPosition) ||
-                    _eventStore is not IExpectedTagPositionEventStore resolvedExpectedPositionStore)
+                var enabled = await expectedPositionStore
+                    .EnsureExpectedTagPositionEnforcementEnabledAsync(cancellationToken);
+                if (!enabled)
                 {
-                    return ResultBox.Error<ExecutionResult>(
-                        new ConditionNotSupportedException(
-                            Sekiban.Dcb.Capabilities.WriteConditionKind.ExpectedTagPosition,
-                            capability.ProviderName));
-                }
-
-                expectedPositionStore = resolvedExpectedPositionStore;
-                if (deriveFence || expectedTagPositions?.RequiresEnforcement == true)
-                {
-                    var enabled = await expectedPositionStore
-                        .EnsureExpectedTagPositionEnforcementEnabledAsync(cancellationToken).ToResultBoxAsync();
-                    if (!enabled.IsSuccess || !enabled.GetValue())
-                    {
-                        return ResultBox.Error<ExecutionResult>(enabled.IsSuccess
-                            ? new TagHeadEnforcementNotEnabledException(currentServiceId)
-                            : enabled.GetException());
-                    }
+                    throw new TagHeadEnforcementNotEnabledException(currentServiceId);
                 }
             }
+        }
 
-            // Step 1: Create command context
-            var commandContext = new CoreCommandContext(_actorAccessor, _domainTypes);
+        // Step 1: Create command context
+        var commandContext = new CoreCommandContext(_actorAccessor, _domainTypes);
 
-            // Step 2: Execute handler function with context
-            var handlerResult = await handlerFunc(command, commandContext);
-            if (!handlerResult.IsSuccess)
+        // Step 2: Execute handler function with context
+        var eventOrNone = await handlerFunc(command, commandContext);
+
+        // Collect events appended explicitly via context (multi-event support)
+        var appended = commandContext.GetAppendedEvents();
+
+        // If handler returned an event (EventOrNone.HasEvent), include it only if it is not already in appended list
+        // Current AppendEvent returns EventOrNone.Event for the appended event; some handlers may both AppendEvent and return the last event.
+        // We treat appended list as the source of truth for multiple events; if none appended but return has event, use that single one.
+        var collectedEvents = new List<EventPayloadWithTags>();
+        if (appended.Count > 0)
+        {
+            collectedEvents.AddRange(appended);
+            // If handler also returned an event that is different reference (just in case), append if not duplicate
+            if (eventOrNone.HasEvent)
             {
-                return ResultBox.Error<ExecutionResult>(handlerResult.GetException());
-            }
-
-            var eventOrNone = handlerResult.GetValue();
-
-            // Collect events appended explicitly via context (multi-event support)
-            var appended = commandContext.GetAppendedEvents();
-
-            // If handler returned an event (EventOrNone.HasEvent), include it only if it is not already in appended list
-            // Current AppendEvent returns EventOrNone.Event for the appended event; some handlers may both AppendEvent and return the last event.
-            // We treat appended list as the source of truth for multiple events; if none appended but return has event, use that single one.
-            var collectedEvents = new List<EventPayloadWithTags>();
-            if (appended.Count > 0)
-            {
-                collectedEvents.AddRange(appended);
-                // If handler also returned an event that is different reference (just in case), append if not duplicate
-                if (eventOrNone.HasEvent)
+                var returned = eventOrNone.GetValue();
+                if (!collectedEvents.Contains(returned))
                 {
-                    var returned = eventOrNone.GetValue();
-                    if (!collectedEvents.Contains(returned))
-                    {
-                        collectedEvents.Add(returned);
-                    }
+                    collectedEvents.Add(returned);
                 }
             }
-            else if (eventOrNone.HasEvent)
-            {
-                collectedEvents.Add(eventOrNone.GetValue());
-            }
+        }
+        else if (eventOrNone.HasEvent)
+        {
+            collectedEvents.Add(eventOrNone.GetValue());
+        }
 
-            // If still no events, return early
-            if (collectedEvents.Count == 0)
-            {
-                if (expectedTagPositions is not null)
-                {
-                    expectedTagPositions.ValidateFor(
-                        ResolveExpectedTagPositionServiceId(),
-                        Array.Empty<string>());
-                }
-                return ResultBox.FromValue(
-                    new ExecutionResult(Guid.Empty, 0, new List<TagWriteResult>(), stopwatch.Elapsed, []));
-            }
-
-            // Step 3: Collect tags across all events
-            var allTags = new HashSet<ITag>(collectedEvents.SelectMany(e => e.Tags));
-
-            // Step 3.1: Validate all tags
-            TagValidator.ValidateTagsAndThrow(allTags);
-
-            var accessedStates = commandContext.GetAccessedTagStates();
-            var reservationInputs = new Dictionary<ITag, string?>();
-            foreach (var tag in allTags.Where(t => t.IsConsistencyTag()))
-            {
-                reservationInputs[tag] = ResolveReservationPosition(tag, accessedStates);
-            }
-            if (deriveFence && expectedTagPositions is null)
-                expectedTagPositions = DeriveExpectedPositions(reservationInputs.Select(e => (e.Key.GetTag(), e.Value)));
-
+        // If still no events, return early
+        if (collectedEvents.Count == 0)
+        {
             if (expectedTagPositions is not null)
             {
                 expectedTagPositions.ValidateFor(
                     ResolveExpectedTagPositionServiceId(),
-                    allTags.Where(tag => tag.IsConsistencyTag()).Select(tag => tag.GetTag()));
+                    Array.Empty<string>());
             }
-
-            // Establish the persisted floor before any reservation, id allocation, or write.
-            await EnsureSortableUniqueIdSeededAsync(cancellationToken);
-
-            // Step 4: According to spec:
-            //  - If tag.IsConsistencyTag() == false -> DO NOT reserve (skip)
-            //  - If tag.IsConsistencyTag() == true AND tag is ConsistencyTag with SortableUniqueId present -> use that SortableUniqueId
-            //  - If tag.IsConsistencyTag() == true AND (ConsistencyTag without SortableUniqueId OR not ConsistencyTag class) ->
-            //       look up accessed tag state via ICommandContext (GeneralCommandContext) and use its LastSortableUniqueId
-            var reservations = new Dictionary<ITag, TagWriteReservation>();
-            cancellationToken.ThrowIfCancellationRequested();
-            var consistencyTags = allTags.Where(tag => tag.IsConsistencyTag()).ToArray();
-            var reservationTasks = consistencyTags.Select(tag =>
-                TagReservationHelper.RequestReservationAsync(_actorAccessor, tag, reservationInputs[tag]))
-                .ToArray();
-            var reservationResults = await Task.WhenAll(reservationTasks);
-
-            // Check if all reservations succeeded
-            var failedReservations = new List<(ITag Tag, Exception Error)>();
-            for (var index = 0; index < consistencyTags.Length; index++)
-            {
-                var tag = consistencyTags[index];
-                var result = reservationResults[index];
-                if (result.IsSuccess)
-                {
-                    reservations[tag] = result.GetValue();
-                }
-                else
-                {
-                    failedReservations.Add((tag, result.GetException()));
-                }
-            }
-
-            // If any reservations failed, cancel all successful reservations
-            if (failedReservations.Any())
-            {
-                await TagReservationHelper.CancelReservationsAsync(_actorAccessor, reservations);
-
-                var errorMessage = string.Join(
-                    "; ",
-                    failedReservations.Select(f => $"Tag {f.Tag.GetTag()}: {f.Error.Message}"));
-                return ResultBox.Error<ExecutionResult>(
-                    new InvalidOperationException($"Failed to reserve tags: {errorMessage}"));
-            }
-
-            try
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-
-                SeedAboveObservedPositions(reservationInputs.Values);
-
-                // Step 5: Write event to EventStore (handles both events and tags)
-                // Build Event objects for each collected event payload
-                var executedUser = GetExecutedUser();
-                var events = new List<Event>();
-                foreach (var e in collectedEvents)
-                {
-                    var eId = Guid.CreateVersion7();
-                    var sortable = _sortableUniqueIdGenerator.GenerateNew();
-                    var meta = new EventMetadata(eId.ToString(), command.GetType().Name, executedUser);
-                    events.Add(
-                        new Event(
-                            e.Event,
-                            sortable,
-                            e.Event.GetType().Name,
-                            eId,
-                            meta,
-                            e.Tags.Select(t => t.GetTag()).ToList()));
-                }
-
-                var preparedEvents = events
-                    .Select(e => new PreparedExecutorEvent(
-                        e,
-                        e.ToSerializableEvent(_domainTypes.EventTypes),
-                        e.Tags.Select(_domainTypes.TagTypes.GetTag).ToArray()))
-                    .ToList();
-                var sizeEvaluation = EvaluateSizeGate(preparedEvents);
-
-                IReadOnlyList<Event> writtenEvents;
-                IReadOnlyList<TagWriteResult> tagWriteResults;
-                if (expectedPositionStore is not null && expectedTagPositions is not null)
-                {
-                    var serialized = preparedEvents.Select(e => e.SerializedEvent).ToList();
-                    var writeResult = await expectedPositionStore.WriteSerializableEventsWithExpectedTagPositionsAsync(
-                        serialized, expectedTagPositions, cancellationToken).ToResultBoxAsync();
-                    if (!writeResult.IsSuccess)
-                    {
-                        await TagReservationHelper.CancelReservationsAsync(_actorAccessor, reservations);
-                        if (writeResult.GetException() is ExpectedTagPositionConflictException conflict)
-                            await TagReservationHelper.NotifyConflictingTagsAsync(_actorAccessor, allTags, conflict);
-                        return ResultBox.Error<ExecutionResult>(writeResult.GetException());
-                    }
-
-                    // The expected-position store receives a lossless serialization of the exact Event instances above;
-                    // preserving those instances keeps the legacy typed result shape and publication semantics intact.
-                    writtenEvents = events;
-                    tagWriteResults = writeResult.GetValue().TagWrites;
-                }
-                else
-                {
-                    var writeResult = await _eventStore.WriteEventsAsync(events, _domainTypes.EventTypes).ToResultBoxAsync();
-                    if (!writeResult.IsSuccess)
-                    {
-                        await TagReservationHelper.CancelReservationsAsync(_actorAccessor, reservations);
-                        return ResultBox.Error<ExecutionResult>(writeResult.GetException());
-                    }
-
-                    (writtenEvents, tagWriteResults) = writeResult.GetValue();
-                }
-
-                // Step 6: Confirm reservations with TagConsistentActors
-                await TagReservationHelper.ConfirmReservationsAsync(_actorAccessor, reservations);
-
-                // Step 6.1: Notify non-consistency tags about the event write
-                await TagReservationHelper.NotifyNonConsistencyTagsAsync(_actorAccessor, allTags, reservations.Keys);
-
-                var firstEvent = writtenEvents.First();
-
-                if (_eventPublisher != null)
-                {
-                    await PublishPreparedEventsAsync(preparedEvents, sizeEvaluation);
-                }
-
-                var metadata = new Dictionary<string, object>
-                {
-                    ["EventCount"] = writtenEvents.Count,
-                    ["TagCount"] = allTags.Count
-                };
-                if (sizeEvaluation.Diagnostics.Count > 0)
-                {
-                    metadata["SizeGateDiagnostics"] = sizeEvaluation.Diagnostics;
-                }
-
-                // Return success result
-                return ResultBox.FromValue(
-                    new ExecutionResult(
-                        firstEvent.Id,
-                        writtenEvents.Count, // event count as a placeholder for position (multi-event)
-                        tagWriteResults.ToList(),
-                        stopwatch.Elapsed,
-                        writtenEvents,
-                        metadata,
-                        firstEvent.SortableUniqueIdValue));
-            }
-            catch (Exception ex)
-            {
-                // If anything fails after reservations, cancel them.
-                await TagReservationHelper.CancelReservationsAsync(_actorAccessor, reservations);
-                if (ex is ExpectedTagPositionConflictException conflict)
-                    await TagReservationHelper.NotifyConflictingTagsAsync(_actorAccessor, allTags, conflict);
-                throw;
-            }
+            return new ExecutionResult(Guid.Empty, 0, new List<TagWriteResult>(), stopwatch.Elapsed, []);
         }
-        catch (Exception ex)
+
+        // Step 3: Collect tags across all events
+        var allTags = new HashSet<ITag>(collectedEvents.SelectMany(e => e.Tags));
+
+        // Step 3.1: Validate all tags
+        TagValidator.ValidateTagsAndThrow(allTags);
+
+        var accessedStates = commandContext.GetAccessedTagStates();
+        var reservationInputs = new Dictionary<ITag, string?>();
+        foreach (var tag in allTags.Where(t => t.IsConsistencyTag()))
         {
-            return ResultBox.Error<ExecutionResult>(ex);
+            reservationInputs[tag] = ResolveReservationPosition(tag, accessedStates);
+        }
+        if (deriveFence && expectedTagPositions is null)
+            expectedTagPositions = DeriveExpectedPositions(reservationInputs.Select(e => (e.Key.GetTag(), e.Value)));
+
+        if (expectedTagPositions is not null)
+        {
+            expectedTagPositions.ValidateFor(
+                ResolveExpectedTagPositionServiceId(),
+                allTags.Where(tag => tag.IsConsistencyTag()).Select(tag => tag.GetTag()));
+        }
+
+        // Establish the persisted floor before any reservation, id allocation, or write.
+        await EnsureSortableUniqueIdSeededAsync(cancellationToken);
+
+        // Step 4: According to spec:
+        //  - If tag.IsConsistencyTag() == false -> DO NOT reserve (skip)
+        //  - If tag.IsConsistencyTag() == true AND tag is ConsistencyTag with SortableUniqueId present -> use that SortableUniqueId
+        //  - If tag.IsConsistencyTag() == true AND (ConsistencyTag without SortableUniqueId OR not ConsistencyTag class) ->
+        //       look up accessed tag state via ICommandContext (GeneralCommandContext) and use its LastSortableUniqueId
+        cancellationToken.ThrowIfCancellationRequested();
+        var consistencyTags = allTags.Where(tag => tag.IsConsistencyTag()).ToArray();
+        var reservations = await ReserveConsistencyTagsAsync(consistencyTags, tag => reservationInputs[tag]);
+
+        // Set when a failed write has already released the reservations, so the catch below does not repeat it.
+        var reservationsReleased = false;
+        try
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            SeedAboveObservedPositions(reservationInputs.Values);
+
+            // Step 5: Write event to EventStore (handles both events and tags)
+            // Build Event objects for each collected event payload
+            var executedUser = GetExecutedUser();
+            var events = new List<Event>();
+            foreach (var e in collectedEvents)
+            {
+                var eId = Guid.CreateVersion7();
+                var sortable = _sortableUniqueIdGenerator.GenerateNew();
+                var meta = new EventMetadata(eId.ToString(), command.GetType().Name, executedUser);
+                events.Add(
+                    new Event(
+                        e.Event,
+                        sortable,
+                        e.Event.GetType().Name,
+                        eId,
+                        meta,
+                        e.Tags.Select(t => t.GetTag()).ToList()));
+            }
+
+            var preparedEvents = events
+                .Select(e => new PreparedExecutorEvent(
+                    e,
+                    e.ToSerializableEvent(_domainTypes.EventTypes),
+                    e.Tags.Select(_domainTypes.TagTypes.GetTag).ToArray()))
+                .ToList();
+            var sizeEvaluation = EvaluateSizeGate(preparedEvents);
+
+            IReadOnlyList<Event> writtenEvents;
+            IReadOnlyList<TagWriteResult> tagWriteResults;
+            if (expectedPositionStore is not null && expectedTagPositions is not null)
+            {
+                var serialized = preparedEvents.Select(e => e.SerializedEvent).ToList();
+                var write = expectedPositionStore.WriteSerializableEventsWithExpectedTagPositionsAsync(
+                    serialized, expectedTagPositions, cancellationToken);
+                ExpectedTagPositionWriteResult writeResult;
+                try
+                {
+                    writeResult = await write;
+                }
+                catch (Exception writeFailure)
+                {
+                    reservationsReleased = true;
+                    await TagReservationHelper.CancelReservationsAsync(_actorAccessor, reservations);
+                    if (writeFailure is ExpectedTagPositionConflictException conflict)
+                        await TagReservationHelper.NotifyConflictingTagsAsync(_actorAccessor, allTags, conflict);
+                    throw;
+                }
+
+                // The expected-position store receives a lossless serialization of the exact Event instances above;
+                // preserving those instances keeps the legacy typed result shape and publication semantics intact.
+                writtenEvents = events;
+                tagWriteResults = writeResult.TagWrites;
+            }
+            else
+            {
+                var write = _eventStore.WriteEventsAsync(events, _domainTypes.EventTypes);
+                try
+                {
+                    (writtenEvents, tagWriteResults) = await write;
+                }
+                catch (Exception)
+                {
+                    reservationsReleased = true;
+                    await TagReservationHelper.CancelReservationsAsync(_actorAccessor, reservations);
+                    throw;
+                }
+            }
+
+            // Step 6: Confirm reservations with TagConsistentActors
+            await TagReservationHelper.ConfirmReservationsAsync(_actorAccessor, reservations);
+
+            // Step 6.1: Notify non-consistency tags about the event write
+            await TagReservationHelper.NotifyNonConsistencyTagsAsync(_actorAccessor, allTags, reservations.Keys);
+
+            var firstEvent = writtenEvents.First();
+
+            if (_eventPublisher != null)
+            {
+                await PublishPreparedEventsAsync(preparedEvents, sizeEvaluation);
+            }
+
+            var metadata = new Dictionary<string, object>
+            {
+                ["EventCount"] = writtenEvents.Count,
+                ["TagCount"] = allTags.Count
+            };
+            if (sizeEvaluation.Diagnostics.Count > 0)
+            {
+                metadata["SizeGateDiagnostics"] = sizeEvaluation.Diagnostics;
+            }
+
+            // Return success result
+            return new ExecutionResult(
+                firstEvent.Id,
+                writtenEvents.Count, // event count as a placeholder for position (multi-event)
+                tagWriteResults.ToList(),
+                stopwatch.Elapsed,
+                writtenEvents,
+                metadata,
+                firstEvent.SortableUniqueIdValue);
+        }
+        catch (Exception ex) when (!reservationsReleased)
+        {
+            // If anything fails after reservations, cancel them.
+            await TagReservationHelper.CancelReservationsAsync(_actorAccessor, reservations);
+            if (ex is ExpectedTagPositionConflictException conflict)
+                await TagReservationHelper.NotifyConflictingTagsAsync(_actorAccessor, allTags, conflict);
+            throw;
         }
     }
 
-    public Task<ResultBox<TagState>> GetTagStateAsync(TagStateId tagStateId) =>
+    public Task<TagState> GetTagStateAsync(TagStateId tagStateId) =>
         GetTagStateAsync(tagStateId, CancellationToken.None);
 
-    public async Task<ResultBox<TagState>> GetTagStateAsync(
+    public async Task<TagState> GetTagStateAsync(
         TagStateId tagStateId,
         CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
+        // Step 0: Validate tagStateId using DataAnnotations attributes
+        var validationErrors = SekibanValidator.Validate(tagStateId);
+        if (validationErrors.Count > 0)
+        {
+            throw new SekibanValidationException(validationErrors);
+        }
+
+        // Get the tag state actor for this tag state ID
+        var tagStateActorId = tagStateId.GetTagStateId();
+        var actorLookup = _actorAccessor.GetActorAsync<ITagStateActorCommon>(tagStateActorId);
+        ITagStateActorCommon actor;
         try
         {
+            actor = await actorLookup;
+        }
+        catch (Exception)
+        {
+            // As before, the caller's cancellation is observed before a failed lookup is reported.
             cancellationToken.ThrowIfCancellationRequested();
-            // Step 0: Validate tagStateId using DataAnnotations attributes
-            var validationErrors = SekibanValidator.Validate(tagStateId);
-            if (validationErrors.Count > 0)
-            {
-                return ResultBox.Error<TagState>(new SekibanValidationException(validationErrors));
-            }
+            throw;
+        }
 
-            // Get the tag state actor for this tag state ID
-            var tagStateActorId = tagStateId.GetTagStateId();
-            var actorResult = await _actorAccessor.GetActorAsync<ITagStateActorCommon>(tagStateActorId);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        // Get the state from the actor
+        var state = await actor.GetStateAsync(cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        // Convert SerializableTagState to TagState
+        // We need to deserialize the payload from the serializable state
+        if (state.ResolvedPayloadName == nameof(EmptyTagStatePayload))
+        {
             cancellationToken.ThrowIfCancellationRequested();
+            return new TagState(
+                new EmptyTagStatePayload(),
+                state.Version,
+                state.LastSortedUniqueId,
+                state.TagGroup,
+                state.TagContent,
+                state.TagProjector,
+                state.ProjectorVersion);
+        }
 
-            if (!actorResult.IsSuccess)
-            {
-                return ResultBox.Error<TagState>(actorResult.GetException());
-            }
+        // Deserialize the payload using domain types
+        var payloadTypeResult = _domainTypes.TagStatePayloadTypes.GetPayloadType(state.ResolvedPayloadName);
+        if (payloadTypeResult == null)
+        {
+            throw new InvalidOperationException($"Unknown payload type: {state.ResolvedPayloadName}");
+        }
 
-            var actor = actorResult.GetValue();
-
-            // Get the state from the actor
-            var state = await actor.GetStateAsync(cancellationToken);
-            cancellationToken.ThrowIfCancellationRequested();
-
-            // Convert SerializableTagState to TagState
-            // We need to deserialize the payload from the serializable state
-            if (state.ResolvedPayloadName == nameof(EmptyTagStatePayload))
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                return ResultBox.FromValue(
-                    new TagState(
-                        new EmptyTagStatePayload(),
-                        state.Version,
-                        state.LastSortedUniqueId,
-                        state.TagGroup,
-                        state.TagContent,
-                        state.TagProjector,
-                        state.ProjectorVersion));
-            }
-
-            // Deserialize the payload using domain types
-            var payloadTypeResult = _domainTypes.TagStatePayloadTypes.GetPayloadType(state.ResolvedPayloadName);
-            if (payloadTypeResult == null)
-            {
-                return ResultBox.Error<TagState>(
-                    new InvalidOperationException($"Unknown payload type: {state.ResolvedPayloadName}"));
-            }
-
-            var deserializeResult = ResultBox.WrapTry(() => _domainTypes.TagStatePayloadTypes.DeserializePayload(
+        ITagStatePayload payload;
+        try
+        {
+            payload = _domainTypes.TagStatePayloadTypes.DeserializePayload(
                 state.ResolvedPayloadName,
-                state.Payload));
-            cancellationToken.ThrowIfCancellationRequested();
-
-            if (!deserializeResult.IsSuccess)
-            {
-                return ResultBox.Error<TagState>(deserializeResult.GetException());
-            }
-
-            var payload = deserializeResult.GetValue();
-            cancellationToken.ThrowIfCancellationRequested();
-
-            return ResultBox.FromValue(
-                new TagState(
-                    payload,
-                    state.Version,
-                    state.LastSortedUniqueId,
-                    state.TagGroup,
-                    state.TagContent,
-                    state.TagProjector,
-                    state.ProjectorVersion));
+                state.Payload);
         }
-        catch (Exception ex)
+        catch (Exception)
         {
-            return ResultBox.Error<TagState>(ex);
+            // As before, the caller's cancellation is observed before a failed deserialization is reported.
+            cancellationToken.ThrowIfCancellationRequested();
+            throw;
         }
+
+        cancellationToken.ThrowIfCancellationRequested();
+
+        return new TagState(
+            payload,
+            state.Version,
+            state.LastSortedUniqueId,
+            state.TagGroup,
+            state.TagContent,
+            state.TagProjector,
+            state.ProjectorVersion);
     }
 
-    public async Task<ResultBox<SerializableTagState>> GetSerializableTagStateAsync(TagStateId tagStateId)
+    public async Task<SerializableTagState> GetSerializableTagStateAsync(TagStateId tagStateId)
     {
-        try
+        var validationErrors = SekibanValidator.Validate(tagStateId);
+        if (validationErrors.Count > 0)
         {
-            var validationErrors = SekibanValidator.Validate(tagStateId);
-            if (validationErrors.Count > 0)
-            {
-                return ResultBox.Error<SerializableTagState>(new SekibanValidationException(validationErrors));
-            }
-
-            var tagStateActorId = tagStateId.GetTagStateId();
-            var actorResult = await _actorAccessor.GetActorAsync<ITagStateActorCommon>(tagStateActorId);
-
-            if (!actorResult.IsSuccess)
-            {
-                return ResultBox.Error<SerializableTagState>(actorResult.GetException());
-            }
-
-            var actor = actorResult.GetValue();
-            var state = await actor.GetStateAsync();
-
-            return ResultBox.FromValue(state);
+            throw new SekibanValidationException(validationErrors);
         }
-        catch (Exception ex)
-        {
-            return ResultBox.Error<SerializableTagState>(ex);
-        }
+
+        var tagStateActorId = tagStateId.GetTagStateId();
+        var actor = await _actorAccessor.GetActorAsync<ITagStateActorCommon>(tagStateActorId);
+        return await actor.GetStateAsync();
     }
 
-    public Task<ResultBox<SerializedCommitResult>> CommitSerializableEventsAsync(
+    public Task<SerializedCommitResult> CommitSerializableEventsAsync(
         SerializedCommitRequest request,
         CancellationToken cancellationToken) =>
         CommitSerializableEventsCoreAsync(request, null, cancellationToken);
@@ -753,15 +751,15 @@ public class CoreGeneralSekibanExecutor
     ///     V2 serialized entry point. It is additive to the V1/legacy interface and validates the version before it can
     ///     reach reservation, id allocation, or a provider write.
     /// </summary>
-    public Task<ResultBox<SerializedCommitResult>> CommitSerializableEventsWithExpectedTagPositionsAsync(
+    public Task<SerializedCommitResult> CommitSerializableEventsWithExpectedTagPositionsAsync(
         VersionedExpectedTagPositionSerializedCommitRequest request,
         CancellationToken cancellationToken = default)
     {
         if (request.Version != VersionedExpectedTagPositionSerializedCommitRequest.CurrentVersion)
         {
-            return Task.FromResult(ResultBox.Error<SerializedCommitResult>(
+            return Task.FromException<SerializedCommitResult>(
                 new UnsupportedSerializedCommitVersionException(
-                    request.Version, VersionedExpectedTagPositionSerializedCommitRequest.CurrentVersion)));
+                    request.Version, VersionedExpectedTagPositionSerializedCommitRequest.CurrentVersion));
         }
 
         return CommitSerializableEventsCoreAsync(
@@ -772,557 +770,437 @@ public class CoreGeneralSekibanExecutor
             cancellationToken);
     }
 
-    private async Task<ResultBox<SerializedCommitResult>> CommitSerializableEventsCoreAsync(
+    private async Task<SerializedCommitResult> CommitSerializableEventsCoreAsync(
         SerializedCommitRequest request,
         ExpectedTagPositionSpecification? expectedTagPositions,
         CancellationToken cancellationToken)
     {
         var stopwatch = Stopwatch.StartNew();
 
-        try
+        var deriveFence = _tagConsistencyFenceOptions?.Mode == TagConsistencyFenceMode.DeriveFromReservations;
+        IExpectedTagPositionEventStore? expectedPositionStore = null;
+        if (expectedTagPositions is not null || deriveFence)
         {
-            var deriveFence = _tagConsistencyFenceOptions?.Mode == TagConsistencyFenceMode.DeriveFromReservations;
-            IExpectedTagPositionEventStore? expectedPositionStore = null;
-            if (expectedTagPositions is not null || deriveFence)
+            var currentServiceId = ResolveExpectedTagPositionServiceId();
+            expectedTagPositions?.ValidateEntryShapes(currentServiceId);
+            var capability = Sekiban.Dcb.Capabilities.SekibanDcbCapabilityResolver.DescribeWriteConditions(
+                _eventStore, "event store");
+            if (!capability.Supports(Sekiban.Dcb.Capabilities.WriteConditionKind.ExpectedTagPosition) ||
+                _eventStore is not IExpectedTagPositionEventStore resolvedExpectedPositionStore)
             {
-                var currentServiceId = ResolveExpectedTagPositionServiceId();
-                expectedTagPositions?.ValidateEntryShapes(currentServiceId);
-                var capability = Sekiban.Dcb.Capabilities.SekibanDcbCapabilityResolver.DescribeWriteConditions(
-                    _eventStore, "event store");
-                if (!capability.Supports(Sekiban.Dcb.Capabilities.WriteConditionKind.ExpectedTagPosition) ||
-                    _eventStore is not IExpectedTagPositionEventStore resolvedExpectedPositionStore)
-                {
-                    return ResultBox.Error<SerializedCommitResult>(
-                        new ConditionNotSupportedException(
-                            Sekiban.Dcb.Capabilities.WriteConditionKind.ExpectedTagPosition,
-                            capability.ProviderName));
-                }
+                throw new ConditionNotSupportedException(
+                    Sekiban.Dcb.Capabilities.WriteConditionKind.ExpectedTagPosition,
+                    capability.ProviderName);
+            }
 
-                expectedPositionStore = resolvedExpectedPositionStore;
-                if (deriveFence || expectedTagPositions?.RequiresEnforcement == true)
+            expectedPositionStore = resolvedExpectedPositionStore;
+            if (deriveFence || expectedTagPositions?.RequiresEnforcement == true)
+            {
+                var enabled = await expectedPositionStore
+                    .EnsureExpectedTagPositionEnforcementEnabledAsync(cancellationToken);
+                if (!enabled)
                 {
-                    var enabled = await expectedPositionStore
-                        .EnsureExpectedTagPositionEnforcementEnabledAsync(cancellationToken).ToResultBoxAsync();
-                    if (!enabled.IsSuccess || !enabled.GetValue())
-                    {
-                        return ResultBox.Error<SerializedCommitResult>(enabled.IsSuccess
-                            ? new TagHeadEnforcementNotEnabledException(currentServiceId)
-                            : enabled.GetException());
-                    }
+                    throw new TagHeadEnforcementNotEnabledException(currentServiceId);
                 }
             }
+        }
 
-            if (request.ConsistencyTags.Any(entry => entry.LastSortableUniqueId is null))
-            {
-                return ResultBox.Error<SerializedCommitResult>(
-                    new ArgumentException(
-                        "Serialized consistency-tag reservations require a non-null lastSortableUniqueId. " +
-                        "Use an empty string to assert that the tag is empty."));
-            }
+        if (request.ConsistencyTags.Any(entry => entry.LastSortableUniqueId is null))
+        {
+            throw new ArgumentException(
+                "Serialized consistency-tag reservations require a non-null lastSortableUniqueId. " +
+                "Use an empty string to assert that the tag is empty.");
+        }
 
-            if (request.EventCandidates.Count == 0)
-            {
-                if (expectedTagPositions is not null)
-                {
-                    expectedTagPositions.ValidateFor(
-                        ResolveExpectedTagPositionServiceId(),
-                        Array.Empty<string>());
-                }
-                return ResultBox.FromValue(
-                    new SerializedCommitResult(
-                        Array.Empty<SerializableEvent>(),
-                        Array.Empty<TagWriteResult>(),
-                        stopwatch.Elapsed));
-            }
-
-            // Step 1: Collect all tags from event candidates
-            var allTagStrings = new HashSet<string>(
-                request.EventCandidates.SelectMany(e => e.Tags));
-
-            var duplicateConsistencyTags = request.ConsistencyTags
-                .GroupBy(ct => ct.Tag)
-                .Where(g => g.Count() > 1)
-                .Select(g => g.Key)
-                .ToList();
-            if (duplicateConsistencyTags.Count > 0)
-            {
-                return ResultBox.Error<SerializedCommitResult>(
-                    new InvalidOperationException(
-                        $"Duplicate consistency tags in request: {string.Join(", ", duplicateConsistencyTags)}"));
-            }
-
-            var unknownConsistencyTags = request.ConsistencyTags
-                .Select(ct => ct.Tag)
-                .Where(tag => !allTagStrings.Contains(tag))
-                .Distinct()
-                .ToList();
-            if (unknownConsistencyTags.Count > 0)
-            {
-                return ResultBox.Error<SerializedCommitResult>(
-                    new InvalidOperationException(
-                        $"Consistency tags must exist in event candidate tags. Unknown tags: {string.Join(", ", unknownConsistencyTags)}"));
-            }
-
-            if (deriveFence && expectedTagPositions is null)
-                expectedTagPositions = DeriveExpectedPositions(request.ConsistencyTags.Select(e => (e.Tag, (string?)e.LastSortableUniqueId)));
-
+        if (request.EventCandidates.Count == 0)
+        {
             if (expectedTagPositions is not null)
             {
                 expectedTagPositions.ValidateFor(
                     ResolveExpectedTagPositionServiceId(),
-                    request.ConsistencyTags.Select(entry => entry.Tag));
+                    Array.Empty<string>());
             }
+            return new SerializedCommitResult(
+                Array.Empty<SerializableEvent>(),
+                Array.Empty<TagWriteResult>(),
+                stopwatch.Elapsed);
+        }
 
-            // Step 2: Build FallbackTag objects for non-consistency tags and reservation
-            var consistencyEntryMap = request.ConsistencyTags.ToDictionary(
-                ct => ct.Tag,
-                ct => ct.LastSortableUniqueId);
+        // Step 1: Collect all tags from event candidates
+        var allTagStrings = new HashSet<string>(
+            request.EventCandidates.SelectMany(e => e.Tags));
 
-            var allTags = new HashSet<ITag>();
-            foreach (var tagString in allTagStrings)
-            {
-                allTags.Add(ParseTag(tagString, consistencyEntryMap.ContainsKey(tagString)));
-            }
+        var duplicateConsistencyTags = request.ConsistencyTags
+            .GroupBy(ct => ct.Tag)
+            .Where(g => g.Count() > 1)
+            .Select(g => g.Key)
+            .ToList();
+        if (duplicateConsistencyTags.Count > 0)
+        {
+            throw new InvalidOperationException(
+                $"Duplicate consistency tags in request: {string.Join(", ", duplicateConsistencyTags)}");
+        }
 
-            TagValidator.ValidateTagsAndThrow(allTags);
+        var unknownConsistencyTags = request.ConsistencyTags
+            .Select(ct => ct.Tag)
+            .Where(tag => !allTagStrings.Contains(tag))
+            .Distinct()
+            .ToList();
+        if (unknownConsistencyTags.Count > 0)
+        {
+            throw new InvalidOperationException(
+                $"Consistency tags must exist in event candidate tags. Unknown tags: {string.Join(", ", unknownConsistencyTags)}");
+        }
 
-            // Establish the persisted floor before any reservation, id allocation, or write.
-            await EnsureSortableUniqueIdSeededAsync(cancellationToken);
+        if (deriveFence && expectedTagPositions is null)
+            expectedTagPositions = DeriveExpectedPositions(request.ConsistencyTags.Select(e => (e.Tag, (string?)e.LastSortableUniqueId)));
 
-            // Step 3: Reserve consistency tags
-            var reservations = new Dictionary<ITag, TagWriteReservation>();
-            var failedReservations = new List<(ITag Tag, Exception Error)>();
+        if (expectedTagPositions is not null)
+        {
+            expectedTagPositions.ValidateFor(
+                ResolveExpectedTagPositionServiceId(),
+                request.ConsistencyTags.Select(entry => entry.Tag));
+        }
+
+        // Step 2: Build FallbackTag objects for non-consistency tags and reservation
+        var consistencyEntryMap = request.ConsistencyTags.ToDictionary(
+            ct => ct.Tag,
+            ct => ct.LastSortableUniqueId);
+
+        var allTags = new HashSet<ITag>();
+        foreach (var tagString in allTagStrings)
+        {
+            allTags.Add(ParseTag(tagString, consistencyEntryMap.ContainsKey(tagString)));
+        }
+
+        TagValidator.ValidateTagsAndThrow(allTags);
+
+        // Establish the persisted floor before any reservation, id allocation, or write.
+        await EnsureSortableUniqueIdSeededAsync(cancellationToken);
+
+        // Step 3: Reserve consistency tags
+        cancellationToken.ThrowIfCancellationRequested();
+        var consistencyTags = allTags.Where(tag => tag.IsConsistencyTag()).ToArray();
+        var reservations = await ReserveConsistencyTagsAsync(
+            consistencyTags,
+            tag => consistencyEntryMap[tag.GetTag()]);
+
+        var reservationsConfirmed = false;
+        // Set when a failed step has already released the reservations, so the catch below does not repeat it.
+        var reservationsReleased = false;
+        try
+        {
             cancellationToken.ThrowIfCancellationRequested();
-            var consistencyTags = allTags.Where(tag => tag.IsConsistencyTag()).ToArray();
-            var reservationTasks = consistencyTags.Select(tag =>
-                TagReservationHelper.RequestReservationAsync(_actorAccessor, tag, consistencyEntryMap[tag.GetTag()]))
-                .ToArray();
-            var reservationResults = await Task.WhenAll(reservationTasks);
-            for (var index = 0; index < consistencyTags.Length; index++)
+
+            SeedAboveObservedPositions(consistencyEntryMap.Values);
+
+            // Step 4: Build SerializableEvent objects with server-generated metadata
+            var serializableEvents = new List<SerializableEvent>();
+            foreach (var candidate in request.EventCandidates)
             {
-                var tag = consistencyTags[index];
-                var result = reservationResults[index];
-                if (result.IsSuccess)
+                var eventId = ConditionalEventIdFactory();
+                var sortableId = (ConditionalSortableIdFactory ?? _sortableUniqueIdGenerator.GenerateNew)();
+                var metadata = new EventMetadata(eventId.ToString(), "SerializedCommit", "SerializedSekibanExecutor");
+
+                serializableEvents.Add(new SerializableEvent(
+                    candidate.Payload,
+                    sortableId,
+                    eventId,
+                    metadata,
+                    candidate.Tags.ToList(),
+                    candidate.EventPayloadName));
+            }
+
+            var preparedEvents = new List<PreparedExecutorEvent>(serializableEvents.Count);
+            foreach (var serializableEvent in serializableEvents)
+            {
+                Event preparedEvent;
+                try
                 {
-                    reservations[tag] = result.GetValue();
+                    preparedEvent = serializableEvent.ToEvent(_domainTypes.EventTypes);
                 }
-                else
+                catch (Exception)
                 {
-                    failedReservations.Add((tag, result.GetException()));
+                    reservationsReleased = true;
+                    await TagReservationHelper.CancelReservationsAsync(_actorAccessor, reservations);
+                    throw;
+                }
+
+                preparedEvents.Add(new PreparedExecutorEvent(
+                    preparedEvent,
+                    serializableEvent,
+                    serializableEvent.Tags.Select(_domainTypes.TagTypes.GetTag).ToArray()));
+            }
+            var sizeEvaluation = EvaluateSizeGate(preparedEvents);
+
+            // Step 5: Explicit V2 and opt-in derived V1 use the same store-enforced write path.
+            IReadOnlyList<SerializableEvent> writtenEvents;
+            IReadOnlyList<TagWriteResult> tagWriteResults;
+            if (expectedPositionStore is not null && expectedTagPositions is not null)
+            {
+                var write = expectedPositionStore.WriteSerializableEventsWithExpectedTagPositionsAsync(
+                    serializableEvents, expectedTagPositions, cancellationToken);
+                ExpectedTagPositionWriteResult writeResult;
+                try
+                {
+                    writeResult = await write;
+                }
+                catch (Exception writeFailure)
+                {
+                    reservationsReleased = true;
+                    await TagReservationHelper.CancelReservationsAsync(_actorAccessor, reservations);
+                    if (writeFailure is ExpectedTagPositionConflictException conflict)
+                        await TagReservationHelper.NotifyConflictingTagsAsync(_actorAccessor, allTags, conflict);
+                    throw;
+                }
+
+                writtenEvents = writeResult.Events;
+                tagWriteResults = writeResult.TagWrites;
+            }
+            else
+            {
+                var write = _eventStore.WriteSerializableEventsAsync(serializableEvents);
+                try
+                {
+                    (writtenEvents, tagWriteResults) = await write;
+                }
+                catch (Exception)
+                {
+                    reservationsReleased = true;
+                    await TagReservationHelper.CancelReservationsAsync(_actorAccessor, reservations);
+                    throw;
                 }
             }
 
-            if (failedReservations.Any())
+            // Step 6: Confirm reservations
+            await TagReservationHelper.ConfirmReservationsAsync(_actorAccessor, reservations);
+            reservationsConfirmed = true;
+
+            cancellationToken.ThrowIfCancellationRequested();
+
+            // Step 6.1: Notify non-consistency tags
+            await TagReservationHelper.NotifyNonConsistencyTagsAsync(_actorAccessor, allTags, reservations.Keys);
+
+            if (_eventPublisher != null && writtenEvents.Count > 0)
+            {
+                await PublishPreparedEventsAsync(preparedEvents, sizeEvaluation);
+            }
+
+            var result = new SerializedCommitResult(
+                    writtenEvents,
+                    tagWriteResults,
+                    stopwatch.Elapsed)
+            {
+                SizeGateDiagnostics = sizeEvaluation.Diagnostics
+            };
+            return result;
+        }
+        catch (Exception ex) when (!reservationsReleased)
+        {
+            if (!reservationsConfirmed && reservations.Count > 0)
             {
                 await TagReservationHelper.CancelReservationsAsync(_actorAccessor, reservations);
-
-                var errorMessage = string.Join(
-                    "; ",
-                    failedReservations.Select(f => $"Tag {f.Tag.GetTag()}: {f.Error.Message}"));
-                return ResultBox.Error<SerializedCommitResult>(
-                    new InvalidOperationException($"Failed to reserve tags: {errorMessage}"));
+                if (ex is ExpectedTagPositionConflictException conflict)
+                    await TagReservationHelper.NotifyConflictingTagsAsync(_actorAccessor, allTags, conflict);
             }
-
-            var reservationsConfirmed = false;
-            try
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-
-                SeedAboveObservedPositions(consistencyEntryMap.Values);
-
-                // Step 4: Build SerializableEvent objects with server-generated metadata
-                var serializableEvents = new List<SerializableEvent>();
-                foreach (var candidate in request.EventCandidates)
-                {
-                    var eventId = ConditionalEventIdFactory();
-                    var sortableId = (ConditionalSortableIdFactory ?? _sortableUniqueIdGenerator.GenerateNew)();
-                    var metadata = new EventMetadata(eventId.ToString(), "SerializedCommit", "SerializedSekibanExecutor");
-
-                    serializableEvents.Add(new SerializableEvent(
-                        candidate.Payload,
-                        sortableId,
-                        eventId,
-                        metadata,
-                        candidate.Tags.ToList(),
-                        candidate.EventPayloadName));
-                }
-
-                var preparedEvents = new List<PreparedExecutorEvent>(serializableEvents.Count);
-                foreach (var serializableEvent in serializableEvents)
-                {
-                    var eventResult = serializableEvent.ToEvent(_domainTypes.EventTypes);
-                    if (!eventResult.IsSuccess)
-                    {
-                        await TagReservationHelper.CancelReservationsAsync(_actorAccessor, reservations);
-                        return ResultBox.Error<SerializedCommitResult>(eventResult.GetException());
-                    }
-
-                    var preparedEvent = eventResult.GetValue();
-                    preparedEvents.Add(new PreparedExecutorEvent(
-                        preparedEvent,
-                        serializableEvent,
-                        serializableEvent.Tags.Select(_domainTypes.TagTypes.GetTag).ToArray()));
-                }
-                var sizeEvaluation = EvaluateSizeGate(preparedEvents);
-
-                // Step 5: Explicit V2 and opt-in derived V1 use the same store-enforced write path.
-                IReadOnlyList<SerializableEvent> writtenEvents;
-                IReadOnlyList<TagWriteResult> tagWriteResults;
-                if (expectedPositionStore is not null && expectedTagPositions is not null)
-                {
-                    var writeResult = await expectedPositionStore.WriteSerializableEventsWithExpectedTagPositionsAsync(
-                        serializableEvents, expectedTagPositions, cancellationToken).ToResultBoxAsync();
-                    if (!writeResult.IsSuccess)
-                    {
-                        await TagReservationHelper.CancelReservationsAsync(_actorAccessor, reservations);
-                        if (writeResult.GetException() is ExpectedTagPositionConflictException conflict)
-                            await TagReservationHelper.NotifyConflictingTagsAsync(_actorAccessor, allTags, conflict);
-                        return ResultBox.Error<SerializedCommitResult>(writeResult.GetException());
-                    }
-
-                    writtenEvents = writeResult.GetValue().Events;
-                    tagWriteResults = writeResult.GetValue().TagWrites;
-                }
-                else
-                {
-                    var writeResult = await _eventStore.WriteSerializableEventsAsync(serializableEvents).ToResultBoxAsync();
-                    if (!writeResult.IsSuccess)
-                    {
-                        await TagReservationHelper.CancelReservationsAsync(_actorAccessor, reservations);
-                        return ResultBox.Error<SerializedCommitResult>(writeResult.GetException());
-                    }
-
-                    (writtenEvents, tagWriteResults) = writeResult.GetValue();
-                }
-
-                // Step 6: Confirm reservations
-                await TagReservationHelper.ConfirmReservationsAsync(_actorAccessor, reservations);
-                reservationsConfirmed = true;
-
-                cancellationToken.ThrowIfCancellationRequested();
-
-                // Step 6.1: Notify non-consistency tags
-                await TagReservationHelper.NotifyNonConsistencyTagsAsync(_actorAccessor, allTags, reservations.Keys);
-
-                if (_eventPublisher != null && writtenEvents.Count > 0)
-                {
-                    await PublishPreparedEventsAsync(preparedEvents, sizeEvaluation);
-                }
-
-                var result = new SerializedCommitResult(
-                        writtenEvents,
-                        tagWriteResults,
-                        stopwatch.Elapsed)
-                {
-                    SizeGateDiagnostics = sizeEvaluation.Diagnostics
-                };
-                return ResultBox.FromValue(result);
-            }
-            catch (Exception ex)
-            {
-                if (!reservationsConfirmed && reservations.Count > 0)
-                {
-                    await TagReservationHelper.CancelReservationsAsync(_actorAccessor, reservations);
-                    if (ex is ExpectedTagPositionConflictException conflict)
-                        await TagReservationHelper.NotifyConflictingTagsAsync(_actorAccessor, allTags, conflict);
-                }
-                throw;
-            }
-        }
-        catch (Exception ex)
-        {
-            return ResultBox.Error<SerializedCommitResult>(ex);
+            throw;
         }
     }
 
-    public async Task<ResultBox<TResult>> QueryAsync<TResult>(IQueryCommon<TResult> queryCommon) where TResult : notnull
+    public async Task<TResult> QueryAsync<TResult>(IQueryCommon<TResult> queryCommon) where TResult : notnull
     {
+        // Step 0: Validate query using DataAnnotations attributes
+        var validationErrors = SekibanValidator.Validate(queryCommon);
+        if (validationErrors.Count > 0)
+        {
+            throw new SekibanValidationException(validationErrors);
+        }
+
+        // Get the multi-projector type for this query
+        var projectorType = _domainTypes.QueryTypes.GetMultiProjectorType(queryCommon);
+
+        // Get the multi-projector name
+        var projectorNameProperty = projectorType.GetProperty("MultiProjectorName");
+        if (projectorNameProperty == null)
+        {
+            throw new InvalidOperationException(
+                $"Projector type {projectorType.Name} does not have MultiProjectorName property");
+        }
+
+        var projectorName = projectorNameProperty.GetValue(null) as string;
+        if (string.IsNullOrEmpty(projectorName))
+        {
+            throw new InvalidOperationException(
+                $"Projector type {projectorType.Name} has invalid MultiProjectorName");
+        }
+
+        // Get the multi-projection actor
+        var actor = await _actorAccessor.GetActorAsync<GeneralMultiProjectionActor>(projectorName);
+
+        await WaitForStrictSortableUniqueIdIfNeededAsync(
+            actor,
+            queryCommon,
+            SortableUniqueIdWaitSurface.InMemorySingle);
+
+        // Get the current state
+        var state = await actor.GetStateAsync();
+
+        // Create a provider function that returns the payload
+        var projectorProvider = () => Task.FromResult(state.Payload);
+
+        // Execute the query using QueryTypes
+        var serviceProvider = _actorAccessor as IServiceProvider ??
+            throw new InvalidOperationException("ActorAccessor must implement IServiceProvider");
+
+        int? safeVersion = null;
+        string? safeThreshold = null;
+        DateTime? safeThresholdTime = null;
+        int? unsafeVersion = null;
         try
         {
-            // Step 0: Validate query using DataAnnotations attributes
-            var validationErrors = SekibanValidator.Validate(queryCommon);
-            if (validationErrors.Count > 0)
+            var accessorType = state.Payload.GetType();
+            // If the payload implements ISafeAndUnsafeStateAccessor<T>, it has SafeVersion property.
+            var safeVersionProp = accessorType.GetProperty("SafeVersion");
+            if (safeVersionProp != null)
             {
-                return ResultBox.Error<TResult>(new SekibanValidationException(validationErrors));
+                safeVersion = safeVersionProp.GetValue(state.Payload) as int?;
             }
-
-            // Get the multi-projector type for this query
-            var projectorTypeResult = ResultBox.WrapTry(() => _domainTypes.QueryTypes.GetMultiProjectorType(queryCommon));
-            if (!projectorTypeResult.IsSuccess)
-            {
-                return ResultBox.Error<TResult>(projectorTypeResult.GetException());
-            }
-
-            var projectorType = projectorTypeResult.GetValue();
-
-            // Get the multi-projector name
-            var projectorNameProperty = projectorType.GetProperty("MultiProjectorName");
-            if (projectorNameProperty == null)
-            {
-                return ResultBox.Error<TResult>(
-                    new InvalidOperationException(
-                        $"Projector type {projectorType.Name} does not have MultiProjectorName property"));
-            }
-
-            var projectorName = projectorNameProperty.GetValue(null) as string;
-            if (string.IsNullOrEmpty(projectorName))
-            {
-                return ResultBox.Error<TResult>(
-                    new InvalidOperationException(
-                        $"Projector type {projectorType.Name} has invalid MultiProjectorName"));
-            }
-
-            // Get the multi-projection actor
-            var actorResult = await _actorAccessor.GetActorAsync<GeneralMultiProjectionActor>(projectorName);
-            if (!actorResult.IsSuccess)
-            {
-                return ResultBox.Error<TResult>(actorResult.GetException());
-            }
-
-            var actor = actorResult.GetValue();
-
-            await WaitForStrictSortableUniqueIdIfNeededAsync(
-                actor,
-                queryCommon,
-                SortableUniqueIdWaitSurface.InMemorySingle);
-
-            // Get the current state
-            var stateResult = await actor.GetStateAsync();
-            if (!stateResult.IsSuccess)
-            {
-                return ResultBox.Error<TResult>(stateResult.GetException());
-            }
-
-            var state = stateResult.GetValue();
-
-            // Create a provider function that returns the payload
-            var projectorProvider = () => Task.FromResult(state.Payload);
-
-            // Execute the query using QueryTypes
-            var serviceProvider = _actorAccessor as IServiceProvider ??
-                throw new InvalidOperationException("ActorAccessor must implement IServiceProvider");
-
-            int? safeVersion = null;
-            string? safeThreshold = null;
-            DateTime? safeThresholdTime = null;
-            int? unsafeVersion = null;
-            try
-            {
-                var accessorType = state.Payload.GetType();
-                // If the payload implements ISafeAndUnsafeStateAccessor<T>, it has SafeVersion property.
-                var safeVersionProp = accessorType.GetProperty("SafeVersion");
-                if (safeVersionProp != null)
-                {
-                    safeVersion = safeVersionProp.GetValue(state.Payload) as int?;
-                }
-                var unsafeVersionProp = accessorType.GetProperty("GetVersion") ?? accessorType.GetProperty("Version");
-                // fallback: use state.Version as unsafe version
-                unsafeVersion = state.Version;
-                // Attempt to get current safe window threshold from actor (more precise than last safe id)
-                var actorSafeThreshold = actor.PeekCurrentSafeWindowThreshold();
-                safeThreshold = actorSafeThreshold.Value;
-                try { safeThresholdTime = actorSafeThreshold.GetDateTime(); } catch { }
-            }
-            catch { }
-            var result = await ResultBox.WrapTry(() => _domainTypes.QueryTypes.ExecuteQueryAsync(
-                queryCommon,
-                projectorProvider,
-                serviceProvider,
-                safeVersion,
-                safeThreshold,
-                safeThresholdTime,
-                unsafeVersion));
-
-            if (!result.IsSuccess)
-            {
-                return ResultBox.Error<TResult>(result.GetException());
-            }
-
-            var value = result.GetValue();
-            if (value is TResult typedResult)
-            {
-                return ResultBox.FromValue(typedResult);
-            }
-
-            return ResultBox.Error<TResult>(
-                new InvalidCastException(
-                    $"Query result type mismatch. Expected {typeof(TResult).Name}, got {value?.GetType().Name ?? "null"}"));
+            var unsafeVersionProp = accessorType.GetProperty("GetVersion") ?? accessorType.GetProperty("Version");
+            // fallback: use state.Version as unsafe version
+            unsafeVersion = state.Version;
+            // Attempt to get current safe window threshold from actor (more precise than last safe id)
+            var actorSafeThreshold = actor.PeekCurrentSafeWindowThreshold();
+            safeThreshold = actorSafeThreshold.Value;
+            try { safeThresholdTime = actorSafeThreshold.GetDateTime(); } catch { }
         }
-        catch (Exception ex)
+        catch { }
+        var value = await _domainTypes.QueryTypes.ExecuteQueryAsync(
+            queryCommon,
+            projectorProvider,
+            serviceProvider,
+            safeVersion,
+            safeThreshold,
+            safeThresholdTime,
+            unsafeVersion);
+
+        if (value is TResult typedResult)
         {
-            return ResultBox.Error<TResult>(ex);
+            return typedResult;
         }
+
+        throw new InvalidCastException(
+            $"Query result type mismatch. Expected {typeof(TResult).Name}, got {value?.GetType().Name ?? "null"}");
     }
 
-    public async Task<ResultBox<ListQueryResult<TResult>>> QueryAsync<TResult>(IListQueryCommon<TResult> queryCommon)
+    public async Task<ListQueryResult<TResult>> QueryAsync<TResult>(IListQueryCommon<TResult> queryCommon)
         where TResult : notnull
     {
+        // Step 0: Validate list query using DataAnnotations attributes
+        var validationErrors = SekibanValidator.Validate(queryCommon);
+        if (validationErrors.Count > 0)
+        {
+            throw new SekibanValidationException(validationErrors);
+        }
+
+        // Get the multi-projector type for this query
+        var projectorType = _domainTypes.QueryTypes.GetMultiProjectorType(queryCommon);
+
+        // Get the multi-projector name
+        var projectorNameProperty = projectorType.GetProperty("MultiProjectorName");
+        if (projectorNameProperty == null)
+        {
+            throw new InvalidOperationException(
+                $"Projector type {projectorType.Name} does not have MultiProjectorName property");
+        }
+
+        var projectorName = projectorNameProperty.GetValue(null) as string;
+        if (string.IsNullOrEmpty(projectorName))
+        {
+            throw new InvalidOperationException(
+                $"Projector type {projectorType.Name} has invalid MultiProjectorName");
+        }
+
+        // Get the multi-projection actor
+        var actor = await _actorAccessor.GetActorAsync<GeneralMultiProjectionActor>(projectorName);
+
+        await WaitForStrictSortableUniqueIdIfNeededAsync(
+            actor,
+            queryCommon,
+            SortableUniqueIdWaitSurface.InMemoryList);
+
+        // Get the current state
+        var state = await actor.GetStateAsync();
+
+        // Create a provider function that returns the payload
+        var projectorProvider = () => Task.FromResult(state.Payload);
+
+        // Execute the list query using QueryTypes
+        var serviceProvider = _actorAccessor as IServiceProvider ??
+            throw new InvalidOperationException("ActorAccessor must implement IServiceProvider");
+
+        int? safeVersion = null;
+        string? safeThreshold = null;
+        DateTime? safeThresholdTime = null;
+        int? unsafeVersion = null;
         try
         {
-            // Step 0: Validate list query using DataAnnotations attributes
-            var validationErrors = SekibanValidator.Validate(queryCommon);
-            if (validationErrors.Count > 0)
+            var accessorType = state.Payload.GetType();
+            var safeVersionProp = accessorType.GetProperty("SafeVersion");
+            if (safeVersionProp != null)
             {
-                return ResultBox.Error<ListQueryResult<TResult>>(new SekibanValidationException(validationErrors));
+                safeVersion = safeVersionProp.GetValue(state.Payload) as int?;
             }
-
-            // Get the multi-projector type for this query
-            var projectorTypeResult = ResultBox.WrapTry(() => _domainTypes.QueryTypes.GetMultiProjectorType(queryCommon));
-            if (!projectorTypeResult.IsSuccess)
-            {
-                return ResultBox.Error<ListQueryResult<TResult>>(projectorTypeResult.GetException());
-            }
-
-            var projectorType = projectorTypeResult.GetValue();
-
-            // Get the multi-projector name
-            var projectorNameProperty = projectorType.GetProperty("MultiProjectorName");
-            if (projectorNameProperty == null)
-            {
-                return ResultBox.Error<ListQueryResult<TResult>>(
-                    new InvalidOperationException(
-                        $"Projector type {projectorType.Name} does not have MultiProjectorName property"));
-            }
-
-            var projectorName = projectorNameProperty.GetValue(null) as string;
-            if (string.IsNullOrEmpty(projectorName))
-            {
-                return ResultBox.Error<ListQueryResult<TResult>>(
-                    new InvalidOperationException(
-                        $"Projector type {projectorType.Name} has invalid MultiProjectorName"));
-            }
-
-            // Get the multi-projection actor
-            var actorResult = await _actorAccessor.GetActorAsync<GeneralMultiProjectionActor>(projectorName);
-            if (!actorResult.IsSuccess)
-            {
-                return ResultBox.Error<ListQueryResult<TResult>>(actorResult.GetException());
-            }
-
-            var actor = actorResult.GetValue();
-
-            await WaitForStrictSortableUniqueIdIfNeededAsync(
-                actor,
-                queryCommon,
-                SortableUniqueIdWaitSurface.InMemoryList);
-
-            // Get the current state
-            var stateResult = await actor.GetStateAsync();
-            if (!stateResult.IsSuccess)
-            {
-                return ResultBox.Error<ListQueryResult<TResult>>(stateResult.GetException());
-            }
-
-            var state = stateResult.GetValue();
-
-            // Create a provider function that returns the payload
-            var projectorProvider = () => Task.FromResult(state.Payload);
-
-            // Execute the list query using QueryTypes
-            var serviceProvider = _actorAccessor as IServiceProvider ??
-                throw new InvalidOperationException("ActorAccessor must implement IServiceProvider");
-
-            int? safeVersion = null;
-            string? safeThreshold = null;
-            DateTime? safeThresholdTime = null;
-            int? unsafeVersion = null;
-            try
-            {
-                var accessorType = state.Payload.GetType();
-                var safeVersionProp = accessorType.GetProperty("SafeVersion");
-                if (safeVersionProp != null)
-                {
-                    safeVersion = safeVersionProp.GetValue(state.Payload) as int?;
-                }
-                unsafeVersion = state.Version;
-                var actorSafeThreshold = actor.PeekCurrentSafeWindowThreshold();
-                safeThreshold = actorSafeThreshold.Value;
-                try { safeThresholdTime = actorSafeThreshold.GetDateTime(); } catch { }
-            }
-            catch { }
-            var result = await ResultBox.WrapTry(() => _domainTypes.QueryTypes.ExecuteListQueryAsync(
-                queryCommon,
-                projectorProvider,
-                serviceProvider,
-                safeVersion,
-                safeThreshold,
-                safeThresholdTime,
-                unsafeVersion));
-
-            if (!result.IsSuccess)
-            {
-                return ResultBox.Error<ListQueryResult<TResult>>(result.GetException());
-            }
-
-            var value = result.GetValue();
-            if (value is ListQueryResult<TResult> typedResult)
-            {
-                return ResultBox.FromValue(typedResult);
-            }
-
-            return ResultBox.Error<ListQueryResult<TResult>>(
-                new InvalidCastException(
-                    $"Query result type mismatch. Expected ListQueryResult<{typeof(TResult).Name}>, got {value?.GetType().Name ?? "null"}"));
+            unsafeVersion = state.Version;
+            var actorSafeThreshold = actor.PeekCurrentSafeWindowThreshold();
+            safeThreshold = actorSafeThreshold.Value;
+            try { safeThresholdTime = actorSafeThreshold.GetDateTime(); } catch { }
         }
-        catch (Exception ex)
+        catch { }
+        var value = await _domainTypes.QueryTypes.ExecuteListQueryAsync(
+            queryCommon,
+            projectorProvider,
+            serviceProvider,
+            safeVersion,
+            safeThreshold,
+            safeThresholdTime,
+            unsafeVersion);
+
+        if (value is ListQueryResult<TResult> typedResult)
         {
-            return ResultBox.Error<ListQueryResult<TResult>>(ex);
+            return typedResult;
         }
+
+        throw new InvalidCastException(
+            $"Query result type mismatch. Expected ListQueryResult<{typeof(TResult).Name}>, got {value?.GetType().Name ?? "null"}");
     }
 
-    public Task<ResultBox<string>> GetLatestSortableUniqueIdAsync() =>
-        _eventStore.GetLatestSortableUniqueIdAsync().ToResultBoxAsync();
+    public Task<string> GetLatestSortableUniqueIdAsync() =>
+        _eventStore.GetLatestSortableUniqueIdAsync();
 
-    public async Task<ResultBox<ProjectionHeadStatus>> GetProjectionHeadStatusAsync(
+    public async Task<ProjectionHeadStatus> GetProjectionHeadStatusAsync(
         string projectorName,
         string? expectedProjectorVersion = null)
     {
-        try
+        var validatedProjectorVersion = ProjectionHeadStatusUtilities.ValidateProjectorVersion(
+            _domainTypes,
+            projectorName,
+            expectedProjectorVersion);
+
+        var actor = await _actorAccessor.GetActorAsync<GeneralMultiProjectionActor>(projectorName);
+        var status = await actor.GetProjectionHeadStatusAsync();
+
+        var consistentProjectorName = ProjectionHeadStatusUtilities.EnsureProjectorNameConsistency(
+            projectorName,
+            status.ProjectorName);
+        var consistentProjectorVersion = ProjectionHeadStatusUtilities.EnsureProjectorVersionConsistency(
+            validatedProjectorVersion,
+            status.ProjectorVersion);
+
+        return status with
         {
-            var projectorVersionResult = ResultBox.WrapTry(() => ProjectionHeadStatusUtilities.ValidateProjectorVersion(
-                _domainTypes,
-                projectorName,
-                expectedProjectorVersion));
-            if (!projectorVersionResult.IsSuccess)
-            {
-                return ResultBox.Error<ProjectionHeadStatus>(projectorVersionResult.GetException());
-            }
-
-            var actorResult = await _actorAccessor.GetActorAsync<GeneralMultiProjectionActor>(projectorName);
-            if (!actorResult.IsSuccess)
-            {
-                return ResultBox.Error<ProjectionHeadStatus>(actorResult.GetException());
-            }
-
-            var actor = actorResult.GetValue();
-            var status = await actor.GetProjectionHeadStatusAsync();
-
-            var projectorNameResult = ResultBox.WrapTry(() => ProjectionHeadStatusUtilities.EnsureProjectorNameConsistency(
-                projectorName,
-                status.ProjectorName));
-            if (!projectorNameResult.IsSuccess)
-            {
-                return ResultBox.Error<ProjectionHeadStatus>(projectorNameResult.GetException());
-            }
-
-            var projectorVersionConsistencyResult = ResultBox.WrapTry(() => ProjectionHeadStatusUtilities.EnsureProjectorVersionConsistency(
-                projectorVersionResult.GetValue(),
-                status.ProjectorVersion));
-            if (!projectorVersionConsistencyResult.IsSuccess)
-            {
-                return ResultBox.Error<ProjectionHeadStatus>(projectorVersionConsistencyResult.GetException());
-            }
-
-            return ResultBox.FromValue(status with
-            {
-                ProjectorName = projectorNameResult.GetValue(),
-                ProjectorVersion = projectorVersionConsistencyResult.GetValue()
-            });
-        }
-        catch (Exception ex)
-        {
-            return ResultBox.Error<ProjectionHeadStatus>(ex);
-        }
+            ProjectorName = consistentProjectorName,
+            ProjectorVersion = consistentProjectorVersion
+        };
     }
 
     private async Task WaitForStrictSortableUniqueIdIfNeededAsync(
@@ -1361,36 +1239,19 @@ public class CoreGeneralSekibanExecutor
         return status.Current.LastSortableUniqueId;
     }
 
-    public async Task<ResultBox<EventStoreHeadStatus>> GetEventStoreHeadStatusAsync(bool includeTotalEventCount = false)
+    public async Task<EventStoreHeadStatus> GetEventStoreHeadStatusAsync(bool includeTotalEventCount = false)
     {
-        try
+        var latestSortableUniqueId = await _eventStore.GetLatestSortableUniqueIdAsync();
+
+        long? totalEventCount = null;
+        if (includeTotalEventCount)
         {
-            var latestSortableUniqueIdResult = await _eventStore.GetLatestSortableUniqueIdAsync().ToResultBoxAsync();
-            if (!latestSortableUniqueIdResult.IsSuccess)
-            {
-                return ResultBox.Error<EventStoreHeadStatus>(latestSortableUniqueIdResult.GetException());
-            }
-
-            long? totalEventCount = null;
-            if (includeTotalEventCount)
-            {
-                var totalEventCountResult = await _eventStore.GetEventCountAsync().ToResultBoxAsync();
-                if (!totalEventCountResult.IsSuccess)
-                {
-                    return ResultBox.Error<EventStoreHeadStatus>(totalEventCountResult.GetException());
-                }
-
-                totalEventCount = totalEventCountResult.GetValue();
-            }
-
-            return ResultBox.FromValue(new EventStoreHeadStatus(
-                ProjectionHeadStatusUtilities.NormalizeSortableUniqueId(latestSortableUniqueIdResult.GetValue()),
-                totalEventCount));
+            totalEventCount = await _eventStore.GetEventCountAsync();
         }
-        catch (Exception ex)
-        {
-            return ResultBox.Error<EventStoreHeadStatus>(ex);
-        }
+
+        return new EventStoreHeadStatus(
+            ProjectionHeadStatusUtilities.NormalizeSortableUniqueId(latestSortableUniqueId),
+            totalEventCount);
     }
 
     /// <summary>
@@ -1422,9 +1283,9 @@ public class CoreGeneralSekibanExecutor
     ///     expected-tag positions enter the same ordinary batch pipeline with a durable store capability gate; a
     ///     conditional append continues to use its dedicated single-event path.
     /// </summary>
-    public Task<ResultBox<ExecutionResult>> ExecuteAsync<TCommand>(
+    public Task<ExecutionResult> ExecuteAsync<TCommand>(
         TCommand command,
-        Func<TCommand, ICoreCommandContext, Task<ResultBox<EventOrNone>>> handlerFunc,
+        Func<TCommand, ICoreCommandContext, Task<EventOrNone>> handlerFunc,
         CommandExecutionOptions? options,
         CancellationToken cancellationToken = default) where TCommand : ICommand
     {
@@ -1434,9 +1295,9 @@ public class CoreGeneralSekibanExecutor
         if (options?.ConditionalAppend is not null &&
             (options.ExpectedTagPositions is not null || options.TagConsistencyFence == TagConsistencyFenceMode.DeriveFromReservations))
         {
-            return Task.FromResult(ResultBox.Error<ExecutionResult>(
+            return Task.FromException<ExecutionResult>(
                 new TagHeadExpectationValidationException(
-                    "ConditionalAppend and an explicit tag consistency fence cannot be combined in one command. Use one explicit write-condition protocol.")));
+                    "ConditionalAppend and an explicit tag consistency fence cannot be combined in one command. Use one explicit write-condition protocol."));
         }
 
         return options?.ConditionalAppend is { } conditional
@@ -1444,283 +1305,257 @@ public class CoreGeneralSekibanExecutor
             : ExecuteAsyncCore(command, handlerFunc, options?.ExpectedTagPositions, cancellationToken, options?.TagConsistencyFence);
     }
 
-    private async Task<ResultBox<ExecutionResult>> ExecuteConditionalAppendAsync<TCommand>(
+    private async Task<ExecutionResult> ExecuteConditionalAppendAsync<TCommand>(
         TCommand command,
-        Func<TCommand, ICoreCommandContext, Task<ResultBox<EventOrNone>>> handlerFunc,
+        Func<TCommand, ICoreCommandContext, Task<EventOrNone>> handlerFunc,
         ConditionalAppendSpecification conditional,
         CancellationToken cancellationToken) where TCommand : ICommand
     {
         var stopwatch = Stopwatch.StartNew();
-        try
+        // Step 0: validate command.
+        var validationErrors = SekibanValidator.Validate(command);
+        if (validationErrors.Count > 0)
         {
-            // Step 0: validate command.
-            var validationErrors = SekibanValidator.Validate(command);
-            if (validationErrors.Count > 0)
-            {
-                return ResultBox.Error<ExecutionResult>(new SekibanValidationException(validationErrors));
-            }
-
-            // Step 0.5: FAIL CLOSED before the handler runs — before any EventId allocation, serialization, or store
-            // call. The decision is the runtime capability descriptor (never a type name); the cast is defensive (a store
-            // that declares support must implement the interface — enforced by an architecture test).
-            var capability = Sekiban.Dcb.Capabilities.SekibanDcbCapabilityResolver.DescribeWriteConditions(_eventStore, "event store");
-            if (!capability.Supports(Sekiban.Dcb.Capabilities.WriteConditionKind.SingleEventUniqueKey))
-            {
-                return ResultBox.Error<ExecutionResult>(
-                    new ConditionNotSupportedException(Sekiban.Dcb.Capabilities.WriteConditionKind.SingleEventUniqueKey, capability.ProviderName));
-            }
-
-            if (_eventStore is not IConditionalEventStore conditionalStore)
-            {
-                return ResultBox.Error<ExecutionResult>(
-                    new ConditionNotSupportedException(Sekiban.Dcb.Capabilities.WriteConditionKind.SingleEventUniqueKey, capability.ProviderName));
-            }
-
-            // Step 1-2: context + handler.
-            var commandContext = new CoreCommandContext(_actorAccessor, _domainTypes);
-            var handlerResult = await handlerFunc(command, commandContext);
-            if (!handlerResult.IsSuccess)
-            {
-                return ResultBox.Error<ExecutionResult>(handlerResult.GetException());
-            }
-
-            var eventOrNone = handlerResult.GetValue();
-            var collectedEvents = new List<EventPayloadWithTags>(commandContext.GetAppendedEvents());
-            if (eventOrNone.HasEvent)
-            {
-                var returned = eventOrNone.GetValue();
-                if (!collectedEvents.Contains(returned))
-                {
-                    collectedEvents.Add(returned);
-                }
-            }
-
-            // Single-event contract: zero AND multiple both fail closed here, BEFORE any store call — a zero-event
-            // conditional command must never fall through to the legacy empty-success result.
-            if (collectedEvents.Count != 1)
-            {
-                return ResultBox.Error<ExecutionResult>(
-                    new SingleEventConditionalAppendException(collectedEvents.Count));
-            }
-
-            var single = collectedEvents[0];
-            TagValidator.ValidateTagsAndThrow(new HashSet<ITag>(single.Tags));
-
-            await EnsureSortableUniqueIdSeededAsync(cancellationToken);
-
-            SeedAboveObservedPositions(commandContext.GetAccessedTagStates().Values.Select(state => state.LastSortedUniqueId));
-
-            var executedUser = GetExecutedUser();
-            var eventId = ConditionalEventIdFactory();
-            var sortable = _sortableUniqueIdGenerator.GenerateNew();
-            var eventMetadata = new EventMetadata(eventId.ToString(), command.GetType().Name, executedUser);
-            var domainEvent = new Event(
-                single.Event,
-                sortable,
-                single.Event.GetType().Name,
-                eventId,
-                eventMetadata,
-                single.Tags.Select(t => t.GetTag()).ToList());
-            var serializable = domainEvent.ToSerializableEvent(_domainTypes.EventTypes);
-            var preparedEvents = new List<PreparedExecutorEvent>
-            {
-                new(
-                    domainEvent,
-                    serializable,
-                    single.Tags.ToArray())
-            };
-            var sizeEvaluation = EvaluateSizeGate(preparedEvents);
-
-            var appendResult = await conditionalStore.AppendIfUniqueAsync(
-                new ConditionalAppendRequest(conditional.IdempotencyKey, serializable),
-                cancellationToken).ToResultBoxAsync();
-            if (!appendResult.IsSuccess)
-            {
-                return ResultBox.Error<ExecutionResult>(appendResult.GetException());
-            }
-
-            var receipt = appendResult.GetValue();
-            var isNewlyAppended = receipt.Status == ConditionalAppendStatus.Appended;
-            var writtenEvents = isNewlyAppended ? new List<Event> { domainEvent } : new List<Event>();
-
-            if (_eventPublisher != null && isNewlyAppended)
-            {
-                await PublishPreparedEventsAsync(preparedEvents, sizeEvaluation);
-            }
-
-            var metadata = new Dictionary<string, object>
-            {
-                ["ConditionalAppendStatus"] = receipt.Status.ToString(),
-                ["OperationFingerprint"] = receipt.OperationFingerprint,
-                ["WasAlreadyCommitted"] = receipt.WasAlreadyCommitted
-            };
-            if (sizeEvaluation.Diagnostics.Count > 0)
-            {
-                metadata["SizeGateDiagnostics"] = sizeEvaluation.Diagnostics;
-            }
-
-            return ResultBox.FromValue(
-                new ExecutionResult(
-                    receipt.WinnerEventId,
-                    isNewlyAppended ? 1 : 0,
-                    new List<TagWriteResult>(),
-                    stopwatch.Elapsed,
-                    writtenEvents,
-                    metadata,
-                    receipt.WinnerSortableUniqueId));
+            throw new SekibanValidationException(validationErrors);
         }
-        catch (Exception ex)
+
+        // Step 0.5: FAIL CLOSED before the handler runs — before any EventId allocation, serialization, or store
+        // call. The decision is the runtime capability descriptor (never a type name); the cast is defensive (a store
+        // that declares support must implement the interface — enforced by an architecture test).
+        var capability = Sekiban.Dcb.Capabilities.SekibanDcbCapabilityResolver.DescribeWriteConditions(_eventStore, "event store");
+        if (!capability.Supports(Sekiban.Dcb.Capabilities.WriteConditionKind.SingleEventUniqueKey))
         {
-            return ResultBox.Error<ExecutionResult>(ex);
+            throw new ConditionNotSupportedException(Sekiban.Dcb.Capabilities.WriteConditionKind.SingleEventUniqueKey, capability.ProviderName);
         }
+
+        if (_eventStore is not IConditionalEventStore conditionalStore)
+        {
+            throw new ConditionNotSupportedException(Sekiban.Dcb.Capabilities.WriteConditionKind.SingleEventUniqueKey, capability.ProviderName);
+        }
+
+        // Step 1-2: context + handler.
+        var commandContext = new CoreCommandContext(_actorAccessor, _domainTypes);
+        var eventOrNone = await handlerFunc(command, commandContext);
+        var collectedEvents = new List<EventPayloadWithTags>(commandContext.GetAppendedEvents());
+        if (eventOrNone.HasEvent)
+        {
+            var returned = eventOrNone.GetValue();
+            if (!collectedEvents.Contains(returned))
+            {
+                collectedEvents.Add(returned);
+            }
+        }
+
+        // Single-event contract: zero AND multiple both fail closed here, BEFORE any store call — a zero-event
+        // conditional command must never fall through to the legacy empty-success result.
+        if (collectedEvents.Count != 1)
+        {
+            throw new SingleEventConditionalAppendException(collectedEvents.Count);
+        }
+
+        var single = collectedEvents[0];
+        TagValidator.ValidateTagsAndThrow(new HashSet<ITag>(single.Tags));
+
+        await EnsureSortableUniqueIdSeededAsync(cancellationToken);
+
+        SeedAboveObservedPositions(commandContext.GetAccessedTagStates().Values.Select(state => state.LastSortedUniqueId));
+
+        var executedUser = GetExecutedUser();
+        var eventId = ConditionalEventIdFactory();
+        var sortable = _sortableUniqueIdGenerator.GenerateNew();
+        var eventMetadata = new EventMetadata(eventId.ToString(), command.GetType().Name, executedUser);
+        var domainEvent = new Event(
+            single.Event,
+            sortable,
+            single.Event.GetType().Name,
+            eventId,
+            eventMetadata,
+            single.Tags.Select(t => t.GetTag()).ToList());
+        var serializable = domainEvent.ToSerializableEvent(_domainTypes.EventTypes);
+        var preparedEvents = new List<PreparedExecutorEvent>
+        {
+            new(
+                domainEvent,
+                serializable,
+                single.Tags.ToArray())
+        };
+        var sizeEvaluation = EvaluateSizeGate(preparedEvents);
+
+        var receipt = await conditionalStore.AppendIfUniqueAsync(
+            new ConditionalAppendRequest(conditional.IdempotencyKey, serializable),
+            cancellationToken);
+        var isNewlyAppended = receipt.Status == ConditionalAppendStatus.Appended;
+        var writtenEvents = isNewlyAppended ? new List<Event> { domainEvent } : new List<Event>();
+
+        if (_eventPublisher != null && isNewlyAppended)
+        {
+            await PublishPreparedEventsAsync(preparedEvents, sizeEvaluation);
+        }
+
+        var metadata = new Dictionary<string, object>
+        {
+            ["ConditionalAppendStatus"] = receipt.Status.ToString(),
+            ["OperationFingerprint"] = receipt.OperationFingerprint,
+            ["WasAlreadyCommitted"] = receipt.WasAlreadyCommitted
+        };
+        if (sizeEvaluation.Diagnostics.Count > 0)
+        {
+            metadata["SizeGateDiagnostics"] = sizeEvaluation.Diagnostics;
+        }
+
+        return new ExecutionResult(
+            receipt.WinnerEventId,
+            isNewlyAppended ? 1 : 0,
+            new List<TagWriteResult>(),
+            stopwatch.Elapsed,
+            writtenEvents,
+            metadata,
+            receipt.WinnerSortableUniqueId);
     }
 
     /// <summary>
     ///     WASM-boundary conditional single-event serialized commit. Validates the request <c>Version</c> and the store
     ///     capability FAIL-CLOSED — before any EventId allocation, serialization, or store call.
     /// </summary>
-    public async Task<ResultBox<SerializedConditionalCommitResult>> CommitSerializableEventConditionallyAsync(
+    public async Task<SerializedConditionalCommitResult> CommitSerializableEventConditionallyAsync(
         SerializedConditionalCommitRequest request,
         CancellationToken cancellationToken)
     {
         var stopwatch = Stopwatch.StartNew();
+        // Version gate first: an unknown wire version is rejected before anything else happens.
+        if (request.Version != SerializedConditionalCommitRequest.CurrentVersion)
+        {
+            throw new UnsupportedSerializedCommitVersionException(
+                request.Version,
+                SerializedConditionalCommitRequest.CurrentVersion);
+        }
+
+        var capability = Sekiban.Dcb.Capabilities.SekibanDcbCapabilityResolver.DescribeWriteConditions(_eventStore, "event store");
+        if (!capability.Supports(Sekiban.Dcb.Capabilities.WriteConditionKind.SingleEventUniqueKey))
+        {
+            throw new ConditionNotSupportedException(Sekiban.Dcb.Capabilities.WriteConditionKind.SingleEventUniqueKey, capability.ProviderName);
+        }
+
+        if (_eventStore is not IConditionalEventStore conditionalStore)
+        {
+            throw new ConditionNotSupportedException(Sekiban.Dcb.Capabilities.WriteConditionKind.SingleEventUniqueKey, capability.ProviderName);
+        }
+
+        var candidate = request.EventCandidate;
+        await EnsureSortableUniqueIdSeededAsync(cancellationToken);
+        var eventId = ConditionalEventIdFactory();
+        var sortableId = (ConditionalSortableIdFactory ?? _sortableUniqueIdGenerator.GenerateNew)();
+        var metadata = new EventMetadata(eventId.ToString(), "SerializedConditionalCommit", "SerializedSekibanExecutor");
+        var serializable = new SerializableEvent(
+            candidate.Payload,
+            sortableId,
+            eventId,
+            metadata,
+            candidate.Tags.ToList(),
+            candidate.EventPayloadName);
+        // The serialized boundary historically lets the conditional store classify its request before any
+        // optional publisher-side payload binding. Keep that ordering when the opt-in gate is not configured;
+        // otherwise a malformed/private test payload could mask the provider's typed in-doubt result.
+        List<PreparedExecutorEvent>? preparedEvents = null;
+        var sizeEvaluation = ExecutorSizeGateEvaluation.Empty;
+        if (_executorSizeGateOptions is { Policies.Count: > 0 })
+        {
+            var boundEvent = TryBindEvent(serializable);
+            if (boundEvent is null)
+            {
+                const string bindingCapabilityReason =
+                    "serialized event payload binding capability is unavailable; size validation was not performed";
+                var strictPolicy = _executorSizeGateOptions.Policies
+                    .FirstOrDefault(policy => policy.Strictness == ExecutorSizeStrictness.Strict);
+                if (strictPolicy is not null)
+                {
+                    throw new ExecutorSizeCapabilityException(
+                        strictPolicy.Scope,
+                        strictPolicy.Representation,
+                        bindingCapabilityReason);
+                }
+
+                sizeEvaluation = new ExecutorSizeGateEvaluation(
+                    _executorSizeGateOptions.Policies
+                        .Select(policy => new ExecutorSizeDiagnostic(
+                            policy.Scope,
+                            policy.Representation,
+                            bindingCapabilityReason))
+                        .ToArray(),
+                    new Dictionary<Guid, ExecutorSizeDestinationPlan>());
+            }
+            else
+            {
+                preparedEvents =
+                [
+                    new(
+                        boundEvent,
+                        serializable,
+                        serializable.Tags.Select(_domainTypes.TagTypes.GetTag).ToArray())
+                ];
+                sizeEvaluation = EvaluateSizeGate(preparedEvents);
+            }
+        }
+
+        var receipt = await conditionalStore.AppendIfUniqueAsync(
+            new ConditionalAppendRequest(request.IdempotencyKey, serializable),
+            cancellationToken);
+        var isNewlyAppended = receipt.Status == ConditionalAppendStatus.Appended;
+        var written = isNewlyAppended
+            ? (IReadOnlyList<SerializableEvent>)new[] { serializable }
+            : Array.Empty<SerializableEvent>();
+
+        if (_eventPublisher != null && isNewlyAppended)
+        {
+            if (preparedEvents is not null)
+            {
+                await PublishPreparedEventsAsync(preparedEvents, sizeEvaluation);
+            }
+            else
+            {
+                // Preserve the legacy publisher behavior for an ungated serialized route: binding failure is
+                // non-fatal after a successful append, and no binding is attempted before the provider call.
+                var boundEvent = TryBindEvent(serializable);
+                if (boundEvent is not null)
+                {
+                    var eventTags = serializable.Tags
+                        .Select(_domainTypes.TagTypes.GetTag)
+                        .ToList();
+                    await _eventPublisher.PublishAsync(
+                        new List<(Event Event, IReadOnlyCollection<ITag> Tags)>
+                        {
+                            (boundEvent, eventTags.AsReadOnly())
+                        }.AsReadOnly(),
+                        CancellationToken.None);
+                }
+            }
+        }
+
+        var result = new SerializedConditionalCommitResult(
+                SerializedConditionalCommitResult.CurrentVersion,
+                receipt.Status,
+                receipt.WinnerEventId,
+                receipt.WinnerSortableUniqueId,
+                receipt.OperationFingerprint,
+                written,
+                stopwatch.Elapsed)
+        {
+            SizeGateDiagnostics = sizeEvaluation.Diagnostics
+        };
+        return result;
+    }
+
+    // Binding a serialized payload to its event type is optional on the serialized conditional route: a failure is
+    // a value here (no binding), never an error.
+    private Event? TryBindEvent(SerializableEvent serializable)
+    {
         try
         {
-            // Version gate first: an unknown wire version is rejected before anything else happens.
-            if (request.Version != SerializedConditionalCommitRequest.CurrentVersion)
-            {
-                return ResultBox.Error<SerializedConditionalCommitResult>(
-                    new UnsupportedSerializedCommitVersionException(
-                        request.Version,
-                        SerializedConditionalCommitRequest.CurrentVersion));
-            }
-
-            var capability = Sekiban.Dcb.Capabilities.SekibanDcbCapabilityResolver.DescribeWriteConditions(_eventStore, "event store");
-            if (!capability.Supports(Sekiban.Dcb.Capabilities.WriteConditionKind.SingleEventUniqueKey))
-            {
-                return ResultBox.Error<SerializedConditionalCommitResult>(
-                    new ConditionNotSupportedException(Sekiban.Dcb.Capabilities.WriteConditionKind.SingleEventUniqueKey, capability.ProviderName));
-            }
-
-            if (_eventStore is not IConditionalEventStore conditionalStore)
-            {
-                return ResultBox.Error<SerializedConditionalCommitResult>(
-                    new ConditionNotSupportedException(Sekiban.Dcb.Capabilities.WriteConditionKind.SingleEventUniqueKey, capability.ProviderName));
-            }
-
-            var candidate = request.EventCandidate;
-            await EnsureSortableUniqueIdSeededAsync(cancellationToken);
-            var eventId = ConditionalEventIdFactory();
-            var sortableId = (ConditionalSortableIdFactory ?? _sortableUniqueIdGenerator.GenerateNew)();
-            var metadata = new EventMetadata(eventId.ToString(), "SerializedConditionalCommit", "SerializedSekibanExecutor");
-            var serializable = new SerializableEvent(
-                candidate.Payload,
-                sortableId,
-                eventId,
-                metadata,
-                candidate.Tags.ToList(),
-                candidate.EventPayloadName);
-            // The serialized boundary historically lets the conditional store classify its request before any
-            // optional publisher-side payload binding. Keep that ordering when the opt-in gate is not configured;
-            // otherwise a malformed/private test payload could mask the provider's typed in-doubt result.
-            List<PreparedExecutorEvent>? preparedEvents = null;
-            var sizeEvaluation = ExecutorSizeGateEvaluation.Empty;
-            if (_executorSizeGateOptions is { Policies.Count: > 0 })
-            {
-                var eventResult = serializable.ToEvent(_domainTypes.EventTypes);
-                if (!eventResult.IsSuccess)
-                {
-                    const string bindingCapabilityReason =
-                        "serialized event payload binding capability is unavailable; size validation was not performed";
-                    var strictPolicy = _executorSizeGateOptions.Policies
-                        .FirstOrDefault(policy => policy.Strictness == ExecutorSizeStrictness.Strict);
-                    if (strictPolicy is not null)
-                    {
-                        return ResultBox.Error<SerializedConditionalCommitResult>(
-                            new ExecutorSizeCapabilityException(
-                                strictPolicy.Scope,
-                                strictPolicy.Representation,
-                                bindingCapabilityReason));
-                    }
-
-                    sizeEvaluation = new ExecutorSizeGateEvaluation(
-                        _executorSizeGateOptions.Policies
-                            .Select(policy => new ExecutorSizeDiagnostic(
-                                policy.Scope,
-                                policy.Representation,
-                                bindingCapabilityReason))
-                            .ToArray(),
-                        new Dictionary<Guid, ExecutorSizeDestinationPlan>());
-                }
-                else
-                {
-                    preparedEvents =
-                    [
-                        new(
-                            eventResult.GetValue(),
-                            serializable,
-                            serializable.Tags.Select(_domainTypes.TagTypes.GetTag).ToArray())
-                    ];
-                    sizeEvaluation = EvaluateSizeGate(preparedEvents);
-                }
-            }
-
-            var appendResult = await conditionalStore.AppendIfUniqueAsync(
-                new ConditionalAppendRequest(request.IdempotencyKey, serializable),
-                cancellationToken).ToResultBoxAsync();
-            if (!appendResult.IsSuccess)
-            {
-                return ResultBox.Error<SerializedConditionalCommitResult>(appendResult.GetException());
-            }
-
-            var receipt = appendResult.GetValue();
-            var isNewlyAppended = receipt.Status == ConditionalAppendStatus.Appended;
-            var written = isNewlyAppended
-                ? (IReadOnlyList<SerializableEvent>)new[] { serializable }
-                : Array.Empty<SerializableEvent>();
-
-            if (_eventPublisher != null && isNewlyAppended)
-            {
-                if (preparedEvents is not null)
-                {
-                    await PublishPreparedEventsAsync(preparedEvents, sizeEvaluation);
-                }
-                else
-                {
-                    // Preserve the legacy publisher behavior for an ungated serialized route: binding failure is
-                    // non-fatal after a successful append, and no binding is attempted before the provider call.
-                    var eventResult = serializable.ToEvent(_domainTypes.EventTypes);
-                    if (eventResult.IsSuccess)
-                    {
-                        var eventTags = serializable.Tags
-                            .Select(_domainTypes.TagTypes.GetTag)
-                            .ToList();
-                        await _eventPublisher.PublishAsync(
-                            new List<(Event Event, IReadOnlyCollection<ITag> Tags)>
-                            {
-                                (eventResult.GetValue(), eventTags.AsReadOnly())
-                            }.AsReadOnly(),
-                            CancellationToken.None);
-                    }
-                }
-            }
-
-            var result = new SerializedConditionalCommitResult(
-                    SerializedConditionalCommitResult.CurrentVersion,
-                    receipt.Status,
-                    receipt.WinnerEventId,
-                    receipt.WinnerSortableUniqueId,
-                    receipt.OperationFingerprint,
-                    written,
-                    stopwatch.Elapsed)
-            {
-                SizeGateDiagnostics = sizeEvaluation.Diagnostics
-            };
-            return ResultBox.FromValue(result);
+            return serializable.ToEvent(_domainTypes.EventTypes);
         }
-        catch (Exception ex)
+        catch (Exception)
         {
-            return ResultBox.Error<SerializedConditionalCommitResult>(ex);
+            return null;
         }
     }
 }

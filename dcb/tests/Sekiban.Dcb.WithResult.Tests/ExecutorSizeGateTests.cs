@@ -293,7 +293,7 @@ public sealed class ExecutorSizeGateTests
                 [new ConsistencyTagEntry(tag, "")]));
 
         Assert.IsType<ExecutorSizeLimitExceededException>(result.GetException());
-        var actorResult = await accessor.GetActorAsync<GeneralTagConsistentActor>(tag);
+        var actorResult = await ResultBox.WrapTry(() => accessor.GetActorAsync<GeneralTagConsistentActor>(tag));
         Assert.True(actorResult.IsSuccess);
         Assert.Empty(await actorResult.GetValue().GetActiveReservationsAsync());
         Assert.Empty((await store.ReadAllSerializableEventsAsync().AsResultBoxAsync()).GetValue());
@@ -401,8 +401,8 @@ public sealed class ExecutorSizeGateTests
             ExecutorSizeStrictness.Strict,
             _ => throw new InvalidOperationException("conditional provider must not be reached"));
 
-        var result = await ((ISerializedConditionalSekibanDcbExecutor)executor)
-            .CommitSerializableEventConditionallyAsync(CreateUnbindableConditionalRequest());
+        var result = await ResultBox.WrapTry(() => ((ISerializedConditionalSekibanDcbExecutor)executor)
+            .CommitSerializableEventConditionallyAsync(CreateUnbindableConditionalRequest()));
 
         var exception = Assert.IsType<ExecutorSizeCapabilityException>(result.GetException());
         Assert.Equal("serialized-conditional", exception.Scope);
@@ -426,8 +426,8 @@ public sealed class ExecutorSizeGateTests
             ExecutorSizeStrictness.NonStrict,
             _ => ResultBox.Error<ConditionalAppendReceipt>(providerException));
 
-        var result = await ((ISerializedConditionalSekibanDcbExecutor)executor)
-            .CommitSerializableEventConditionallyAsync(CreateUnbindableConditionalRequest());
+        var result = await ResultBox.WrapTry(() => ((ISerializedConditionalSekibanDcbExecutor)executor)
+            .CommitSerializableEventConditionallyAsync(CreateUnbindableConditionalRequest()));
 
         Assert.False(result.IsSuccess);
         Assert.Same(providerException, result.GetException());
@@ -447,8 +447,8 @@ public sealed class ExecutorSizeGateTests
                 SortableUniqueId.GenerateNew(),
                 "provider-fingerprint")));
 
-        var result = await ((ISerializedConditionalSekibanDcbExecutor)executor)
-            .CommitSerializableEventConditionallyAsync(CreateUnbindableConditionalRequest());
+        var result = await ResultBox.WrapTry(() => ((ISerializedConditionalSekibanDcbExecutor)executor)
+            .CommitSerializableEventConditionallyAsync(CreateUnbindableConditionalRequest()));
 
         Assert.True(result.IsSuccess);
         Assert.Equal(1, store.AppendAttempts);
@@ -599,12 +599,12 @@ public sealed class ExecutorSizeGateTests
         Assert.IsType<ExecutorSizeLimitExceededException>(expected.GetException());
         Assert.Equal(0, store.ExpectedPositionWriteCalls);
 
-        var serializedConditional = await ((ISerializedConditionalSekibanDcbExecutor)executor)
+        var serializedConditional = await ResultBox.WrapTry(() => ((ISerializedConditionalSekibanDcbExecutor)executor)
             .CommitSerializableEventConditionallyAsync(
                 new SerializedConditionalCommitRequest(
                     SerializedConditionalCommitRequest.CurrentVersion,
                     CreateCandidate(domain, Guid.NewGuid()),
-                    "serialized-gate-key"));
+                    "serialized-gate-key")));
 
         Assert.IsType<ExecutorSizeLimitExceededException>(serializedConditional.GetException());
         Assert.Equal(0, store.ConditionalAppendCalls);

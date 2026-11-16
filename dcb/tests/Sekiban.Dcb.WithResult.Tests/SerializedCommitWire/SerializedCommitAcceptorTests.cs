@@ -23,20 +23,19 @@ public class SerializedCommitAcceptorTests
         public int CommitCalls { get; private set; }
         public SerializedCommitRequest? LastRequest { get; private set; }
 
-        public Task<ResultBox<SerializableTagState>> GetSerializableTagStateAsync(TagStateId tagStateId) =>
+        public Task<SerializableTagState> GetSerializableTagStateAsync(TagStateId tagStateId) =>
             throw new NotSupportedException();
 
-        public Task<ResultBox<SerializedCommitResult>> CommitSerializableEventsAsync(
+        public Task<SerializedCommitResult> CommitSerializableEventsAsync(
             SerializedCommitRequest request, CancellationToken cancellationToken = default)
         {
             CommitCalls++;
             LastRequest = request;
             return Task.FromResult(
-                ResultBox.FromValue(
                     new SerializedCommitResult(
                         Array.Empty<Sekiban.Dcb.Events.SerializableEvent>(),
                         Array.Empty<TagWriteResult>(),
-                        TimeSpan.Zero)));
+                        TimeSpan.Zero));
         }
     }
 
@@ -47,7 +46,7 @@ public class SerializedCommitAcceptorTests
         var acceptor = new SerializedCommitAcceptor(exec);
         var json = """{"eventCandidates":[{"payload":"AQID","eventPayloadName":"E","tags":["G:1"]}],"consistencyTags":[]}""";
 
-        var result = await acceptor.AcceptAsync(Utf8(json));
+        var result = await ResultBox.WrapTry(() => acceptor.AcceptAsync(Utf8(json)));
 
         Assert.True(result.IsSuccess);
         Assert.Equal(1, exec.CommitCalls);
@@ -62,7 +61,7 @@ public class SerializedCommitAcceptorTests
         var acceptor = new SerializedCommitAcceptor(exec);
         var json = """{"version":1,"eventCandidates":[{"payload":"AQID","eventPayloadName":"E","tags":["G:1"]}],"consistencyTags":[]}""";
 
-        var result = await acceptor.AcceptAsync(Utf8(json));
+        var result = await ResultBox.WrapTry(() => acceptor.AcceptAsync(Utf8(json)));
 
         Assert.True(result.IsSuccess);
         Assert.Equal(1, exec.CommitCalls);
@@ -75,7 +74,7 @@ public class SerializedCommitAcceptorTests
         var acceptor = new SerializedCommitAcceptor(exec);
         var json = """{"version":999,"eventCandidates":[{"payload":"AQID","eventPayloadName":"E","tags":["G:1"]}],"consistencyTags":[]}""";
 
-        var result = await acceptor.AcceptAsync(Utf8(json));
+        var result = await ResultBox.WrapTry(() => acceptor.AcceptAsync(Utf8(json)));
 
         Assert.False(result.IsSuccess);
         var ex = Assert.IsType<UnsupportedSerializedCommitEnvelopeVersionException>(result.GetException());
@@ -93,7 +92,7 @@ public class SerializedCommitAcceptorTests
         var acceptor = new SerializedCommitAcceptor(exec);
         var json = """{"version":999,"eventCandidates":[{"payload":"!!!not-base64!!!","eventPayloadName":"E","tags":[]}],"consistencyTags":[]}""";
 
-        var result = await acceptor.AcceptAsync(Utf8(json));
+        var result = await ResultBox.WrapTry(() => acceptor.AcceptAsync(Utf8(json)));
 
         Assert.IsType<UnsupportedSerializedCommitEnvelopeVersionException>(result.GetException());
         Assert.Equal(0, exec.CommitCalls);
@@ -106,7 +105,7 @@ public class SerializedCommitAcceptorTests
         var acceptor = new SerializedCommitAcceptor(exec);
         var json = """{"version":"1","eventCandidates":[],"consistencyTags":[]}"""; // version as a string
 
-        var result = await acceptor.AcceptAsync(Utf8(json));
+        var result = await ResultBox.WrapTry(() => acceptor.AcceptAsync(Utf8(json)));
 
         Assert.IsType<MalformedSerializedCommitException>(result.GetException());
         Assert.IsNotType<UnsupportedSerializedCommitEnvelopeVersionException>(result.GetException());
@@ -120,7 +119,7 @@ public class SerializedCommitAcceptorTests
         var acceptor = new SerializedCommitAcceptor(exec);
         var json = """{"version":1,"version":1,"eventCandidates":[],"consistencyTags":[]}""";
 
-        var result = await acceptor.AcceptAsync(Utf8(json));
+        var result = await ResultBox.WrapTry(() => acceptor.AcceptAsync(Utf8(json)));
 
         var ex = Assert.IsType<MalformedSerializedCommitException>(result.GetException());
         Assert.Equal(SerializedCommitShapeError.DuplicateVersion, ex.Reason);
@@ -134,7 +133,7 @@ public class SerializedCommitAcceptorTests
         var acceptor = new SerializedCommitAcceptor(exec);
         var json = """{"Version":1,"eventCandidates":[],"consistencyTags":[]}"""; // capital V
 
-        var result = await acceptor.AcceptAsync(Utf8(json));
+        var result = await ResultBox.WrapTry(() => acceptor.AcceptAsync(Utf8(json)));
 
         var ex = Assert.IsType<MalformedSerializedCommitException>(result.GetException());
         Assert.Equal(SerializedCommitShapeError.AmbiguousVersionCasing, ex.Reason);
@@ -148,7 +147,7 @@ public class SerializedCommitAcceptorTests
         var acceptor = new SerializedCommitAcceptor(exec);
         var json = """{"version":1,"Version":1,"eventCandidates":[],"consistencyTags":[]}""";
 
-        var result = await acceptor.AcceptAsync(Utf8(json));
+        var result = await ResultBox.WrapTry(() => acceptor.AcceptAsync(Utf8(json)));
 
         var ex = Assert.IsType<MalformedSerializedCommitException>(result.GetException());
         Assert.Equal(SerializedCommitShapeError.AmbiguousVersionCasing, ex.Reason);
@@ -162,7 +161,7 @@ public class SerializedCommitAcceptorTests
         var acceptor = new SerializedCommitAcceptor(exec);
         var json = """{"version":1,"eventCandidates":[{"payload":"!!!not-base64!!!","eventPayloadName":"E","tags":[]}],"consistencyTags":[]}""";
 
-        var result = await acceptor.AcceptAsync(Utf8(json));
+        var result = await ResultBox.WrapTry(() => acceptor.AcceptAsync(Utf8(json)));
 
         Assert.IsType<MalformedSerializedCommitException>(result.GetException());
         Assert.Equal(0, exec.CommitCalls); // binding failed before execution
@@ -182,7 +181,7 @@ public class SerializedCommitAcceptorTests
         var exec = new RecordingExecutor();
         var acceptor = new SerializedCommitAcceptor(exec);
 
-        var result = await acceptor.AcceptAsync(Utf8(json));
+        var result = await ResultBox.WrapTry(() => acceptor.AcceptAsync(Utf8(json)));
 
         var error = Assert.IsType<MalformedSerializedCommitException>(result.GetException());
         Assert.Equal(expected, error.Reason);
@@ -197,7 +196,7 @@ public class SerializedCommitAcceptorTests
 
         foreach (var json in new[] { "[]", "\"hello\"", "123", "null" })
         {
-            var result = await acceptor.AcceptAsync(Utf8(json));
+            var result = await ResultBox.WrapTry(() => acceptor.AcceptAsync(Utf8(json)));
             Assert.IsType<MalformedSerializedCommitException>(result.GetException());
             Assert.Equal(0, exec.CommitCalls);
         }
@@ -242,7 +241,7 @@ public class SerializedCommitAcceptorTests
                    {"version":2,"eventCandidates":[{"payload":"AQID","eventPayloadName":"E","tags":["G:1"]}],"consistencyTags":[{"tag":"G:1","lastSortableUniqueId":""}],"expectedTagPositions":[{"serviceId":"default","tag":"G:1","expectation":{"kind":3,"position":"p-1"}}]}
                    """;
 
-        var result = await new SerializedCommitAcceptor(exec).AcceptAsync(Utf8(json));
+        var result = await ResultBox.WrapTry(() => new SerializedCommitAcceptor(exec).AcceptAsync(Utf8(json)));
 
         Assert.True(result.IsSuccess, result.IsSuccess ? "" : result.GetException().ToString());
         Assert.Equal(0, exec.LegacyCalls);
@@ -261,7 +260,7 @@ public class SerializedCommitAcceptorTests
                    {"version":2,"eventCandidates":[],"consistencyTags":[],"expectedTagPositions":[]}
                    """;
 
-        var result = await new SerializedCommitAcceptor(exec).AcceptAsync(Utf8(json));
+        var result = await ResultBox.WrapTry(() => new SerializedCommitAcceptor(exec).AcceptAsync(Utf8(json)));
 
         Assert.False(result.IsSuccess);
         Assert.IsType<ConditionNotSupportedException>(result.GetException());
@@ -274,25 +273,25 @@ public class SerializedCommitAcceptorTests
         public int LegacyCalls { get; private set; }
         public VersionedExpectedTagPositionSerializedCommitRequest? Request { get; private set; }
 
-        public Task<ResultBox<SerializableTagState>> GetSerializableTagStateAsync(TagStateId tagStateId) =>
+        public Task<SerializableTagState> GetSerializableTagStateAsync(TagStateId tagStateId) =>
             throw new NotSupportedException();
 
-        public Task<ResultBox<SerializedCommitResult>> CommitSerializableEventsAsync(
+        public Task<SerializedCommitResult> CommitSerializableEventsAsync(
             SerializedCommitRequest request, CancellationToken cancellationToken = default)
         {
             LegacyCalls++;
             throw new InvalidOperationException("V2 must not fall through to the legacy serialized executor.");
         }
 
-        public Task<ResultBox<SerializedCommitResult>> CommitSerializableEventsWithExpectedTagPositionsAsync(
+        public Task<SerializedCommitResult> CommitSerializableEventsWithExpectedTagPositionsAsync(
             VersionedExpectedTagPositionSerializedCommitRequest request,
             CancellationToken cancellationToken = default)
         {
             Request = request;
-            return Task.FromResult(ResultBox.FromValue(new SerializedCommitResult(
+            return Task.FromResult(new SerializedCommitResult(
                 Array.Empty<Sekiban.Dcb.Events.SerializableEvent>(),
                 Array.Empty<TagWriteResult>(),
-                TimeSpan.Zero)));
+                TimeSpan.Zero));
         }
     }
 }

@@ -66,7 +66,7 @@ public class GeneralMultiProjectionActorSafeWindowChaosTests
         await actor.AddEventsAsync(new[] { event3, event1, event2 });
 
         // Initial state - events are sorted by SortableUniqueId even in unsafe state
-        var unsafeState1 = await actor.GetUnsafeStateAsync();
+        var unsafeState1 = await ResultBox.WrapTry(() => actor.GetUnsafeStateAsync());
         var unsafePayload1 = unsafeState1.GetValue().Payload as TestMultiProjector;
         Assert.Equal(3, unsafePayload1!.Items.Count);
         // Events are sorted chronologically: 1, 2, 3
@@ -82,7 +82,7 @@ public class GeneralMultiProjectionActorSafeWindowChaosTests
         await actor.AddEventsAsync(new[] { triggerEvent });
 
         // Act - Get safe state
-        var safeState = await actor.GetStateAsync(canGetUnsafeState: false);
+        var safeState = await ResultBox.WrapTry(() => actor.GetStateAsync(canGetUnsafeState: false));
         var safePayload = safeState.GetValue().Payload as TestMultiProjector;
 
         // Assert - Safe state should have events in correct chronological order
@@ -117,7 +117,7 @@ public class GeneralMultiProjectionActorSafeWindowChaosTests
         await actor.AddEventsAsync(new[] { triggerEvent });
 
         // Get safe state
-        var safeState = await actor.GetStateAsync(canGetUnsafeState: false);
+        var safeState = await ResultBox.WrapTry(() => actor.GetStateAsync(canGetUnsafeState: false));
         var safePayload = safeState.GetValue().Payload as TestMultiProjector;
 
         // Assert - Event should only appear once
@@ -172,7 +172,7 @@ public class GeneralMultiProjectionActorSafeWindowChaosTests
         await actor.AddEventsAsync(new[] { duplicateEvent }); // Duplicate Recent 2 again
 
         // Immediate check - safe state should have old events only
-        var immediateSafeState = await actor.GetStateAsync(canGetUnsafeState: false);
+        var immediateSafeState = await ResultBox.WrapTry(() => actor.GetStateAsync(canGetUnsafeState: false));
         var immediateSafePayload = immediateSafeState.GetValue().Payload as TestMultiProjector;
         Assert.Equal(2, immediateSafePayload!.Items.Count);
         Assert.Contains("Old 1", immediateSafePayload.Items);
@@ -186,7 +186,7 @@ public class GeneralMultiProjectionActorSafeWindowChaosTests
         await actor.AddEventsAsync(new[] { triggerEvent });
 
         // Final check - all events should be in correct order
-        var finalSafeState = await actor.GetStateAsync(canGetUnsafeState: false);
+        var finalSafeState = await ResultBox.WrapTry(() => actor.GetStateAsync(canGetUnsafeState: false));
         var finalSafePayload = finalSafeState.GetValue().Payload as TestMultiProjector;
 
         // Assert - Should have all unique events in chronological order
@@ -231,7 +231,7 @@ public class GeneralMultiProjectionActorSafeWindowChaosTests
         await actor.AddEventsAsync(new[] { update1 }); // First update
 
         // Unsafe state will have wrong order
-        var unsafeState = await actor.GetUnsafeStateAsync();
+        var unsafeState = await ResultBox.WrapTry(() => actor.GetUnsafeStateAsync());
         var unsafePayload = unsafeState.GetValue().Payload as TestMultiProjector;
         // Due to out-of-order processing, the state might be incorrect
         Assert.Single(unsafePayload!.Items);
@@ -244,7 +244,7 @@ public class GeneralMultiProjectionActorSafeWindowChaosTests
         await actor.AddEventsAsync(new[] { triggerEvent });
 
         // Get safe state
-        var safeState = await actor.GetStateAsync(canGetUnsafeState: false);
+        var safeState = await ResultBox.WrapTry(() => actor.GetStateAsync(canGetUnsafeState: false));
         var safePayload = safeState.GetValue().Payload as TestMultiProjector;
 
         // Assert - Updates should be applied in correct order

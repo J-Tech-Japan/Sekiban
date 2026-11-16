@@ -56,13 +56,17 @@ public class EventStreamObserver : IAsyncObserver<SerializableEvent>
             return;
         }
 
-        var eventResult = item.ToEvent(_domainTypes.EventTypes);
-        if (!eventResult.IsSuccess)
+        // An item that cannot be deserialized is skipped, as before.
+        Event evt;
+        try
+        {
+            evt = item.ToEvent(_domainTypes.EventTypes);
+        }
+        catch (Exception)
         {
             return;
         }
 
-        var evt = eventResult.GetValue();
         await _onEvent(evt);
     }
 

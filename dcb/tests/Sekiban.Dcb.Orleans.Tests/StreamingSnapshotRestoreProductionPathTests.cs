@@ -140,10 +140,10 @@ public sealed partial class StreamingSnapshotRestoreProductionPathTests
     {
         var actor = new GeneralMultiProjectionActor(CreateDomain(sourceTypes), StreamingRestoreProjector.MultiProjectorName);
         await actor.AddEventsAsync([CreateEvent(value)]);
-        var snapshot = await actor.BuildSnapshotEnvelopeAsync(
+        var snapshot = await ResultBox.WrapTry(() => actor.BuildSnapshotEnvelopeAsync(
             canGetUnsafeState: true,
             blobAccessor: blob,
-            offloadThresholdBytes: 1);
+            offloadThresholdBytes: 1));
         Assert.True(snapshot.IsSuccess);
         Assert.True(snapshot.GetValue().IsOffloaded);
         return snapshot.GetValue();

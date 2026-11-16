@@ -48,7 +48,7 @@ public class SerializedCommitTests
             [new ConsistencyTagEntry(tagString, "")]);
 
         // When
-        var result = await executor.CommitSerializableEventsAsync(request);
+        var result = await ResultBox.WrapTry(() => executor.CommitSerializableEventsAsync(request));
 
         // Then
         Assert.True(result.IsSuccess);
@@ -83,7 +83,7 @@ public class SerializedCommitTests
             ]);
 
         // When
-        var result = await executor.CommitSerializableEventsAsync(request);
+        var result = await ResultBox.WrapTry(() => executor.CommitSerializableEventsAsync(request));
 
         // Then
         Assert.True(result.IsSuccess);
@@ -101,7 +101,7 @@ public class SerializedCommitTests
         var request = new SerializedCommitRequest([], []);
 
         // When
-        var result = await executor.CommitSerializableEventsAsync(request);
+        var result = await ResultBox.WrapTry(() => executor.CommitSerializableEventsAsync(request));
 
         // Then
         Assert.True(result.IsSuccess);
@@ -160,7 +160,7 @@ public class SerializedCommitTests
             [new ConsistencyTagEntry(tagString, staleSortableId)]);
 
         // When
-        var result = await executor.CommitSerializableEventsAsync(request);
+        var result = await ResultBox.WrapTry(() => executor.CommitSerializableEventsAsync(request));
 
         // Then: reservation should fail because staleSortableId != actual last sortable ID
         Assert.False(result.IsSuccess);
@@ -183,7 +183,7 @@ public class SerializedCommitTests
             [new ConsistencyTagEntry(unknownConsistencyTag, "")]);
 
         // When
-        var result = await executor.CommitSerializableEventsAsync(request);
+        var result = await ResultBox.WrapTry(() => executor.CommitSerializableEventsAsync(request));
 
         // Then
         Assert.False(result.IsSuccess);
@@ -207,7 +207,7 @@ public class SerializedCommitTests
             ]);
 
         // When
-        var result = await executor.CommitSerializableEventsAsync(request);
+        var result = await ResultBox.WrapTry(() => executor.CommitSerializableEventsAsync(request));
 
         // Then
         Assert.False(result.IsSuccess);
@@ -228,7 +228,7 @@ public class SerializedCommitTests
 
         // When: Get serializable tag state
         var tagStateId = TagStateId.FromProjector<StudentProjector>(new StudentTag(studentId));
-        var stateResult = await executor.GetSerializableTagStateAsync(tagStateId);
+        var stateResult = await ResultBox.WrapTry(() => executor.GetSerializableTagStateAsync(tagStateId));
 
         // Then
         Assert.True(stateResult.IsSuccess);
@@ -263,7 +263,7 @@ public class SerializedCommitTests
             [new ConsistencyTagEntry(tagString, writtenSortableId)]);
 
         // When
-        var result = await executor.CommitSerializableEventsAsync(request);
+        var result = await ResultBox.WrapTry(() => executor.CommitSerializableEventsAsync(request));
 
         // Then
         Assert.True(result.IsSuccess);
@@ -292,7 +292,7 @@ public class SerializedCommitTests
             [new SerializableEventCandidate(payload, nameof(StudentCreated), [tagString])],
             [new ConsistencyTagEntry(tagString, firstSortableId)]);
 
-        var commitResult = await executor.CommitSerializableEventsAsync(request);
+        var commitResult = await ResultBox.WrapTry(() => executor.CommitSerializableEventsAsync(request));
         Assert.True(commitResult.IsSuccess);
 
         var writtenEvents = commitResult.GetValue().WrittenEvents;
@@ -359,10 +359,10 @@ public class SerializedCommitTests
         private int _calls;
         public int Calls => Volatile.Read(ref _calls);
 
-        public Task<ResultBox<T>> GetActorAsync<T>(string actorId) where T : class
+        public Task<T> GetActorAsync<T>(string actorId) where T : class
         {
             Interlocked.Increment(ref _calls);
-            return Task.FromResult(ResultBox.Error<T>(new InvalidOperationException("must not be called")));
+            return Task.FromException<T>(new InvalidOperationException("must not be called"));
         }
 
         public Task<bool> ActorExistsAsync(string actorId)

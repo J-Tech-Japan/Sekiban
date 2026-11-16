@@ -1,4 +1,3 @@
-using ResultBoxes;
 using Sekiban.Dcb.MultiProjections;
 using System;
 using System.Collections.Generic;
@@ -25,20 +24,14 @@ public class GeneralQueryExecutor
     /// <param name="query">The query to execute</param>
     /// <param name="projectorProvider">Function to provide the multi-projector state</param>
     /// <returns>The query result</returns>
-    public async Task<ResultBox<TOutput>> ExecuteQueryAsync<TMultiProjector, TQuery, TOutput>(
+    public async Task<TOutput> ExecuteQueryAsync<TMultiProjector, TQuery, TOutput>(
         TQuery query,
-        Func<Task<ResultBox<TMultiProjector>>> projectorProvider)
+        Func<Task<TMultiProjector>> projectorProvider)
         where TMultiProjector : ICoreMultiProjector<TMultiProjector>
         where TQuery : IQueryCommon<TQuery, TOutput>, IEquatable<TQuery>
         where TOutput : notnull
     {
-        var projectorResult = await projectorProvider();
-        if (!projectorResult.IsSuccess)
-        {
-            return ResultBox.Error<TOutput>(projectorResult.GetException());
-        }
-
-        var projector = projectorResult.GetValue();
+        var projector = await projectorProvider();
         var context = new QueryContext(_serviceProvider);
 
         return MultiProjectionQueryInvoker<TMultiProjector, TQuery, TOutput>.Handle(projector, query, context);
@@ -53,48 +46,29 @@ public class GeneralQueryExecutor
     /// <param name="query">The query to execute</param>
     /// <param name="projectorProvider">Function to provide the multi-projector state</param>
     /// <returns>The paginated query result</returns>
-    public async Task<ResultBox<ListQueryResult<TOutput>>> ExecuteListQueryAsync<TMultiProjector, TQuery, TOutput>(
+    public async Task<ListQueryResult<TOutput>> ExecuteListQueryAsync<TMultiProjector, TQuery, TOutput>(
         TQuery query,
-        Func<Task<ResultBox<TMultiProjector>>> projectorProvider)
+        Func<Task<TMultiProjector>> projectorProvider)
         where TMultiProjector : ICoreMultiProjector<TMultiProjector>
         where TQuery : IListQueryCommon<TQuery, TOutput>, IEquatable<TQuery>
         where TOutput : notnull
     {
-        var projectorResult = await projectorProvider();
-        if (!projectorResult.IsSuccess)
-        {
-            return ResultBox.Error<ListQueryResult<TOutput>>(projectorResult.GetException());
-        }
-
-        var projector = projectorResult.GetValue();
+        var projector = await projectorProvider();
         var context = new QueryContext(_serviceProvider);
 
         // Filter
-        var filterResult = MultiProjectionListQueryInvoker<TMultiProjector, TQuery, TOutput>
+        var filteredItems = MultiProjectionListQueryInvoker<TMultiProjector, TQuery, TOutput>
             .Filter(projector, query, context);
-        if (!filterResult.IsSuccess)
-        {
-            return ResultBox.Error<ListQueryResult<TOutput>>(filterResult.GetException());
-        }
-
-        var filteredItems = filterResult.GetValue();
 
         // Sort
-        var sortResult = MultiProjectionListQueryInvoker<TMultiProjector, TQuery, TOutput>
-            .Sort(filteredItems, query, context);
-        if (!sortResult.IsSuccess)
-        {
-            return ResultBox.Error<ListQueryResult<TOutput>>(sortResult.GetException());
-        }
-
-        var sortedItems = sortResult.GetValue().ToList();
+        var sortedItems = MultiProjectionListQueryInvoker<TMultiProjector, TQuery, TOutput>
+            .Sort(filteredItems, query, context)
+            .ToList();
 
         // Apply pagination
-        var result = query is IQueryPagingParameter pagingParameter
+        return query is IQueryPagingParameter pagingParameter
             ? ListQueryResult<TOutput>.CreatePaginated(pagingParameter, sortedItems)
             : new ListQueryResult<TOutput>(sortedItems.Count, null, null, null, sortedItems);
-
-        return ResultBox.FromValue(result);
     }
 
     /// <summary>
@@ -105,18 +79,12 @@ public class GeneralQueryExecutor
     /// <param name="projectorProvider">Function to provide the multi-projector state</param>
     /// <param name="handler">Custom handler function</param>
     /// <returns>The query result</returns>
-    public async Task<ResultBox<TOutput>> ExecuteWithHandlerAsync<TMultiProjector, TOutput>(
-        Func<Task<ResultBox<TMultiProjector>>> projectorProvider,
-        Func<TMultiProjector, IQueryContext, ResultBox<TOutput>> handler)
+    public async Task<TOutput> ExecuteWithHandlerAsync<TMultiProjector, TOutput>(
+        Func<Task<TMultiProjector>> projectorProvider,
+        Func<TMultiProjector, IQueryContext, TOutput> handler)
         where TMultiProjector : ICoreMultiProjector<TMultiProjector> where TOutput : notnull
     {
-        var projectorResult = await projectorProvider();
-        if (!projectorResult.IsSuccess)
-        {
-            return ResultBox.Error<TOutput>(projectorResult.GetException());
-        }
-
-        var projector = projectorResult.GetValue();
+        var projector = await projectorProvider();
         var context = new QueryContext(_serviceProvider);
 
         return handler(projector, context);
@@ -132,46 +100,26 @@ public class GeneralQueryExecutor
     /// <param name="sort">Custom sort function</param>
     /// <param name="pagingParameter">Optional paging parameters</param>
     /// <returns>The paginated query result</returns>
-    public async Task<ResultBox<ListQueryResult<TOutput>>> ExecuteListWithHandlersAsync<TMultiProjector, TOutput>(
-        Func<Task<ResultBox<TMultiProjector>>> projectorProvider,
-        Func<TMultiProjector, IQueryContext, ResultBox<IEnumerable<TOutput>>> filter,
-        Func<IEnumerable<TOutput>, IQueryContext, ResultBox<IEnumerable<TOutput>>> sort,
+    public async Task<ListQueryResult<TOutput>> ExecuteListWithHandlersAsync<TMultiProjector, TOutput>(
+        Func<Task<TMultiProjector>> projectorProvider,
+        Func<TMultiProjector, IQueryContext, IEnumerable<TOutput>> filter,
+        Func<IEnumerable<TOutput>, IQueryContext, IEnumerable<TOutput>> sort,
         IQueryPagingParameter? pagingParameter = null) where TMultiProjector : ICoreMultiProjector<TMultiProjector>
         where TOutput : notnull
     {
-        var projectorResult = await projectorProvider();
-        if (!projectorResult.IsSuccess)
-        {
-            return ResultBox.Error<ListQueryResult<TOutput>>(projectorResult.GetException());
-        }
-
-        var projector = projectorResult.GetValue();
+        var projector = await projectorProvider();
         var context = new QueryContext(_serviceProvider);
 
         // Filter
-        var filterResult = filter(projector, context);
-        if (!filterResult.IsSuccess)
-        {
-            return ResultBox.Error<ListQueryResult<TOutput>>(filterResult.GetException());
-        }
-
-        var filteredItems = filterResult.GetValue();
+        var filteredItems = filter(projector, context);
 
         // Sort
-        var sortResult = sort(filteredItems, context);
-        if (!sortResult.IsSuccess)
-        {
-            return ResultBox.Error<ListQueryResult<TOutput>>(sortResult.GetException());
-        }
-
-        var sortedItems = sortResult.GetValue().ToList();
+        var sortedItems = sort(filteredItems, context).ToList();
 
         // Apply pagination
-        var result = pagingParameter != null
+        return pagingParameter != null
             ? ListQueryResult<TOutput>.CreatePaginated(pagingParameter, sortedItems)
             : new ListQueryResult<TOutput>(sortedItems.Count, null, null, null, sortedItems);
-
-        return ResultBox.FromValue(result);
     }
 
     private static class MultiProjectionQueryInvoker<TMultiProjector, TQuery, TOutput>
@@ -179,51 +127,23 @@ public class GeneralQueryExecutor
         where TQuery : IQueryCommon<TQuery, TOutput>, IEquatable<TQuery>
         where TOutput : notnull
     {
-        public static readonly Func<TMultiProjector, TQuery, IQueryContext, ResultBox<TOutput>> Handle =
-            CreateHandler();
+        public static readonly Func<TMultiProjector, TQuery, IQueryContext, TOutput> Handle = CreateHandler();
 
-        private static Func<TMultiProjector, TQuery, IQueryContext, ResultBox<TOutput>> CreateHandler()
+        private static Func<TMultiProjector, TQuery, IQueryContext, TOutput> CreateHandler()
         {
-            var queryType = typeof(TQuery);
-            var method = queryType.GetMethod("HandleQuery", BindingFlags.Public | BindingFlags.Static)
-                ?? throw new InvalidOperationException(
-                    $"Query type {queryType.Name} must define a public static HandleQuery method.");
-
-            if (method.ReturnType.IsGenericType &&
-                method.ReturnType.GetGenericTypeDefinition() == typeof(ResultBox<>))
+            // A query implementing the core contract (directly, or through a facade interface that unwraps its own
+            // result type once) is handled through that contract.
+            if (CoreQueryContractInvoker.TryCreateSingle(typeof(TQuery)) is { } coreHandler)
             {
-                var returnArg = method.ReturnType.GetGenericArguments()[0];
-                if (returnArg != typeof(TOutput))
-                {
-                    throw new InvalidOperationException(
-                        $"HandleQuery return type mismatch. Expected ResultBox<{typeof(TOutput).Name}> but got ResultBox<{returnArg.Name}>.");
-                }
-
-                var del = method.CreateDelegate<Func<TMultiProjector, TQuery, IQueryContext, ResultBox<TOutput>>>();
-                return del;
+                return (projector, query, context) => (TOutput)coreHandler(projector, query, context)!;
             }
 
-            if (!typeof(TOutput).IsAssignableFrom(method.ReturnType))
-            {
-                throw new InvalidOperationException(
-                    $"HandleQuery return type mismatch. Expected {typeof(TOutput).Name} or ResultBox<{typeof(TOutput).Name}> but got {method.ReturnType.Name}.");
-            }
-
-            var valueDelegate =
-                method.CreateDelegate<Func<TMultiProjector, TQuery, IQueryContext, TOutput>>();
-
-            return (projector, query, context) =>
-            {
-                try
-                {
-                    var value = valueDelegate(projector, query, context);
-                    return ResultBox.FromValue(value);
-                }
-                catch (Exception ex)
-                {
-                    return ResultBox.Error<TOutput>(ex);
-                }
-            };
+            return CreateByName<TQuery, Func<TMultiProjector, TQuery, IQueryContext, TOutput>>(
+                    "HandleQuery",
+                    typeof(TOutput),
+                    isList: false,
+                    out var unsupported)
+                ?? Unsupported<TMultiProjector, TQuery, IQueryContext, TOutput>(unsupported!);
         }
     }
 
@@ -232,98 +152,139 @@ public class GeneralQueryExecutor
         where TQuery : IListQueryCommon<TQuery, TOutput>, IEquatable<TQuery>
         where TOutput : notnull
     {
-        public static readonly Func<TMultiProjector, TQuery, IQueryContext, ResultBox<IEnumerable<TOutput>>> Filter =
+        private static readonly (CoreQueryContractInvoker.FilterHandler Filter, CoreQueryContractInvoker.SortHandler Sort)?
+            CoreHandlers = CoreQueryContractInvoker.TryCreateList(typeof(TQuery));
+
+        public static readonly Func<TMultiProjector, TQuery, IQueryContext, IEnumerable<TOutput>> Filter =
             CreateFilter();
 
-        public static readonly Func<IEnumerable<TOutput>, TQuery, IQueryContext, ResultBox<IEnumerable<TOutput>>>
+        public static readonly Func<IEnumerable<TOutput>, TQuery, IQueryContext, IEnumerable<TOutput>>
             Sort = CreateSort();
 
-        private static Func<TMultiProjector, TQuery, IQueryContext, ResultBox<IEnumerable<TOutput>>> CreateFilter()
+        private static Func<TMultiProjector, TQuery, IQueryContext, IEnumerable<TOutput>> CreateFilter()
         {
-            var queryType = typeof(TQuery);
-            var method = queryType.GetMethod("HandleFilter", BindingFlags.Public | BindingFlags.Static)
-                ?? throw new InvalidOperationException(
-                    $"List query type {queryType.Name} must define a public static HandleFilter method.");
-
-            if (method.ReturnType.IsGenericType &&
-                method.ReturnType.GetGenericTypeDefinition() == typeof(ResultBox<>))
+            if (CoreHandlers is { } core)
             {
-                var returnArg = method.ReturnType.GetGenericArguments()[0];
-                if (!typeof(IEnumerable<TOutput>).IsAssignableFrom(returnArg))
-                {
-                    throw new InvalidOperationException(
-                        $"HandleFilter return type mismatch. Expected ResultBox<IEnumerable<{typeof(TOutput).Name}>> but got ResultBox<{returnArg.Name}>.");
-                }
-
-                var del = method.CreateDelegate<Func<TMultiProjector, TQuery, IQueryContext, ResultBox<IEnumerable<TOutput>>>>();
-                return del;
+                return (projector, query, context) => (IEnumerable<TOutput>)core.Filter(projector, query, context);
             }
 
-            if (!typeof(IEnumerable<TOutput>).IsAssignableFrom(method.ReturnType))
-            {
-                throw new InvalidOperationException(
-                    $"HandleFilter return type mismatch. Expected IEnumerable<{typeof(TOutput).Name}> or ResultBox<IEnumerable<{typeof(TOutput).Name}>> but got {method.ReturnType.Name}.");
-            }
-
-            var valueDelegate =
-                method.CreateDelegate<Func<TMultiProjector, TQuery, IQueryContext, IEnumerable<TOutput>>>();
-
-            return (projector, query, context) =>
-            {
-                try
-                {
-                    var value = valueDelegate(projector, query, context);
-                    return ResultBox.FromValue(value);
-                }
-                catch (Exception ex)
-                {
-                    return ResultBox.Error<IEnumerable<TOutput>>(ex);
-                }
-            };
+            return CreateByName<TQuery, Func<TMultiProjector, TQuery, IQueryContext, IEnumerable<TOutput>>>(
+                    "HandleFilter",
+                    typeof(IEnumerable<TOutput>),
+                    isList: true,
+                    out var unsupported)
+                ?? Unsupported<TMultiProjector, TQuery, IQueryContext, IEnumerable<TOutput>>(unsupported!);
         }
 
-        private static Func<IEnumerable<TOutput>, TQuery, IQueryContext, ResultBox<IEnumerable<TOutput>>> CreateSort()
+        private static Func<IEnumerable<TOutput>, TQuery, IQueryContext, IEnumerable<TOutput>> CreateSort()
         {
-            var queryType = typeof(TQuery);
-            var method = queryType.GetMethod("HandleSort", BindingFlags.Public | BindingFlags.Static)
-                ?? throw new InvalidOperationException(
-                    $"List query type {queryType.Name} must define a public static HandleSort method.");
-
-            if (method.ReturnType.IsGenericType &&
-                method.ReturnType.GetGenericTypeDefinition() == typeof(ResultBox<>))
+            if (CoreHandlers is { } core)
             {
-                var returnArg = method.ReturnType.GetGenericArguments()[0];
-                if (!typeof(IEnumerable<TOutput>).IsAssignableFrom(returnArg))
-                {
-                    throw new InvalidOperationException(
-                        $"HandleSort return type mismatch. Expected ResultBox<IEnumerable<{typeof(TOutput).Name}>> but got ResultBox<{returnArg.Name}>.");
-                }
-
-                var del = method.CreateDelegate<Func<IEnumerable<TOutput>, TQuery, IQueryContext, ResultBox<IEnumerable<TOutput>>>>();
-                return del;
+                return (items, query, context) => (IEnumerable<TOutput>)core.Sort(items, query, context);
             }
 
-            if (!typeof(IEnumerable<TOutput>).IsAssignableFrom(method.ReturnType))
-            {
-                throw new InvalidOperationException(
-                    $"HandleSort return type mismatch. Expected IEnumerable<{typeof(TOutput).Name}> or ResultBox<IEnumerable<{typeof(TOutput).Name}>> but got {method.ReturnType.Name}.");
-            }
-
-            var valueDelegate =
-                method.CreateDelegate<Func<IEnumerable<TOutput>, TQuery, IQueryContext, IEnumerable<TOutput>>>();
-
-            return (items, query, context) =>
-            {
-                try
-                {
-                    var value = valueDelegate(items, query, context);
-                    return ResultBox.FromValue(value);
-                }
-                catch (Exception ex)
-                {
-                    return ResultBox.Error<IEnumerable<TOutput>>(ex);
-                }
-            };
+            return CreateByName<TQuery, Func<IEnumerable<TOutput>, TQuery, IQueryContext, IEnumerable<TOutput>>>(
+                    "HandleSort",
+                    typeof(IEnumerable<TOutput>),
+                    isList: true,
+                    out var unsupported)
+                ?? Unsupported<IEnumerable<TOutput>, TQuery, IQueryContext, IEnumerable<TOutput>>(unsupported!);
         }
+    }
+
+    // The invokers are cached per closed generic type, so an unsupported query shape must not fail the type
+    // initializer: that would surface as a TypeInitializationException on every later use. Instead the cached delegate
+    // throws the explanation each time the query is executed. Nothing on this path may throw while the invoker is
+    // being created.
+    private static TDelegate? CreateByName<TQuery, TDelegate>(
+        string methodName,
+        Type expected,
+        bool isList,
+        out string? unsupported)
+        where TDelegate : Delegate
+    {
+        var queryType = typeof(TQuery);
+        try
+        {
+            var method = queryType.GetMethod(methodName, BindingFlags.Public | BindingFlags.Static);
+            if (method is null)
+            {
+                unsupported = isList
+                    ? $"List query type {queryType.FullName} must define a public static {methodName} method."
+                    : $"Query type {queryType.FullName} must define a public static {methodName} method.";
+                return null;
+            }
+
+            // A ResultBox return must be rejected before the assignability check: with an object output it is
+            // assignable, and the box itself (even a failed one) would be returned as the query result.
+            if (IsResultBox(method.ReturnType) || !expected.IsAssignableFrom(method.ReturnType))
+            {
+                unsupported = UnsupportedShapeMessage(queryType, methodName, expected, method.ReturnType, isList);
+                return null;
+            }
+
+            try
+            {
+                unsupported = null;
+                return method.CreateDelegate<TDelegate>();
+            }
+            catch (ArgumentException)
+            {
+                // For example a value-type return where the output is object: assignable, but not delegate-compatible.
+                unsupported = UnsupportedShapeMessage(queryType, methodName, expected, method.ReturnType, isList);
+                return null;
+            }
+        }
+        catch (Exception ex)
+        {
+            unsupported = $"Query type {queryType.FullName} cannot be executed: its {methodName} could not be bound ({ex.GetType().Name}: {ex.Message}).";
+            return null;
+        }
+    }
+
+    // The query core does not reference ResultBoxes; the box type is recognised by its generic definition's name.
+    private const string ResultBoxDefinitionName = "ResultBoxes.ResultBox`1";
+
+    private static bool IsResultBox(Type type)
+    {
+        for (Type? current = type; current is not null; current = current.BaseType)
+        {
+            if (current.IsGenericType && current.GetGenericTypeDefinition().FullName == ResultBoxDefinitionName)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static Func<T1, T2, T3, TResult> Unsupported<T1, T2, T3, TResult>(string message) =>
+        (_, _, _) => throw new InvalidOperationException(message);
+
+    private static string UnsupportedShapeMessage(
+        Type queryType,
+        string methodName,
+        Type expected,
+        Type actual,
+        bool isList)
+    {
+        var withResultContract = isList ? "IMultiProjectionListQuery" : "IMultiProjectionQuery";
+        var coreContract = isList ? "ICoreMultiProjectionListQuery" : "ICoreMultiProjectionQuery";
+        return $"Query type {queryType.FullName} cannot be executed: its {methodName} returns {FormatType(actual)}, " +
+            $"but {FormatType(expected)} is required. A query whose handlers return a ResultBox must implement " +
+            $"the WithResult {withResultContract} interface; otherwise implement {coreContract} and return the value directly.";
+    }
+
+    // A nested type of a generic type (Outer<T>.Inner) is generic without a backtick in its own name.
+    private static string FormatType(Type type)
+    {
+        if (!type.IsGenericType)
+        {
+            return type.Name;
+        }
+
+        var tick = type.Name.IndexOf('`');
+        var name = tick < 0 ? type.Name : type.Name[..tick];
+        return $"{name}<{string.Join(", ", type.GetGenericArguments().Select(FormatType))}>";
     }
 }

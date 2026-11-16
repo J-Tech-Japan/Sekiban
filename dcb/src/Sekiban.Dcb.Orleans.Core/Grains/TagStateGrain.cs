@@ -341,18 +341,17 @@ public class TagStateGrain : Grain, ITagStateGrain
     {
         cancellationToken.ThrowIfCancellationRequested();
         var tagConsistentActorId = $"{tagStateId.TagGroup}:{tagStateId.TagContent}";
-        var tagConsistentActorResult = await _actorAccessor.GetActorAsync<ITagConsistentActorCommon>(tagConsistentActorId);
+        var tagConsistentActorResult = await _actorAccessor.GetActorAsync<ITagConsistentActorCommon>(tagConsistentActorId)
+            .ToResultBoxAsync();
         cancellationToken.ThrowIfCancellationRequested();
         if (!tagConsistentActorResult.IsSuccess)
         {
             return null;
         }
 
-        var latestSortableUniqueIdResult = await tagConsistentActorResult.GetValue().GetLatestSortableUniqueIdAsync();
+        var latestSortableUniqueId = await TagConsistentLatestPositionReader.TryReadAsync(tagConsistentActorResult.GetValue());
         cancellationToken.ThrowIfCancellationRequested();
-        return latestSortableUniqueIdResult.IsSuccess
-            ? latestSortableUniqueIdResult.GetValue()
-            : null;
+        return latestSortableUniqueId;
     }
 
     private static SortableUniqueId? ResolveSinceForRead(

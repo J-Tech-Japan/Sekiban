@@ -267,7 +267,7 @@ public class ConsistencyReservationRulesTest
         Assert.Equal(2, update.GetValue().TagWrites.Count);
         foreach (var tag in new[] { primary, secondary })
         {
-            var actor = (await _actorAccessor.GetActorAsync<ITagConsistentActorCommon>(tag.GetTag())).GetValue();
+            var actor = (await ResultBox.WrapTry(() => _actorAccessor.GetActorAsync<ITagConsistentActorCommon>(tag.GetTag()))).GetValue();
             Assert.Empty(await Assert.IsType<GeneralTagConsistentActor>(actor).GetActiveReservationsAsync());
         }
     }
@@ -421,8 +421,8 @@ public class ConsistencyReservationRulesTest
 
     private sealed class FailingActorAccessor : IActorObjectAccessor
     {
-        public Task<ResultBox<T>> GetActorAsync<T>(string actorId) where T : class =>
-            Task.FromResult(ResultBox.Error<T>(new IOException("read failed")));
+        public Task<T> GetActorAsync<T>(string actorId) where T : class =>
+            Task.FromException<T>(new IOException("read failed"));
 
         public Task<bool> ActorExistsAsync(string actorId) => Task.FromResult(false);
     }

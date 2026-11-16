@@ -173,8 +173,8 @@ public sealed class TagConsistencyFenceTests
                     (_, _) => Task.FromResult(EventOrNone.Event(Payload(), tag).GetValue()), options);
                 break;
             case CoreGeneralSekibanExecutor core:
-                Assert.True((await core.ExecuteAsync(new Command(),
-                    (_, _) => Task.FromResult(EventOrNone.Event(Payload(), tag)), options)).IsSuccess);
+                await core.ExecuteAsync(new Command(),
+                    (_, _) => Task.FromResult(EventOrNone.Event(Payload(), tag).GetValue()), options);
                 break;
         }
         Assert.Equal("tenant-x", Assert.Single(store.Specification!.Entries).ServiceId);
@@ -239,12 +239,11 @@ public sealed class TagConsistencyFenceTests
         Assert.Throws<InvalidOperationException>(() => new CoreGeneralSekibanExecutor(store, new RecordingAccessor(), Domain, On));
         var core = new CoreGeneralSekibanExecutor(store, new RecordingAccessor(), Domain);
         var handled = false;
-        var result = await core.ExecuteAsync(new Command(), (_, _) =>
+        await Assert.ThrowsAsync<ConditionNotSupportedException>(() => core.ExecuteAsync(new Command(), (_, _) =>
         {
             handled = true;
-            return Task.FromResult(EventOrNone.None);
-        }, new CommandExecutionOptions { TagConsistencyFence = TagConsistencyFenceMode.DeriveFromReservations });
-        Assert.IsType<ConditionNotSupportedException>(result.GetException());
+            return Task.FromResult(EventOrNone.Empty);
+        }, new CommandExecutionOptions { TagConsistencyFence = TagConsistencyFenceMode.DeriveFromReservations }));
         Assert.False(handled);
     }
 
@@ -434,9 +433,9 @@ public sealed class TagConsistencyFenceTests
         var store = new RecordingStore();
         using var provider = DiProvider(type, store, gate, fence, allocator, optionalServices, customService);
         var executor = provider.GetRequiredService(type);
-        var result = executor is CoreGeneralSekibanExecutor core
-            ? await core.CommitSerializableEventsAsync(Request(), default)
-            : await ((ISerializedSekibanDcbExecutor)executor).CommitSerializableEventsAsync(Request());
+        var result = await ResultBox.WrapTry(() => executor is CoreGeneralSekibanExecutor core
+            ? core.CommitSerializableEventsAsync(Request(), default)
+            : ((ISerializedSekibanDcbExecutor)executor).CommitSerializableEventsAsync(Request()));
         Assert.True(result.IsSuccess, result.IsSuccess ? "" : result.GetException().ToString());
         Assert.Equal(fence, store.Specification is not null);
         if (fence)
@@ -488,14 +487,14 @@ public sealed class TagConsistencyFenceTests
         public List<string?> Inputs { get; } = [];
         public int Cancelled, Confirmed, Notified;
         public bool NotifyThrows;
-        public Task<ResultBox<T>> GetActorAsync<T>(string id) where T : class => Task.FromResult(ResultBox.FromValue((T)(object)this));
+        public Task<T> GetActorAsync<T>(string id) where T : class => Task.FromResult((T)(object)this);
         public Task<bool> ActorExistsAsync(string id) => Task.FromResult(true);
         public Task<string> GetTagActorIdAsync() => Task.FromResult("Fence:test");
-        public Task<ResultBox<string>> GetLatestSortableUniqueIdAsync() => Task.FromResult(ResultBox.FromValue(Head));
-        public Task<ResultBox<TagWriteReservation>> MakeReservationAsync(string? position)
+        public Task<string> GetLatestSortableUniqueIdAsync() => Task.FromResult(Head);
+        public Task<TagWriteReservation> MakeReservationAsync(string? position)
         {
             Inputs.Add(position);
-            return Task.FromResult(ResultBox.FromValue(new TagWriteReservation(Guid.NewGuid().ToString(), DateTime.UtcNow.AddMinutes(1).ToString("O"), "Fence:test")));
+            return Task.FromResult(new TagWriteReservation(Guid.NewGuid().ToString(), DateTime.UtcNow.AddMinutes(1).ToString("O"), "Fence:test"));
         }
         public Task<bool> CancelReservationAsync(TagWriteReservation reservation) { Cancelled++; return Task.FromResult(true); }
         public Task<bool> ConfirmReservationAsync(TagWriteReservation reservation) { Confirmed++; return Task.FromResult(true); }

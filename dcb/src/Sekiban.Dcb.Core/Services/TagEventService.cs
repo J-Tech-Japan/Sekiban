@@ -1,4 +1,3 @@
-using ResultBoxes;
 using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Events;
@@ -42,8 +41,8 @@ public class TagEventService
     /// <param name="tag">The tag to fetch events for</param>
     /// <param name="since">Optional: Only return events after this ID</param>
     /// <returns>List of events for the tag</returns>
-    public Task<ResultBox<IEnumerable<Event>>> GetEventsByTagAsync(ITag tag, SortableUniqueId? since = null)
-        => _eventStore.ReadEventsByTagAsync(tag, _eventTypes, since).ToResultBoxAsync();
+    public Task<IEnumerable<Event>> GetEventsByTagAsync(ITag tag, SortableUniqueId? since = null)
+        => _eventStore.ReadEventsByTagAsync(tag, _eventTypes, since);
 
     /// <summary>
     ///     Fetch all events for a tag specified by string
@@ -51,7 +50,7 @@ public class TagEventService
     /// <param name="tagString">Tag string in format 'group:content'</param>
     /// <param name="since">Optional: Only return events after this ID</param>
     /// <returns>List of events for the tag</returns>
-    public Task<ResultBox<IEnumerable<Event>>> GetEventsByTagStringAsync(string tagString, SortableUniqueId? since = null)
+    public Task<IEnumerable<Event>> GetEventsByTagStringAsync(string tagString, SortableUniqueId? since = null)
     {
         var tag = ParseTag(tagString);
         return GetEventsByTagAsync(tag, since);

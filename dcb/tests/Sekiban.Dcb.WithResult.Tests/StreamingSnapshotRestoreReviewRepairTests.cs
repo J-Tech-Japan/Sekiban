@@ -65,7 +65,7 @@ public sealed partial class StreamingSnapshotRestoreTests
         var legacySelectedThreshold = await RestoreInlineAndCaptureSelectedThresholdAsync(
             legacyActor,
             legacyState);
-        var legacy = await legacyActor.GetStateAsync(canGetUnsafeState: true);
+        var legacy = await ResultBox.WrapTry(() => legacyActor.GetStateAsync(canGetUnsafeState: true));
         Assert.True(legacy.IsSuccess);
         Assert.Equal(0, byteSetup.StreamDeserializeCalls);
         // Each path owns an actor and therefore selects its own timestamp-derived threshold. Exact equality is against
@@ -132,7 +132,7 @@ public sealed partial class StreamingSnapshotRestoreTests
             expectedCount: 2,
             cell.Delivery == MatrixDelivery.Offloaded ? "offloaded stream path" : "inline compatibility path");
 
-        var restored = await restoreActor.GetStateAsync(canGetUnsafeState: true);
+        var restored = await ResultBox.WrapTry(() => restoreActor.GetStateAsync(canGetUnsafeState: true));
         Assert.True(restored.IsSuccess);
         Assert.Equal(expectedValue, GetMatrixPayloadValue(restored.GetValue().Payload));
         Assert.Equal(GetMatrixPayloadValue(legacy.GetValue().Payload), GetMatrixPayloadValue(restored.GetValue().Payload));

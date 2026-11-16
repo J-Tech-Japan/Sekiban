@@ -41,11 +41,11 @@ public interface IMultiProjectionListQuery<TMultiProjector, TQuery, TOutput> : I
         TMultiProjector projector,
         TQuery query,
         IQueryContext context) =>
-        ResultBoxBridge.Unwrap(TQuery.HandleFilter(projector, query, context));
+        ResultBoxBridge.Unwrap(TQuery.HandleFilter(projector, query, context), ResultBoxBridge.NullListQueryResultMessage);
 
     static IEnumerable<TOutput> ICoreMultiProjectionListQuery<TMultiProjector, TQuery, TOutput>.HandleSort(
         IEnumerable<TOutput> filteredList,
         TQuery query,
         IQueryContext context) =>
-        ResultBoxBridge.Unwrap(TQuery.HandleSort(filteredList, query, context));
+        ResultBoxBridge.Unwrap(TQuery.HandleSort(filteredList, query, context), ResultBoxBridge.NullListQueryResultMessage);
 }

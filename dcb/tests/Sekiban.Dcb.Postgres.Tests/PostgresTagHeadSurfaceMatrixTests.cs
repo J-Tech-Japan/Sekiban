@@ -118,7 +118,7 @@ public sealed class PostgresTagHeadSurfaceMatrixTests : PostgresTestBase
         AssertLegacyRequest(request, candidate, tag);
         var wire = SerializedCommitWireContract.SerializeToUtf8Bytes(request);
         AssertLegacyWire(wire);
-        var result = await new SerializedCommitAcceptor(executor).AcceptAsync(wire);
+        var result = await ResultBox.WrapTry(() => new SerializedCommitAcceptor(executor).AcceptAsync(wire));
 
         Assert.True(result.IsSuccess, result.IsSuccess ? "" : result.GetException().ToString());
         AssertSerializedPayload(result.GetValue(), candidate, tag);

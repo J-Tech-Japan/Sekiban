@@ -51,9 +51,9 @@ public class GeneralMultiProjectionActorCatchingUpTests
         // Act - Add events with finishedCatchUp = false
         await actor.AddEventsAsync(new[] { oldEvent, recentEvent }, false);
 
-        var safeState = await actor.GetStateAsync(canGetUnsafeState: false); // Explicitly get safe state
-        var unsafeState = await actor.GetUnsafeStateAsync();
-        var defaultState = await actor.GetStateAsync(); // Default behavior
+        var safeState = await ResultBox.WrapTry(() => actor.GetStateAsync(canGetUnsafeState: false)); // Explicitly get safe state
+        var unsafeState = await ResultBox.WrapTry(() => actor.GetUnsafeStateAsync());
+        var defaultState = await ResultBox.WrapTry(() => actor.GetStateAsync()); // Default behavior
 
         // Assert
         Assert.True(safeState.IsSuccess);
@@ -88,7 +88,7 @@ public class GeneralMultiProjectionActorCatchingUpTests
         // Then add with finished catching up
         await actor.AddEventsAsync(new[] { event2 });
 
-        var state = await actor.GetStateAsync();
+        var state = await ResultBox.WrapTry(() => actor.GetStateAsync());
 
         // Assert
         Assert.True(state.IsSuccess);
@@ -110,7 +110,7 @@ public class GeneralMultiProjectionActorCatchingUpTests
         await actor.AddEventsAsync(new[] { recentEvent }, false);
 
         // Act - Get serializable state with canGetUnsafeState = false
-        var envelope = await actor.GetSnapshotAsync(canGetUnsafeState: false);
+        var envelope = await ResultBox.WrapTry(() => actor.GetSnapshotAsync(canGetUnsafeState: false));
 
         // Assert
         Assert.True(envelope.IsSuccess);
@@ -136,7 +136,7 @@ public class GeneralMultiProjectionActorCatchingUpTests
         await actor.AddEventsAsync(new[] { recentEvent });
 
         // Act - Get serializable state with canGetUnsafeState = true (default)
-        var envelope = await actor.GetSnapshotAsync(canGetUnsafeState: true);
+        var envelope = await ResultBox.WrapTry(() => actor.GetSnapshotAsync(canGetUnsafeState: true));
 
         // Assert
         Assert.True(envelope.IsSuccess);
@@ -158,14 +158,14 @@ public class GeneralMultiProjectionActorCatchingUpTests
         await actor1.AddEventsAsync(new[] { event1 }, false);
 
         // Get serializable state
-        var serializableState = await actor1.GetSnapshotAsync();
+        var serializableState = await ResultBox.WrapTry(() => actor1.GetSnapshotAsync());
 
         // Create new actor and load state
         var actor2 = new GeneralMultiProjectionActor(_domainTypes, TestMultiProjector.MultiProjectorName, _options);
         await actor2.SetSnapshotAsync(serializableState.GetValue());
 
         // Act
-        var reloadedState = await actor2.GetStateAsync();
+        var reloadedState = await ResultBox.WrapTry(() => actor2.GetStateAsync());
 
         // Assert - Catching up state should be preserved
         Assert.True(reloadedState.IsSuccess);
@@ -188,7 +188,7 @@ public class GeneralMultiProjectionActorCatchingUpTests
         await actor.AddEventsAsync(new[] { recentEvent1, recentEvent2 });
 
         // Act - Get state for snapshot (safe state only)
-        var snapshotState = await actor.GetSnapshotAsync(canGetUnsafeState: false);
+        var snapshotState = await ResultBox.WrapTry(() => actor.GetSnapshotAsync(canGetUnsafeState: false));
 
         // Assert
         Assert.True(snapshotState.IsSuccess);
@@ -205,7 +205,7 @@ public class GeneralMultiProjectionActorCatchingUpTests
             _options);
         await restoredActor.SetSnapshotAsync(new Sekiban.Dcb.Snapshots.SerializableMultiProjectionStateEnvelope(false, state, null));
 
-        var restoredState = await restoredActor.GetStateAsync();
+        var restoredState = await ResultBox.WrapTry(() => restoredActor.GetStateAsync());
         var payload = restoredState.GetValue().Payload as TestMultiProjector;
 
         // Should only have the safe item
@@ -228,8 +228,8 @@ public class GeneralMultiProjectionActorCatchingUpTests
         await actor.AddEventsAsync(new[] { recentEvent });
 
         // Act - Get state with canGetUnsafeState = false
-        var safeOnlyState = await actor.GetStateAsync(canGetUnsafeState: false);
-        var defaultState = await actor.GetStateAsync(); // Should get unsafe state by default
+        var safeOnlyState = await ResultBox.WrapTry(() => actor.GetStateAsync(canGetUnsafeState: false));
+        var defaultState = await ResultBox.WrapTry(() => actor.GetStateAsync()); // Should get unsafe state by default
 
         // Assert
         Assert.True(safeOnlyState.IsSuccess);
@@ -259,7 +259,7 @@ public class GeneralMultiProjectionActorCatchingUpTests
         var oldEvent = CreateEvent(new TestEventCreated("Safe Item"), DateTime.UtcNow.AddSeconds(-10));
         await actor.AddEventsAsync(new[] { oldEvent });
 
-        var snapshotResult = await actor.GetSnapshotAsync(canGetUnsafeState: false);
+        var snapshotResult = await ResultBox.WrapTry(() => actor.GetSnapshotAsync(canGetUnsafeState: false));
         Assert.True(snapshotResult.IsSuccess);
         var snapshot = snapshotResult.GetValue();
 
@@ -276,7 +276,7 @@ public class GeneralMultiProjectionActorCatchingUpTests
 
         // A first restore failure has no published checkpoint to quarantine, so the actor retains the legacy
         // initial-state/rebuild contract rather than latching a failure that would prevent catch-up.
-        var stateAfterFailedRestore = await restoredActor.GetStateAsync(canGetUnsafeState: false);
+        var stateAfterFailedRestore = await ResultBox.WrapTry(() => restoredActor.GetStateAsync(canGetUnsafeState: false));
         Assert.True(stateAfterFailedRestore.IsSuccess);
         var payload = stateAfterFailedRestore.GetValue().Payload as TestMultiProjector;
         Assert.NotNull(payload);
@@ -288,7 +288,7 @@ public class GeneralMultiProjectionActorCatchingUpTests
     {
         var actor = new GeneralMultiProjectionActor(_domainTypes, TestMultiProjector.MultiProjectorName, _options);
         await actor.AddEventsAsync([CreateEvent(new TestEventCreated("published"), DateTime.UtcNow.AddSeconds(-10))]);
-        var snapshotResult = await actor.GetSnapshotAsync(canGetUnsafeState: false);
+        var snapshotResult = await ResultBox.WrapTry(() => actor.GetSnapshotAsync(canGetUnsafeState: false));
         Assert.True(snapshotResult.IsSuccess);
         var snapshot = snapshotResult.GetValue();
 
@@ -297,7 +297,7 @@ public class GeneralMultiProjectionActorCatchingUpTests
 
         // This kills an unconditional legacy-recovery implementation: a replacement failure must never make a
         // previously published payload usable, and it must retain the original exception instance at all boundaries.
-        var stateAfterMismatch = await actor.GetStateAsync(canGetUnsafeState: false);
+        var stateAfterMismatch = await ResultBox.WrapTry(() => actor.GetStateAsync(canGetUnsafeState: false));
         Assert.False(stateAfterMismatch.IsSuccess);
         Assert.Same(mismatch, stateAfterMismatch.GetException());
         var applyFailure = await Assert.ThrowsAsync<InvalidOperationException>(
@@ -306,7 +306,7 @@ public class GeneralMultiProjectionActorCatchingUpTests
 
         // A successful replacement restore is the explicit recovery boundary and clears the quarantine atomically.
         await actor.SetSnapshotAsync(snapshot);
-        var recovered = await actor.GetStateAsync(canGetUnsafeState: false);
+        var recovered = await ResultBox.WrapTry(() => actor.GetStateAsync(canGetUnsafeState: false));
         Assert.True(recovered.IsSuccess);
         var payload = Assert.IsType<TestMultiProjector>(recovered.GetValue().Payload);
         Assert.Equal(["published"], payload.Items);
@@ -324,8 +324,8 @@ public class GeneralMultiProjectionActorCatchingUpTests
         await actor.AddEventsAsync(new[] { oldEvent1, oldEvent2 });
 
         // Act
-        var stateWithUnsafe = await actor.GetStateAsync(canGetUnsafeState: true);
-        var stateWithoutUnsafe = await actor.GetStateAsync(canGetUnsafeState: false);
+        var stateWithUnsafe = await ResultBox.WrapTry(() => actor.GetStateAsync(canGetUnsafeState: true));
+        var stateWithoutUnsafe = await ResultBox.WrapTry(() => actor.GetStateAsync(canGetUnsafeState: false));
 
         // Assert - Both should return safe state since there are no buffered events
         Assert.True(stateWithUnsafe.IsSuccess);
@@ -355,7 +355,7 @@ public class GeneralMultiProjectionActorCatchingUpTests
 
         // Act - Phase 1: During catch up with old data only
         await actor.AddEventsAsync(new[] { oldEvent1 }, false);
-        var stateDuringCatchUp = await actor.GetStateAsync(canGetUnsafeState: false);
+        var stateDuringCatchUp = await ResultBox.WrapTry(() => actor.GetStateAsync(canGetUnsafeState: false));
 
         // Assert - Should be safe but not caught up
         Assert.True(stateDuringCatchUp.IsSuccess);
@@ -364,7 +364,7 @@ public class GeneralMultiProjectionActorCatchingUpTests
 
         // Act - Phase 2: After catch up completed with old data only
         await actor.AddEventsAsync(new[] { oldEvent2 });
-        var stateAfterCatchUp = await actor.GetStateAsync(canGetUnsafeState: false);
+        var stateAfterCatchUp = await ResultBox.WrapTry(() => actor.GetStateAsync(canGetUnsafeState: false));
 
         // Assert - Should be both safe and caught up
         Assert.True(stateAfterCatchUp.IsSuccess);
@@ -392,8 +392,8 @@ public class GeneralMultiProjectionActorCatchingUpTests
         // Act - Phase 1: During catch up with mixed data
         await actor.AddEventsAsync(new[] { oldEvent, recentEvent }, false);
 
-        var safeStateDuringCatchUp = await actor.GetStateAsync(canGetUnsafeState: false);
-        var unsafeStateDuringCatchUp = await actor.GetStateAsync(canGetUnsafeState: true);
+        var safeStateDuringCatchUp = await ResultBox.WrapTry(() => actor.GetStateAsync(canGetUnsafeState: false));
+        var unsafeStateDuringCatchUp = await ResultBox.WrapTry(() => actor.GetStateAsync(canGetUnsafeState: true));
 
         // Assert - During catch up
         // Safe state: not caught up, but is safe
@@ -411,8 +411,8 @@ public class GeneralMultiProjectionActorCatchingUpTests
         var finalEvent = CreateEvent(new TestEventCreated("Final Item"), DateTime.UtcNow.AddSeconds(-7));
         await actor.AddEventsAsync(new[] { finalEvent });
 
-        var safeStateAfterCatchUp = await actor.GetStateAsync(canGetUnsafeState: false);
-        var unsafeStateAfterCatchUp = await actor.GetStateAsync(canGetUnsafeState: true);
+        var safeStateAfterCatchUp = await ResultBox.WrapTry(() => actor.GetStateAsync(canGetUnsafeState: false));
+        var unsafeStateAfterCatchUp = await ResultBox.WrapTry(() => actor.GetStateAsync(canGetUnsafeState: true));
 
         // Assert - After catch up completed
         // Safe state: caught up and safe
@@ -437,7 +437,7 @@ public class GeneralMultiProjectionActorCatchingUpTests
         };
         await actor.AddEventsAsync(batch1, false);
 
-        var state1 = await actor.GetStateAsync();
+        var state1 = await ResultBox.WrapTry(() => actor.GetStateAsync());
         Assert.False(state1.GetValue().IsCatchedUp);
 
         // Phase 2: More events, still catching up
@@ -447,7 +447,7 @@ public class GeneralMultiProjectionActorCatchingUpTests
         };
         await actor.AddEventsAsync(batch2, false);
 
-        var state2 = await actor.GetStateAsync();
+        var state2 = await ResultBox.WrapTry(() => actor.GetStateAsync());
         Assert.False(state2.GetValue().IsCatchedUp);
 
         // Phase 3: Final batch, catching up complete
@@ -458,7 +458,7 @@ public class GeneralMultiProjectionActorCatchingUpTests
         await actor.AddEventsAsync(batch3);
 
         // Act & Assert
-        var finalState = await actor.GetStateAsync();
+        var finalState = await ResultBox.WrapTry(() => actor.GetStateAsync());
         Assert.True(finalState.GetValue().IsCatchedUp);
 
         var payload = finalState.GetValue().Payload as TestMultiProjector;

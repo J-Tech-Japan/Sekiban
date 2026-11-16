@@ -1,4 +1,3 @@
-using ResultBoxes;
 using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.Storage;
@@ -47,39 +46,39 @@ public class TagStateService
     public ITag ParseTag(string tagString) => _inner.ParseTag(tagString);
 
     /// <inheritdoc cref="CoreTagStateService.GetLatestTagStateAsync" />
-    public Task<ResultBox<TagState>> GetLatestTagStateAsync(ITag tag) => _inner.GetLatestTagStateAsync(tag);
+    public Task<TagState> GetLatestTagStateAsync(ITag tag) => _inner.GetLatestTagStateAsync(tag);
 
     /// <inheritdoc cref="CoreTagStateService.GetLatestTagStateByStringAsync" />
-    public Task<ResultBox<TagState>> GetLatestTagStateByStringAsync(string tagString) =>
+    public Task<TagState> GetLatestTagStateByStringAsync(string tagString) =>
         _inner.GetLatestTagStateByStringAsync(tagString);
 
-    public Task<ResultBox<TagStateProjectionResult>> ProjectTagStateAsync(string tagString, string projectorName) =>
+    public Task<TagStateProjectionResult> ProjectTagStateAsync(string tagString, string projectorName) =>
         ConvertProjectionAsync(_inner.ProjectTagStateAsync(tagString, projectorName));
 
-    public Task<ResultBox<TagStateProjectionResult>> ProjectTagStateAsync(
+    public Task<TagStateProjectionResult> ProjectTagStateAsync(
         string tagString,
         string projectorName,
         CancellationToken cancellationToken) =>
         ConvertProjectionAsync(_inner.ProjectTagStateAsync(tagString, projectorName, cancellationToken));
 
-    public Task<ResultBox<TagStateProjectionResult>> ProjectTagStateAsync(string tagString) =>
+    public Task<TagStateProjectionResult> ProjectTagStateAsync(string tagString) =>
         ConvertProjectionAsync(_inner.ProjectTagStateAsync(tagString));
 
-    public Task<ResultBox<TagStateProjectionResult>> ProjectTagStateAsync(
+    public Task<TagStateProjectionResult> ProjectTagStateAsync(
         string tagString,
         CancellationToken cancellationToken) =>
         ConvertProjectionAsync(_inner.ProjectTagStateAsync(tagString, cancellationToken));
 
-    public Task<ResultBox<TagStateProjectionResult>> ProjectTagStateAsync(ITag tag) =>
+    public Task<TagStateProjectionResult> ProjectTagStateAsync(ITag tag) =>
         ConvertProjectionAsync(_inner.ProjectTagStateAsync(tag));
 
-    public Task<ResultBox<TagStateProjectionResult>> ProjectTagStateAsync(ITag tag, CancellationToken cancellationToken) =>
+    public Task<TagStateProjectionResult> ProjectTagStateAsync(ITag tag, CancellationToken cancellationToken) =>
         ConvertProjectionAsync(_inner.ProjectTagStateAsync(tag, cancellationToken));
 
-    public Task<ResultBox<TagStateProjectionResult>> ProjectTagStateAsync(ITag tag, string projectorName) =>
+    public Task<TagStateProjectionResult> ProjectTagStateAsync(ITag tag, string projectorName) =>
         ConvertProjectionAsync(_inner.ProjectTagStateAsync(tag, projectorName));
 
-    public Task<ResultBox<TagStateProjectionResult>> ProjectTagStateAsync(
+    public Task<TagStateProjectionResult> ProjectTagStateAsync(
         ITag tag,
         string projectorName,
         CancellationToken cancellationToken) =>
@@ -94,23 +93,16 @@ public class TagStateService
     /// <inheritdoc cref="CoreTagStateService.JsonSerializerOptions" />
     public JsonSerializerOptions JsonSerializerOptions => _inner.JsonSerializerOptions;
 
-    private static async Task<ResultBox<TagStateProjectionResult>> ConvertProjectionAsync(
-        Task<ResultBox<CoreTagStateProjectionResult>> projectionTask)
+    private static async Task<TagStateProjectionResult> ConvertProjectionAsync(
+        Task<CoreTagStateProjectionResult> projectionTask)
     {
-        var projectionResult = await projectionTask;
-        if (!projectionResult.IsSuccess)
-        {
-            return ResultBox.Error<TagStateProjectionResult>(projectionResult.GetException());
-        }
-
-        var projection = projectionResult.GetValue();
-        return ResultBox.FromValue(
-            new TagStateProjectionResult(
-                projection.Tag,
-                projection.ProjectorName,
-                projection.ProjectorVersion,
-                projection.State,
-                projection.EventCount,
-                projection.LastSortableUniqueId));
+        var projection = await projectionTask;
+        return new TagStateProjectionResult(
+            projection.Tag,
+            projection.ProjectorName,
+            projection.ProjectorVersion,
+            projection.State,
+            projection.EventCount,
+            projection.LastSortableUniqueId);
     }
 }

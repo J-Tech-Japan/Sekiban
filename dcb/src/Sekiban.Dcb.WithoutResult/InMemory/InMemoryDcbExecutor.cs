@@ -1,4 +1,3 @@
-using ResultBoxes;
 using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Commands;
 using Sekiban.Dcb.Common;
@@ -166,10 +165,10 @@ public class InMemoryDcbExecutor : ISekibanExecutor, ISerializedSekibanDcbExecut
     Task<EventStoreHeadStatus> ISekibanExecutor.GetEventStoreHeadStatusAsync(bool includeTotalEventCount) =>
         _inner.GetEventStoreHeadStatusAsync(includeTotalEventCount);
 
-    Task<ResultBox<SerializableTagState>> ISerializedSekibanDcbExecutor.GetSerializableTagStateAsync(TagStateId tagStateId) =>
+    Task<SerializableTagState> ISerializedSekibanDcbExecutor.GetSerializableTagStateAsync(TagStateId tagStateId) =>
         _inner.GetSerializableTagStateAsync(tagStateId);
 
-    Task<ResultBox<SerializedCommitResult>> ISerializedSekibanDcbExecutor.CommitSerializableEventsAsync(
+    Task<SerializedCommitResult> ISerializedSekibanDcbExecutor.CommitSerializableEventsAsync(
         SerializedCommitRequest request,
         CancellationToken cancellationToken) =>
         _inner.CommitSerializableEventsAsync(request, cancellationToken);

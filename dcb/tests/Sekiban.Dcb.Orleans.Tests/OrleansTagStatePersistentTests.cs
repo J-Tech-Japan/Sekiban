@@ -403,8 +403,8 @@ public class OrleansTagStatePersistentTests
 
     private sealed class MissingActorAccessor : IActorObjectAccessor
     {
-        public Task<ResultBox<T>> GetActorAsync<T>(string actorId) where T : class =>
-            Task.FromResult(ResultBox.Error<T>(new KeyNotFoundException(actorId)));
+        public Task<T> GetActorAsync<T>(string actorId) where T : class =>
+            Task.FromException<T>(new KeyNotFoundException(actorId));
 
         public Task<bool> ActorExistsAsync(string actorId) => Task.FromResult(false);
     }

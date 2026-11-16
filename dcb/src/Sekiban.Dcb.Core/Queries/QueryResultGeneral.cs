@@ -1,4 +1,3 @@
-using ResultBoxes;
 namespace Sekiban.Dcb.Queries;
 
 /// <summary>
@@ -8,14 +7,13 @@ public record QueryResultGeneral(object Value, string ResultType, IQueryCommon Q
 {
     public object GetValue() => Value;
 
-    public ResultBox<T> ToTypedResult<T>() where T : notnull
+    public T ToTypedResult<T>() where T : notnull
     {
         if (Value is T typedValue)
         {
-            return ResultBox.FromValue(typedValue);
+            return typedValue;
         }
 
-        return ResultBox.Error<T>(
-            new InvalidCastException($"Cannot cast {Value?.GetType()?.Name ?? "null"} to {typeof(T).Name}"));
+        throw new InvalidCastException($"Cannot cast {Value?.GetType()?.Name ?? "null"} to {typeof(T).Name}");
     }
 }

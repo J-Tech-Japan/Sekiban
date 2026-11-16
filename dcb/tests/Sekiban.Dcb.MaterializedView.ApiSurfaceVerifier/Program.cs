@@ -28,13 +28,19 @@ var removedMembers = baselineSurface
         .Select(member => $"{type.Key}::{member}"))
     .OrderBy(value => value)
     .ToList();
-if (removedTypes.Count != 0 || removedMembers.Count != 0)
+var unexpected = IntendedRemovals.Unexpected(
+    removedTypes.Concat(removedMembers).ToList(),
+    IntendedRemovals.LocateSuppressionFile(
+        Directory.GetCurrentDirectory(),
+        AppContext.BaseDirectory,
+        Path.GetDirectoryName(candidatePath)!));
+if (unexpected.Count != 0)
 {
-    var removed = string.Join(Environment.NewLine, removedTypes.Concat(removedMembers));
+    var removed = string.Join(Environment.NewLine, unexpected);
     throw new InvalidOperationException($"The candidate removes public API from the baseline:{Environment.NewLine}{removed}");
 }
 
-Console.WriteLine($"api-surface-additions-only-ok:{baselineSurface.Count}:{candidateSurface.Count}");
+Console.WriteLine($"api-surface-additions-only-ok:{baselineSurface.Count}:{candidateSurface.Count}:intended-11.0-removals:{IntendedRemovals.Entries.Count}");
 
 static MetadataLoadContext CreateMetadataContext(string assemblyPath, string fallbackAssemblyPath)
 {

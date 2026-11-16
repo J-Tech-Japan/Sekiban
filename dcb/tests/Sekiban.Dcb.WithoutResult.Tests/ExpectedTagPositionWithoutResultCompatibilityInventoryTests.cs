@@ -60,7 +60,7 @@ public sealed class ExpectedTagPositionWithoutResultCompatibilityInventoryTests
     {
         var method = Assert.Single(facade.GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly),
             candidate => candidate.Name == nameof(ISerializedExpectedTagPositionSekibanDcbExecutor.CommitSerializableEventsWithExpectedTagPositionsAsync) &&
-                         candidate.ReturnType == typeof(Task<ResultBox<SerializedCommitResult>>) &&
+                         candidate.ReturnType == typeof(Task<SerializedCommitResult>) &&
                          candidate.GetParameters().Select(parameter => parameter.ParameterType).SequenceEqual(
                              [typeof(VersionedExpectedTagPositionSerializedCommitRequest), typeof(CancellationToken)]));
         Assert.False(method.IsStatic);

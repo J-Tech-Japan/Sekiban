@@ -2850,7 +2850,8 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             CheckpointSlot? activeSlotToAdopt = null;
             if (_checkpointMutation is { IsCapable: true })
             {
-                var slotResult = await _checkpointMutation.ReadSlotAsync(projectorName, projectorVersion, cancellationToken);
+                var slotResult = await _checkpointMutation.ReadSlotAsync(projectorName, projectorVersion, cancellationToken)
+                    .ToResultBoxAsync();
                 ThrowIfRestoreCancelled(cancellationToken, slotResult.IsSuccess ? null : slotResult.GetException());
                 if (slotResult.IsSuccess)
                 {
@@ -3549,7 +3550,10 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
             var previousSlot = _checkpointMutation.AdoptedSlot;
             var heldGeneration = previousSlot?.Generation ?? 0;
-            var result = await _checkpointMutation.PersistAsync(request, stream, offloadThreshold);
+            var outcome = await _checkpointMutation.PersistAsync(request, stream, offloadThreshold);
+            var result = outcome.Failure is { } persistFailure
+                ? ResultBox.Error<bool>(persistFailure)
+                : ResultBox.FromValue(true);
             var adoptedGeneration = _checkpointMutation.AdoptedSlot?.Generation ?? 0;
             if (!result.IsSuccess && adoptedGeneration > heldGeneration && sameVersion &&
                 ReferenceEquals(writeHost, _host) && !_hostIsPristine && !IsStaleCheckpointHost(writeHost))

@@ -15,6 +15,7 @@ using Sekiban.Dcb.Orleans.ServiceId;
 using Sekiban.Dcb.ServiceId;
 using Xunit;
 using Sekiban.Dcb.TestSupport;
+using ResultBoxes;
 
 namespace Sekiban.Dcb.MaterializedView.Postgres.Tests;
 
@@ -262,7 +263,7 @@ public sealed class MaterializedViewPostgresOrleansTests(MaterializedViewPostgre
                     .OrderBy(serializableEvent => serializableEvent.SortableUniqueIdValue, StringComparer.Ordinal)
                     .ToList();
                 receiptEvent = durableEvents.Single(serializableEvent =>
-                    serializableEvent.ToEvent(fixture.DomainTypes.EventTypes).GetValue().Payload is OrderItemAdded added &&
+                    serializableEvent.ToEvent(fixture.DomainTypes.EventTypes).Payload is OrderItemAdded added &&
                     added.ItemId == firstItemId);
                 receiptSortableUniqueId = receiptEvent.SortableUniqueIdValue;
 
@@ -888,7 +889,7 @@ public sealed class MaterializedViewPostgresOrleansTests(MaterializedViewPostgre
         var events = (await fixture.EventStore.ReadAllSerializableEventsAsync().AsResultBoxAsync()).GetValue()
             .Where(serializableEvent =>
             {
-                var eventResult = serializableEvent.ToEvent(fixture.DomainTypes.EventTypes);
+                var eventResult = ResultBox.WrapTry(() => serializableEvent.ToEvent(fixture.DomainTypes.EventTypes));
                 if (!eventResult.IsSuccess)
                 {
                     return false;
@@ -1018,7 +1019,7 @@ public sealed class MaterializedViewPostgresOrleansTests(MaterializedViewPostgre
         var events = (await fixture.EventStore.ReadAllSerializableEventsAsync().AsResultBoxAsync()).GetValue()
             .Where(serializableEvent =>
             {
-                var eventResult = serializableEvent.ToEvent(fixture.DomainTypes.EventTypes);
+                var eventResult = ResultBox.WrapTry(() => serializableEvent.ToEvent(fixture.DomainTypes.EventTypes));
                 if (!eventResult.IsSuccess)
                 {
                     return false;
@@ -1142,7 +1143,7 @@ public sealed class MaterializedViewPostgresOrleansTests(MaterializedViewPostgre
             .Select(serializableEvent => new
             {
                 SerializableEvent = serializableEvent,
-                Event = serializableEvent.ToEvent(fixture.DomainTypes.EventTypes).GetValue()
+                Event = serializableEvent.ToEvent(fixture.DomainTypes.EventTypes)
             })
             .ToList();
 

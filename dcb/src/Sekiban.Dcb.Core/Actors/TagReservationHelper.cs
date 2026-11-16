@@ -1,6 +1,5 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
-using ResultBoxes;
 using Sekiban.Dcb.Tags;
 namespace Sekiban.Dcb.Actors;
 
@@ -10,28 +9,14 @@ namespace Sekiban.Dcb.Actors;
 /// </summary>
 public static class TagReservationHelper
 {
-    public static async Task<ResultBox<TagWriteReservation>> RequestReservationAsync(
+    public static async Task<TagWriteReservation> RequestReservationAsync(
         IActorObjectAccessor actorAccessor,
         ITag tag,
         string? lastSortableUniqueId)
     {
-        try
-        {
-            var tagConsistentActorId = tag.GetTag();
-            var actorResult = await actorAccessor.GetActorAsync<ITagConsistentActorCommon>(tagConsistentActorId);
-
-            if (!actorResult.IsSuccess)
-            {
-                return ResultBox.Error<TagWriteReservation>(actorResult.GetException());
-            }
-
-            var actor = actorResult.GetValue();
-            return await actor.MakeReservationAsync(lastSortableUniqueId);
-        }
-        catch (Exception ex)
-        {
-            return ResultBox.Error<TagWriteReservation>(ex);
-        }
+        var tagConsistentActorId = tag.GetTag();
+        var actor = await actorAccessor.GetActorAsync<ITagConsistentActorCommon>(tagConsistentActorId);
+        return await actor.MakeReservationAsync(lastSortableUniqueId);
     }
 
     public static async Task CancelReservationsAsync(
@@ -98,17 +83,8 @@ public static class TagReservationHelper
         try
         {
             var tagConsistentActorId = tag.GetTag();
-            var actorResult = await actorAccessor.GetActorAsync<ITagConsistentActorCommon>(tagConsistentActorId);
-
-            if (actorResult.IsSuccess)
-            {
-                var actor = actorResult.GetValue();
-                await actor.CancelReservationAsync(reservation);
-            }
-            else
-            {
-                LogFailure(actorAccessor, "cancel", tag, actorResult.GetException(), reservation.ReservationCode);
-            }
+            var actor = await actorAccessor.GetActorAsync<ITagConsistentActorCommon>(tagConsistentActorId);
+            await actor.CancelReservationAsync(reservation);
         }
         catch (Exception ex)
         {
@@ -124,17 +100,8 @@ public static class TagReservationHelper
         try
         {
             var tagConsistentActorId = tag.GetTag();
-            var actorResult = await actorAccessor.GetActorAsync<ITagConsistentActorCommon>(tagConsistentActorId);
-
-            if (actorResult.IsSuccess)
-            {
-                var actor = actorResult.GetValue();
-                await actor.ConfirmReservationAsync(reservation);
-            }
-            else
-            {
-                LogFailure(actorAccessor, "confirm", tag, actorResult.GetException(), reservation.ReservationCode);
-            }
+            var actor = await actorAccessor.GetActorAsync<ITagConsistentActorCommon>(tagConsistentActorId);
+            await actor.ConfirmReservationAsync(reservation);
         }
         catch (Exception ex)
         {
@@ -149,16 +116,8 @@ public static class TagReservationHelper
         try
         {
             var tagConsistentActorId = tag.GetTag();
-            var actorResult = await actorAccessor.GetActorAsync<ITagConsistentActorCommon>(tagConsistentActorId);
-
-            if (actorResult.IsSuccess)
-            {
-                await actorResult.GetValue().NotifyEventWrittenAsync();
-            }
-            else
-            {
-                LogFailure(actorAccessor, "notify", tag, actorResult.GetException());
-            }
+            var actor = await actorAccessor.GetActorAsync<ITagConsistentActorCommon>(tagConsistentActorId);
+            await actor.NotifyEventWrittenAsync();
         }
         catch (Exception ex)
         {

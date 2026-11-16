@@ -122,7 +122,7 @@ public class ExecutedUserProviderTests : ExecutedUserProviderScenarioTestsBase, 
             [new SerializableEventCandidate(payload, nameof(TestCreated), [tagString])],
             []);
 
-        var result = await executor.CommitSerializableEventsAsync(request);
+        var result = await ResultBox.WrapTry(() => executor.CommitSerializableEventsAsync(request));
         Assert.True(result.IsSuccess);
 
         var written = result.GetValue().WrittenEvents;

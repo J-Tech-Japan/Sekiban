@@ -25,5 +25,5 @@ public interface IMultiProjectionQuery<TMultiProjector, TQuery, TOutput> : ICore
         TMultiProjector projector,
         TQuery query,
         IQueryContext context) =>
-        ResultBoxBridge.Unwrap(TQuery.HandleQuery(projector, query, context));
+        ResultBoxBridge.Unwrap(TQuery.HandleQuery(projector, query, context), ResultBoxBridge.NullQueryResultMessage);
 }

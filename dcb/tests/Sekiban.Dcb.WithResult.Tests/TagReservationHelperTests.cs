@@ -31,7 +31,7 @@ public class TagReservationHelperTests
         var tag = new ConsistencyTag(new StudentTag(studentId));
 
         // When
-        var result = await TagReservationHelper.RequestReservationAsync(accessor, tag, "");
+        var result = await ResultBox.WrapTry(() => TagReservationHelper.RequestReservationAsync(accessor, tag, ""));
 
         // Then
         Assert.True(result.IsSuccess);
@@ -64,7 +64,7 @@ public class TagReservationHelperTests
             [new SerializableEventCandidate(payload, nameof(StudentCreated), [tagString])],
             [new ConsistencyTagEntry(tagString, staleSortableId)]);
 
-        var result = await serializedExecutor.CommitSerializableEventsAsync(request);
+        var result = await ResultBox.WrapTry(() => serializedExecutor.CommitSerializableEventsAsync(request));
 
         // Then: should fail due to version mismatch
         Assert.False(result.IsSuccess);
@@ -90,7 +90,7 @@ public class TagReservationHelperTests
         var studentId = Guid.NewGuid();
         var tag = new ConsistencyTag(new StudentTag(studentId));
 
-        var reservationResult = await TagReservationHelper.RequestReservationAsync(accessor, tag, "");
+        var reservationResult = await ResultBox.WrapTry(() => TagReservationHelper.RequestReservationAsync(accessor, tag, ""));
         Assert.True(reservationResult.IsSuccess);
         var reservation = reservationResult.GetValue();
 
@@ -100,7 +100,7 @@ public class TagReservationHelperTests
 
         // Then: a subsequent reservation with empty lastSortableUniqueId should succeed
         // (confirming the previous reservation was properly processed)
-        var nextResult = await TagReservationHelper.RequestReservationAsync(accessor, tag, "");
+        var nextResult = await ResultBox.WrapTry(() => TagReservationHelper.RequestReservationAsync(accessor, tag, ""));
         Assert.True(nextResult.IsSuccess);
     }
 
@@ -112,7 +112,7 @@ public class TagReservationHelperTests
         var studentId = Guid.NewGuid();
         var tag = new ConsistencyTag(new StudentTag(studentId));
 
-        var reservationResult = await TagReservationHelper.RequestReservationAsync(accessor, tag, "");
+        var reservationResult = await ResultBox.WrapTry(() => TagReservationHelper.RequestReservationAsync(accessor, tag, ""));
         Assert.True(reservationResult.IsSuccess);
         var reservation = reservationResult.GetValue();
 
@@ -120,7 +120,7 @@ public class TagReservationHelperTests
         await TagReservationHelper.CancelReservationsAsync(accessor, reservations);
 
         // When: request a new reservation after cancel
-        var nextResult = await TagReservationHelper.RequestReservationAsync(accessor, tag, "");
+        var nextResult = await ResultBox.WrapTry(() => TagReservationHelper.RequestReservationAsync(accessor, tag, ""));
 
         // Then: should succeed since the previous reservation was cancelled
         Assert.True(nextResult.IsSuccess);

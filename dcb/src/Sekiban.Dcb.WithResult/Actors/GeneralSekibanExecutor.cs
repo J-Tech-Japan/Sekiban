@@ -160,37 +160,19 @@ public class GeneralSekibanExecutor : ISekibanExecutor, ISerializedSekibanDcbExe
     /// <summary>
     ///     Execute a command with its built-in handler
     /// </summary>
-    public async Task<ResultBox<ExecutionResult>> ExecuteAsync<TCommand>(
+    public Task<ResultBox<ExecutionResult>> ExecuteAsync<TCommand>(
         TCommand command,
-        CancellationToken cancellationToken = default) where TCommand : ICommandWithHandler<TCommand>
-    {
-        // Create a wrapper that converts ICommandContext to ICoreCommandContext
-        Func<TCommand, ICoreCommandContext, Task<ResultBox<EventOrNone>>> coreHandler = async (cmd, coreCtx) =>
-        {
-            var contextAdapter = new CommandContextAdapter(coreCtx);
-            return await TCommand.HandleAsync(cmd, contextAdapter);
-        };
-
-        return await _core.ExecuteAsync(command, coreHandler, cancellationToken);
-    }
+        CancellationToken cancellationToken = default) where TCommand : ICommandWithHandler<TCommand> =>
+        ResultBoxBridge.CaptureAsync(_core.ExecuteAsync(command, CoreHandler<TCommand>(), cancellationToken));
 
     /// <summary>
     ///     Execute a command with a handler function
     /// </summary>
-    public async Task<ResultBox<ExecutionResult>> ExecuteAsync<TCommand>(
+    public Task<ResultBox<ExecutionResult>> ExecuteAsync<TCommand>(
         TCommand command,
         Func<TCommand, ICommandContext, Task<ResultBox<EventOrNone>>> handlerFunc,
-        CancellationToken cancellationToken = default) where TCommand : ICommand
-    {
-        // Wrap the handler to convert ICommandContext to ICoreCommandContext
-        Func<TCommand, ICoreCommandContext, Task<ResultBox<EventOrNone>>> coreHandler = (cmd, coreCtx) =>
-        {
-            var contextAdapter = new CommandContextAdapter(coreCtx);
-            return handlerFunc(cmd, contextAdapter);
-        };
-
-        return await _core.ExecuteAsync(command, coreHandler, cancellationToken);
-    }
+        CancellationToken cancellationToken = default) where TCommand : ICommand =>
+        ResultBoxBridge.CaptureAsync(_core.ExecuteAsync(command, CoreHandler(handlerFunc), cancellationToken));
 
     /// <summary>
     ///     Execute a handler function without an explicit command
@@ -199,95 +181,107 @@ public class GeneralSekibanExecutor : ISekibanExecutor, ISerializedSekibanDcbExe
         Func<ICommandContext, Task<ResultBox<EventOrNone>>> handlerFunc,
         CancellationToken cancellationToken = default)
     {
-        Func<AnonymousCommand, ICoreCommandContext, Task<ResultBox<EventOrNone>>> coreHandler = (_, coreCtx) =>
-        {
-            var contextAdapter = new CommandContextAdapter(coreCtx);
-            return handlerFunc(contextAdapter);
-        };
+        Func<AnonymousCommand, ICoreCommandContext, Task<EventOrNone>> coreHandler = (_, coreCtx) =>
+            ResultBoxBridge.UnwrapAsync(handlerFunc(new CommandContextAdapter(coreCtx)));
 
-        return _core.ExecuteAsync(NoCommandInstance, coreHandler, cancellationToken);
+        return ResultBoxBridge.CaptureAsync(_core.ExecuteAsync(NoCommandInstance, coreHandler, cancellationToken));
     }
+
+    // The user's handler returns a box; the exception-based core receives its value, or the exception a failed box
+    // carries (same instance), which the core reports back here as a failed box.
+    private static Func<TCommand, ICoreCommandContext, Task<EventOrNone>> CoreHandler<TCommand>()
+        where TCommand : ICommandWithHandler<TCommand> =>
+        (cmd, coreCtx) => ResultBoxBridge.UnwrapAsync(TCommand.HandleAsync(cmd, new CommandContextAdapter(coreCtx)));
+
+    private static Func<TCommand, ICoreCommandContext, Task<EventOrNone>> CoreHandler<TCommand>(
+        Func<TCommand, ICommandContext, Task<ResultBox<EventOrNone>>> handlerFunc) where TCommand : ICommand =>
+        (cmd, coreCtx) => ResultBoxBridge.UnwrapAsync(handlerFunc(cmd, new CommandContextAdapter(coreCtx)));
 
     /// <summary>
     ///     Get the current state for a specific tag state
     /// </summary>
     public Task<ResultBox<TagState>> GetTagStateAsync(TagStateId tagStateId) =>
-        _core.GetTagStateAsync(tagStateId);
+        ResultBoxBridge.CaptureAsync(_core.GetTagStateAsync(tagStateId));
 
     public Task<ResultBox<TagState>> GetTagStateAsync(TagStateId tagStateId, CancellationToken cancellationToken) =>
-        _core.GetTagStateAsync(tagStateId, cancellationToken);
+        ResultBoxBridge.CaptureAsync(_core.GetTagStateAsync(tagStateId, cancellationToken));
 
     /// <summary>
     ///     Execute a single-result query
     /// </summary>
     public Task<ResultBox<TResult>> QueryAsync<TResult>(IQueryCommon<TResult> queryCommon) where TResult : notnull =>
-        _core.QueryAsync(queryCommon);
+        ResultBoxBridge.CaptureAsync(_core.QueryAsync(queryCommon));
 
     /// <summary>
     ///     Execute a list query with pagination support
     /// </summary>
     public Task<ResultBox<ListQueryResult<TResult>>> QueryAsync<TResult>(IListQueryCommon<TResult> queryCommon)
         where TResult : notnull =>
-        _core.QueryAsync(queryCommon);
+        ResultBoxBridge.CaptureAsync(_core.QueryAsync(queryCommon));
 
     public Task<ResultBox<string>> GetLatestSortableUniqueIdAsync() =>
-        _core.GetLatestSortableUniqueIdAsync();
+        ResultBoxBridge.CaptureAsync(_core.GetLatestSortableUniqueIdAsync());
 
     public Task<ResultBox<ProjectionHeadStatus>> GetProjectionHeadStatusAsync(
         string projectorName,
         string? expectedProjectorVersion = null) =>
-        _core.GetProjectionHeadStatusAsync(projectorName, expectedProjectorVersion);
+        ResultBoxBridge.CaptureAsync(_core.GetProjectionHeadStatusAsync(projectorName, expectedProjectorVersion));
 
     public Task<ResultBox<EventStoreHeadStatus>> GetEventStoreHeadStatusAsync(bool includeTotalEventCount = false) =>
-        _core.GetEventStoreHeadStatusAsync(includeTotalEventCount);
+        ResultBoxBridge.CaptureAsync(_core.GetEventStoreHeadStatusAsync(includeTotalEventCount));
 
     public Task<ResultBox<SerializableTagState>> GetSerializableTagStateAsync(TagStateId tagStateId) =>
-        _core.GetSerializableTagStateAsync(tagStateId);
+        ResultBoxBridge.CaptureAsync(_core.GetSerializableTagStateAsync(tagStateId));
 
     public Task<ResultBox<SerializedCommitResult>> CommitSerializableEventsAsync(
         SerializedCommitRequest request,
         CancellationToken cancellationToken = default) =>
-        _core.CommitSerializableEventsAsync(request, cancellationToken);
+        ResultBoxBridge.CaptureAsync(_core.CommitSerializableEventsAsync(request, cancellationToken));
 
     /// <summary>Opt-in V2 serialized commit with PostgreSQL's durable expected-tag-position protocol.</summary>
     public Task<ResultBox<SerializedCommitResult>> CommitSerializableEventsWithExpectedTagPositionsAsync(
         VersionedExpectedTagPositionSerializedCommitRequest request,
         CancellationToken cancellationToken = default) =>
-        _core.CommitSerializableEventsWithExpectedTagPositionsAsync(request, cancellationToken);
+        ResultBoxBridge.CaptureAsync(_core.CommitSerializableEventsWithExpectedTagPositionsAsync(request, cancellationToken));
 
     /// <summary>Opt-in: execute a self-handling command with conditional (unique-key) append options.</summary>
     public Task<ResultBox<ExecutionResult>> ExecuteAsync<TCommand>(
         TCommand command,
         CommandExecutionOptions options,
-        CancellationToken cancellationToken = default) where TCommand : ICommandWithHandler<TCommand>
-    {
-        Func<TCommand, ICoreCommandContext, Task<ResultBox<EventOrNone>>> coreHandler = async (cmd, coreCtx) =>
-        {
-            var contextAdapter = new CommandContextAdapter(coreCtx);
-            return await TCommand.HandleAsync(cmd, contextAdapter);
-        };
-        return _core.ExecuteAsync(command, coreHandler, options, cancellationToken);
-    }
+        CancellationToken cancellationToken = default) where TCommand : ICommandWithHandler<TCommand> =>
+        ResultBoxBridge.CaptureAsync(_core.ExecuteAsync(command, CoreHandler<TCommand>(), options, cancellationToken));
 
     /// <summary>Opt-in: execute a command with a handler function and conditional (unique-key) append options.</summary>
     public Task<ResultBox<ExecutionResult>> ExecuteAsync<TCommand>(
         TCommand command,
         Func<TCommand, ICommandContext, Task<ResultBox<EventOrNone>>> handlerFunc,
         CommandExecutionOptions options,
-        CancellationToken cancellationToken = default) where TCommand : ICommand
-    {
-        Func<TCommand, ICoreCommandContext, Task<ResultBox<EventOrNone>>> coreHandler = (cmd, coreCtx) =>
-        {
-            var contextAdapter = new CommandContextAdapter(coreCtx);
-            return handlerFunc(cmd, contextAdapter);
-        };
-        return _core.ExecuteAsync(command, coreHandler, options, cancellationToken);
-    }
+        CancellationToken cancellationToken = default) where TCommand : ICommand =>
+        ResultBoxBridge.CaptureAsync(_core.ExecuteAsync(command, CoreHandler(handlerFunc), options, cancellationToken));
 
     /// <summary>Opt-in WASM boundary: conditional (unique-key) single-event serialized commit.</summary>
     public Task<ResultBox<SerializedConditionalCommitResult>> CommitSerializableEventConditionallyAsync(
         SerializedConditionalCommitRequest request,
         CancellationToken cancellationToken = default) =>
+        ResultBoxBridge.CaptureAsync(_core.CommitSerializableEventConditionallyAsync(request, cancellationToken));
+
+    // The serialized boundaries are exception-based core contracts; the boxed methods above are this facade's own API.
+    Task<SerializableTagState> ISerializedSekibanDcbExecutor.GetSerializableTagStateAsync(TagStateId tagStateId) =>
+        _core.GetSerializableTagStateAsync(tagStateId);
+
+    Task<SerializedCommitResult> ISerializedSekibanDcbExecutor.CommitSerializableEventsAsync(
+        SerializedCommitRequest request,
+        CancellationToken cancellationToken) =>
+        _core.CommitSerializableEventsAsync(request, cancellationToken);
+
+    Task<SerializedCommitResult> ISerializedExpectedTagPositionSekibanDcbExecutor.CommitSerializableEventsWithExpectedTagPositionsAsync(
+        VersionedExpectedTagPositionSerializedCommitRequest request,
+        CancellationToken cancellationToken) =>
+        _core.CommitSerializableEventsWithExpectedTagPositionsAsync(request, cancellationToken);
+
+    Task<SerializedConditionalCommitResult> ISerializedConditionalSekibanDcbExecutor.CommitSerializableEventConditionallyAsync(
+        SerializedConditionalCommitRequest request,
+        CancellationToken cancellationToken) =>
         _core.CommitSerializableEventConditionallyAsync(request, cancellationToken);
 
     private sealed record AnonymousCommand : ICommand;

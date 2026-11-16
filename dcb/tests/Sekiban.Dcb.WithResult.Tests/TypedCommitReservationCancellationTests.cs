@@ -118,17 +118,17 @@ public sealed class TypedCommitReservationCancellationTests
         public ConcurrentQueue<TagWriteReservation> Reservations { get; } = new();
         public ConcurrentQueue<TagWriteReservation> Cancellations { get; } = new();
 
-        public Task<ResultBox<T>> GetActorAsync<T>(string actorId) where T : class =>
-            Task.FromResult(ResultBox.FromValue((T)(object)new GatedActor(this, actorId)));
+        public Task<T> GetActorAsync<T>(string actorId) where T : class =>
+            Task.FromResult((T)(object)new GatedActor(this, actorId));
 
         public Task<bool> ActorExistsAsync(string actorId) => Task.FromResult(tags.Contains(actorId));
 
         private sealed class GatedActor(GatedActorAccessor owner, string tag) : ITagConsistentActorCommon
         {
             public Task<string> GetTagActorIdAsync() => Task.FromResult(tag);
-            public Task<ResultBox<string>> GetLatestSortableUniqueIdAsync() => Task.FromResult(ResultBox.FromValue(""));
+            public Task<string> GetLatestSortableUniqueIdAsync() => Task.FromResult("");
 
-            public async Task<ResultBox<TagWriteReservation>> MakeReservationAsync(string? lastSortableUniqueId)
+            public async Task<TagWriteReservation> MakeReservationAsync(string? lastSortableUniqueId)
             {
                 owner.Started.Enqueue(tag);
                 if (owner.Started.Count == owner.TagCount) owner.AllStarted.TrySetResult();
@@ -136,10 +136,10 @@ public sealed class TypedCommitReservationCancellationTests
                 try
                 {
                     if (tag == owner.FailingTag)
-                        return ResultBox.Error<TagWriteReservation>(new InvalidOperationException("reservation rejected"));
+                        throw new InvalidOperationException("reservation rejected");
                     var reservation = new TagWriteReservation(Guid.NewGuid().ToString(), "", tag);
                     owner.Reservations.Enqueue(reservation);
-                    return ResultBox.FromValue(reservation);
+                    return reservation;
                 }
                 finally
                 {

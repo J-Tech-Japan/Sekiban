@@ -1,6 +1,5 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
-using ResultBoxes;
 using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
@@ -47,30 +46,23 @@ public class GeneralTagConsistentActor : ITagConsistentActorCommon
 
     public Task<string> GetTagActorIdAsync() => Task.FromResult(_tagName);
 
-    public async Task<ResultBox<string>> GetLatestSortableUniqueIdAsync()
+    public async Task<string> GetLatestSortableUniqueIdAsync()
     {
+        // Ensure catch-up is completed before acquiring lock
+        await EnsureCatchUpCompletedAsync();
+
+        await _reservationLock.WaitAsync();
         try
         {
-            // Ensure catch-up is completed before acquiring lock
-            await EnsureCatchUpCompletedAsync();
-
-            await _reservationLock.WaitAsync();
-            try
-            {
-                return ResultBox.FromValue(_latestSortableUniqueId);
-            }
-            finally
-            {
-                _reservationLock.Release();
-            }
+            return _latestSortableUniqueId;
         }
-        catch (Exception ex)
+        finally
         {
-            return ResultBox.Error<string>(ex);
+            _reservationLock.Release();
         }
     }
 
-    public async Task<ResultBox<TagWriteReservation>> MakeReservationAsync(string? lastSortableUniqueId)
+    public async Task<TagWriteReservation> MakeReservationAsync(string? lastSortableUniqueId)
     {
         // Ensure catch-up is completed before acquiring lock
         await EnsureCatchUpCompletedAsync();
@@ -85,15 +77,14 @@ public class GeneralTagConsistentActor : ITagConsistentActorCommon
             // Check if there are any active reservations
             if (_activeReservations.Any())
             {
-                return ResultBox.Error<TagWriteReservation>(
-                    new Exception($"Tag {await GetTagActorIdAsync()} is currently reserved"));
+                throw new Exception($"Tag {await GetTagActorIdAsync()} is currently reserved");
             }
 
             // SEK-G30: null means the command never observed this tag. Keep the complete reservation lifecycle, but do
             // not compare, refresh, or adopt a version. Empty remains G19 AssertEmpty and non-empty remains ExactMatch.
             if (lastSortableUniqueId is null)
             {
-                return ResultBox.FromValue(await CreateReservationAsync());
+                return await CreateReservationAsync();
             }
 
             // SEK-G19: EXACT-MATCH optimistic-concurrency check after the SEK-G30 null branch, in-lock and post-catch-up. An
@@ -104,8 +95,8 @@ public class GeneralTagConsistentActor : ITagConsistentActorCommon
             // version the tag never had — the secondary hole); non-empty mismatch CONFLICT; non-empty match pass. The
             // active-reservation rejection above is unchanged. GUARANTEE BOUNDARY: this holds at-most-one first write PER
             // CLUSTER (Orleans single activation per tag); cross-cluster uniqueness remains the storage layer's job
-            // (G15/G16 conditional unique-append). Conflicts surface through the EXISTING ResultBox.Error channel — no new
-            // public exception type is added.
+            // (G15/G16 conditional unique-append). Conflicts surface as the same exception the earlier error channel carried — no
+            // new public exception type is added.
             var expectedVersion = string.IsNullOrEmpty(lastSortableUniqueId) ? string.Empty : lastSortableUniqueId;
             var currentVersion = string.IsNullOrEmpty(_latestSortableUniqueId) ? string.Empty : _latestSortableUniqueId;
 
@@ -114,11 +105,7 @@ public class GeneralTagConsistentActor : ITagConsistentActorCommon
                 (Volatile.Read(ref _invalidationGeneration) != _validatedGeneration ||
                     (expectedVersion.Length > 0 && currentVersion.Length == 0)))
             {
-                var refreshResult = await ReadValidatedUnderLockAsync();
-                if (!refreshResult.IsSuccess)
-                {
-                    return ResultBox.Error<TagWriteReservation>(refreshResult.GetException());
-                }
+                await ReadValidatedUnderLockAsync();
                 currentVersion = _latestSortableUniqueId;
             }
 
@@ -127,9 +114,8 @@ public class GeneralTagConsistentActor : ITagConsistentActorCommon
 
             if (!string.Equals(expectedVersion, currentVersion, StringComparison.Ordinal))
             {
-                return ResultBox.Error<TagWriteReservation>(
-                    new Exception(
-                        $"Tag {await GetTagActorIdAsync()} has been modified. Expected version: {lastSortableUniqueId}, Current version: {_latestSortableUniqueId}"));
+                throw new Exception(
+                    $"Tag {await GetTagActorIdAsync()} has been modified. Expected version: {lastSortableUniqueId}, Current version: {_latestSortableUniqueId}");
             }
 
             // On a matching non-empty expectation the current version is already equal (no-op); an empty expectation leaves
@@ -139,7 +125,7 @@ public class GeneralTagConsistentActor : ITagConsistentActorCommon
                 PublishLatestUnderReservationLock(lastSortableUniqueId);
             }
 
-            return ResultBox.FromValue(await CreateReservationAsync());
+            return await CreateReservationAsync();
         }
         finally
         {
@@ -163,35 +149,33 @@ public class GeneralTagConsistentActor : ITagConsistentActorCommon
     ///     Performs an authoritative read for invalidation or SEK-G22 reconciliation while <see cref="_reservationLock" /> is already held.
     ///     This method deliberately does not call the catch-up path or acquire the reservation lock.
     /// </summary>
-    private async Task<ResultBox<string>> RefreshLatestTagUnderReservationLockAsync()
+    private async Task<string> RefreshLatestTagUnderReservationLockAsync()
     {
         if (_eventStore == null)
         {
-            return ResultBox.Error<string>(
-                new InvalidOperationException($"Cannot authoritatively refresh tag {_tagName} without an event store"));
+            throw new InvalidOperationException($"Cannot authoritatively refresh tag {_tagName} without an event store");
         }
 
+        Task<TagState> latestTagRead;
         try
         {
             var tag = _tagTypes.GetTag(_tagName);
-            var latestTagResult = await _eventStore.GetLatestTagAsync(tag).ToResultBoxAsync();
-            if (!latestTagResult.IsSuccess)
-            {
-                return ResultBox.Error<string>(latestTagResult.GetException());
-            }
-
-            var authoritativeVersion = latestTagResult.GetValue().LastSortedUniqueId ?? string.Empty;
-
-            // Refresh can reconcile empty or non-empty caches; never lower a newer cached observation.
-            PublishLatestUnderReservationLock(authoritativeVersion);
-
-            return ResultBox.FromValue(_latestSortableUniqueId);
+            latestTagRead = _eventStore.GetLatestTagAsync(tag);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "[GeneralTagConsistentActor] Error during authoritative reservation refresh for tag {TagName}", _tagName);
-            return ResultBox.Error<string>(ex);
+            throw;
         }
+
+        // A failed store read propagates as itself and, as before, is not logged here.
+        var latestTag = await latestTagRead;
+        var authoritativeVersion = latestTag.LastSortedUniqueId ?? string.Empty;
+
+        // Refresh can reconcile empty or non-empty caches; never lower a newer cached observation.
+        PublishLatestUnderReservationLock(authoritativeVersion);
+
+        return _latestSortableUniqueId;
     }
 
     // All callers hold _reservationLock, including catch-up publication.
@@ -204,25 +188,28 @@ public class GeneralTagConsistentActor : ITagConsistentActorCommon
         }
     }
 
-    private async Task<ResultBox<string>> ReadValidatedUnderLockAsync()
+    private async Task<string> ReadValidatedUnderLockAsync()
     {
         for (var attempt = 0; attempt < 3; attempt++)
         {
             var generation = Volatile.Read(ref _invalidationGeneration);
-            var result = await RefreshLatestTagUnderReservationLockAsync();
-            if (!result.IsSuccess)
+            try
             {
-                return ResultBox.Error<string>(new Exception(
+                await RefreshLatestTagUnderReservationLockAsync();
+            }
+            catch (Exception ex)
+            {
+                throw new Exception(
                     $"Tag {_tagName} has been modified or could not be refreshed authoritatively",
-                    result.GetException()));
+                    ex);
             }
             if (Volatile.Read(ref _invalidationGeneration) == generation)
             {
                 _validatedGeneration = generation;
-                return ResultBox.FromValue(_latestSortableUniqueId);
+                return _latestSortableUniqueId;
             }
         }
-        return ResultBox.Error<string>(new Exception($"Tag {_tagName} is being written concurrently; retry"));
+        throw new Exception($"Tag {_tagName} is being written concurrently; retry");
     }
 
     private bool IsCatchUpComplete =>
@@ -347,25 +334,30 @@ public class GeneralTagConsistentActor : ITagConsistentActorCommon
             // Parse tag name using ITagTypes instead of GenericTag
             var tag = _tagTypes.GetTag(_tagName);
 
-            // Get the latest tag state
-            var latestTagResult = await _eventStore!.GetLatestTagAsync(tag).ToResultBoxAsync();
-            if (latestTagResult.IsSuccess)
+            // Get the latest tag state. A failed store read publishes no completion, so the next call retries (one
+            // catch-up read per failing call); as before, it is not logged.
+            var latestTagRead = _eventStore!.GetLatestTagAsync(tag);
+            TagState tagState;
+            try
             {
-                var tagState = latestTagResult.GetValue();
-
-                // Update the latest sortable unique ID with proper synchronization
-                await _reservationLock.WaitAsync();
-                try
-                {
-                    PublishLatestUnderReservationLock(tagState.LastSortedUniqueId);
-                    RaiseCatchUpGeneration(generation);
-                }
-                finally
-                {
-                    _reservationLock.Release();
-                }
+                tagState = await latestTagRead;
             }
-            // Failed reads publish no completion, so the next call retries (one catch-up read per failing call).
+            catch (Exception)
+            {
+                return;
+            }
+
+            // Update the latest sortable unique ID with proper synchronization
+            await _reservationLock.WaitAsync();
+            try
+            {
+                PublishLatestUnderReservationLock(tagState.LastSortedUniqueId);
+                RaiseCatchUpGeneration(generation);
+            }
+            finally
+            {
+                _reservationLock.Release();
+            }
         }
         catch (Exception ex)
         {

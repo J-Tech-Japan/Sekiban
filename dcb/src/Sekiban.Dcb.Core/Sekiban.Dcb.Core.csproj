@@ -14,7 +14,7 @@
         <RepositoryUrl>https://github.com/J-Tech-Japan/Sekiban</RepositoryUrl>
         <PackageProjectUrl>https://github.com/J-Tech-Japan/Sekiban</PackageProjectUrl>
         <PackageVersion>10.0.2-preview03</PackageVersion>
-        <Description>Core types and interfaces for Sekiban Dynamic Consistency Boundary - shared between ResultBox and exception-based implementations</Description>
+        <Description>Core types and interfaces for Sekiban Dynamic Consistency Boundary - shared between the WithResult and WithoutResult facades</Description>
         <PackageTags>event-sourcing;cqrs;ddd;dcb;sekiban;core</PackageTags>
         <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
         <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
@@ -31,7 +31,6 @@
 
     <ItemGroup>
         <PackageReference Include="Microsoft.AspNetCore.Http.Abstractions" Version="2.3.14" />
-        <PackageReference Include="ResultBoxes" Version="0.4.0"/>
         <PackageReference Include="Microsoft.Sbom.Targets" Version="4.1.5">
             <PrivateAssets>all</PrivateAssets>
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>

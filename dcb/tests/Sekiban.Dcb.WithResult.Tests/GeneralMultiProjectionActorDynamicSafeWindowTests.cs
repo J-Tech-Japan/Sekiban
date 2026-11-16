@@ -55,8 +55,8 @@ public class GeneralMultiProjectionActorDynamicSafeWindowTests
 
         await actor.AddEventsAsync(new[] { e20, e12 }, finishedCatchUp: true, source: EventSource.Stream);
 
-        var safeState = await actor.GetStateAsync(canGetUnsafeState: false);
-        var unsafeState = await actor.GetUnsafeStateAsync();
+        var safeState = await ResultBox.WrapTry(() => actor.GetStateAsync(canGetUnsafeState: false));
+        var unsafeState = await ResultBox.WrapTry(() => actor.GetUnsafeStateAsync());
 
         Assert.True(safeState.IsSuccess);
         Assert.True(unsafeState.IsSuccess);
@@ -99,8 +99,8 @@ public class GeneralMultiProjectionActorDynamicSafeWindowTests
         var mid = CreateEvent(new TestEventCreated("Mid"), DateTime.UtcNow.AddSeconds(-15));
         await actor.AddEventsAsync(new[] { mid }, finishedCatchUp: true, source: EventSource.Stream);
 
-        var safeState = await actor.GetStateAsync(canGetUnsafeState: false);
-        var unsafeState = await actor.GetUnsafeStateAsync();
+        var safeState = await ResultBox.WrapTry(() => actor.GetStateAsync(canGetUnsafeState: false));
+        var unsafeState = await ResultBox.WrapTry(() => actor.GetUnsafeStateAsync());
 
         Assert.True(safeState.IsSuccess);
         Assert.True(unsafeState.IsSuccess);

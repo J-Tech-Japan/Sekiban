@@ -7,6 +7,7 @@ using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
 using CoreInMemoryEventStore = Sekiban.Dcb.Testing.InMemoryEventStore;
 using Sekiban.Dcb.TestSupport;
+using ResultBoxes;
 namespace Sekiban.Dcb.Tests;
 
 /// <summary>
@@ -34,7 +35,7 @@ public class ActorRecreationTests
         var actorId = studentTag.GetTag();
 
         // Step 1: Create actor and write events
-        var actorResult1 = await _accessor.GetActorAsync<ITagConsistentActorCommon>(actorId);
+        var actorResult1 = await ResultBox.WrapTry(() => _accessor.GetActorAsync<ITagConsistentActorCommon>(actorId));
         Assert.True(actorResult1.IsSuccess);
         var actor1 = actorResult1.GetValue();
 
@@ -46,11 +47,11 @@ public class ActorRecreationTests
         await _eventStore.WriteEventAsync(event2, _domainTypes.EventTypes).AsResultBoxAsync();
 
         // Make a reservation to update the latest sortable unique ID
-        var reservationResult = await actor1.MakeReservationAsync(event2.SortableUniqueIdValue);
+        var reservationResult = await ResultBox.WrapTry(() => actor1.MakeReservationAsync(event2.SortableUniqueIdValue));
         Assert.True(reservationResult.IsSuccess);
 
         // Verify the state
-        var latestId1Result = await actor1.GetLatestSortableUniqueIdAsync();
+        var latestId1Result = await ResultBox.WrapTry(() => actor1.GetLatestSortableUniqueIdAsync());
         Assert.True(latestId1Result.IsSuccess);
         Assert.Equal(event2.SortableUniqueIdValue, latestId1Result.GetValue());
 
@@ -60,12 +61,12 @@ public class ActorRecreationTests
         Assert.False(await _accessor.ActorExistsAsync(actorId));
 
         // Step 3: Create a new actor with the same ID
-        var actorResult2 = await _accessor.GetActorAsync<ITagConsistentActorCommon>(actorId);
+        var actorResult2 = await ResultBox.WrapTry(() => _accessor.GetActorAsync<ITagConsistentActorCommon>(actorId));
         Assert.True(actorResult2.IsSuccess);
         var actor2 = actorResult2.GetValue();
 
         // Step 4: Verify catch-up happened as expected
-        var latestId2Result = await actor2.GetLatestSortableUniqueIdAsync();
+        var latestId2Result = await ResultBox.WrapTry(() => actor2.GetLatestSortableUniqueIdAsync());
         Assert.True(latestId2Result.IsSuccess);
         Assert.Equal(event2.SortableUniqueIdValue, latestId2Result.GetValue());
 
@@ -94,7 +95,7 @@ public class ActorRecreationTests
         await _eventStore.WriteEventAsync(event2, _domainTypes.EventTypes).AsResultBoxAsync();
 
         // Step 2: Create actor and verify it computes state from events
-        var actorResult1 = await _accessor.GetActorAsync<ITagStateActorCommon>(actorId);
+        var actorResult1 = await ResultBox.WrapTry(() => _accessor.GetActorAsync<ITagStateActorCommon>(actorId));
         Assert.True(actorResult1.IsSuccess);
         var actor1 = actorResult1.GetValue();
 
@@ -112,7 +113,7 @@ public class ActorRecreationTests
         await _eventStore.WriteEventAsync(event3, _domainTypes.EventTypes).AsResultBoxAsync();
 
         // Step 5: Recreate actor
-        var actorResult2 = await _accessor.GetActorAsync<ITagStateActorCommon>(actorId);
+        var actorResult2 = await ResultBox.WrapTry(() => _accessor.GetActorAsync<ITagStateActorCommon>(actorId));
         Assert.True(actorResult2.IsSuccess);
         var actor2 = actorResult2.GetValue();
 
@@ -150,23 +151,23 @@ public class ActorRecreationTests
             _domainTypes.EventTypes).AsResultBoxAsync();
 
         // Create and remove first actor
-        var actor1Result = await _accessor.GetActorAsync<ITagConsistentActorCommon>(actorId1);
+        var actor1Result = await ResultBox.WrapTry(() => _accessor.GetActorAsync<ITagConsistentActorCommon>(actorId1));
         Assert.True(actor1Result.IsSuccess);
         _accessor.RemoveActor(actorId1);
 
         // Create second actor (should not affect first student's data)
-        var actor2Result = await _accessor.GetActorAsync<ITagConsistentActorCommon>(actorId2);
+        var actor2Result = await ResultBox.WrapTry(() => _accessor.GetActorAsync<ITagConsistentActorCommon>(actorId2));
         Assert.True(actor2Result.IsSuccess);
         var actor2 = actor2Result.GetValue();
 
         // Recreate first actor
-        var actor1RecreatedResult = await _accessor.GetActorAsync<ITagConsistentActorCommon>(actorId1);
+        var actor1RecreatedResult = await ResultBox.WrapTry(() => _accessor.GetActorAsync<ITagConsistentActorCommon>(actorId1));
         Assert.True(actor1RecreatedResult.IsSuccess);
         var actor1Recreated = actor1RecreatedResult.GetValue();
 
         // Verify both actors have their own correct state
-        var latestId1Result = await actor1Recreated.GetLatestSortableUniqueIdAsync();
-        var latestId2Result = await actor2.GetLatestSortableUniqueIdAsync();
+        var latestId1Result = await ResultBox.WrapTry(() => actor1Recreated.GetLatestSortableUniqueIdAsync());
+        var latestId2Result = await ResultBox.WrapTry(() => actor2.GetLatestSortableUniqueIdAsync());
 
         Assert.True(latestId1Result.IsSuccess);
         Assert.True(latestId2Result.IsSuccess);
@@ -184,23 +185,23 @@ public class ActorRecreationTests
         var actorId = studentTag.GetTag();
 
         // Step 1: Create actor without any events
-        var actorResult1 = await _accessor.GetActorAsync<ITagConsistentActorCommon>(actorId);
+        var actorResult1 = await ResultBox.WrapTry(() => _accessor.GetActorAsync<ITagConsistentActorCommon>(actorId));
         Assert.True(actorResult1.IsSuccess);
         var actor1 = actorResult1.GetValue();
 
-        var latestId1Result = await actor1.GetLatestSortableUniqueIdAsync();
+        var latestId1Result = await ResultBox.WrapTry(() => actor1.GetLatestSortableUniqueIdAsync());
         Assert.True(latestId1Result.IsSuccess);
         Assert.Equal("", latestId1Result.GetValue()); // Should be empty
 
         // Step 2: Remove and recreate
         _accessor.RemoveActor(actorId);
 
-        var actorResult2 = await _accessor.GetActorAsync<ITagConsistentActorCommon>(actorId);
+        var actorResult2 = await ResultBox.WrapTry(() => _accessor.GetActorAsync<ITagConsistentActorCommon>(actorId));
         Assert.True(actorResult2.IsSuccess);
         var actor2 = actorResult2.GetValue();
 
         // Step 3: Verify it's still empty (no events to catch up)
-        var latestId2Result = await actor2.GetLatestSortableUniqueIdAsync();
+        var latestId2Result = await ResultBox.WrapTry(() => actor2.GetLatestSortableUniqueIdAsync());
         Assert.True(latestId2Result.IsSuccess);
         Assert.Equal("", latestId2Result.GetValue());
     }
@@ -223,8 +224,8 @@ public class ActorRecreationTests
 
         // Create both actors
         var consistentActor1
-            = (await _accessor.GetActorAsync<ITagConsistentActorCommon>(tagConsistentActorId)).GetValue();
-        var stateActor1 = (await _accessor.GetActorAsync<ITagStateActorCommon>(tagStateActorId)).GetValue();
+            = (await ResultBox.WrapTry(() => _accessor.GetActorAsync<ITagConsistentActorCommon>(tagConsistentActorId))).GetValue();
+        var stateActor1 = (await ResultBox.WrapTry(() => _accessor.GetActorAsync<ITagStateActorCommon>(tagStateActorId))).GetValue();
 
         // Update consistent actor with a sortable unique ID
         await consistentActor1.MakeReservationAsync(event1.SortableUniqueIdValue);
@@ -243,10 +244,10 @@ public class ActorRecreationTests
 
         // Recreate TagConsistentActor
         var consistentActor2
-            = (await _accessor.GetActorAsync<ITagConsistentActorCommon>(tagConsistentActorId)).GetValue();
+            = (await ResultBox.WrapTry(() => _accessor.GetActorAsync<ITagConsistentActorCommon>(tagConsistentActorId))).GetValue();
 
         // Recreate TagStateActor
-        var stateActor2 = (await _accessor.GetActorAsync<ITagStateActorCommon>(tagStateActorId)).GetValue();
+        var stateActor2 = (await ResultBox.WrapTry(() => _accessor.GetActorAsync<ITagStateActorCommon>(tagStateActorId))).GetValue();
 
         // Get state - should include both events after catch up
         var state2 = await stateActor2.GetStateAsync();

@@ -3,6 +3,34 @@
 <Suppressions xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:Sekiban.Dcb.Actors.GeneralSekibanExecutor.CommitSerializableEventConditionallyAsync(Sekiban.Dcb.Commands.SerializedConditionalCommitRequest,System.Threading.CancellationToken)</Target>
+    <Left>lib/net10.0/Sekiban.Dcb.WithoutResult.dll</Left>
+    <Right>lib/net10.0/Sekiban.Dcb.WithoutResult.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:Sekiban.Dcb.Actors.GeneralSekibanExecutor.CommitSerializableEventsAsync(Sekiban.Dcb.Commands.SerializedCommitRequest,System.Threading.CancellationToken)</Target>
+    <Left>lib/net10.0/Sekiban.Dcb.WithoutResult.dll</Left>
+    <Right>lib/net10.0/Sekiban.Dcb.WithoutResult.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:Sekiban.Dcb.Actors.GeneralSekibanExecutor.CommitSerializableEventsWithExpectedTagPositionsAsync(Sekiban.Dcb.Commands.VersionedExpectedTagPositionSerializedCommitRequest,System.Threading.CancellationToken)</Target>
+    <Left>lib/net10.0/Sekiban.Dcb.WithoutResult.dll</Left>
+    <Right>lib/net10.0/Sekiban.Dcb.WithoutResult.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:Sekiban.Dcb.Actors.GeneralSekibanExecutor.GetSerializableTagStateAsync(Sekiban.Dcb.Tags.TagStateId)</Target>
+    <Left>lib/net10.0/Sekiban.Dcb.WithoutResult.dll</Left>
+    <Right>lib/net10.0/Sekiban.Dcb.WithoutResult.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
     <Target>M:Sekiban.Dcb.Domains.SimpleMultiProjectorTypes.Deserialize(System.Byte[],System.String,System.Text.Json.JsonSerializerOptions)</Target>
     <Left>lib/net10.0/Sekiban.Dcb.WithoutResult.dll</Left>
     <Right>lib/net10.0/Sekiban.Dcb.WithoutResult.dll</Right>
@@ -69,6 +97,34 @@
     <Target>M:Sekiban.Dcb.Domains.SimpleMultiProjectorTypes.SerializeToStream(System.String,Sekiban.Dcb.DcbDomainTypes,System.String,Sekiban.Dcb.MultiProjections.IMultiProjectionPayload,System.IO.Stream)</Target>
     <Left>lib/net10.0/Sekiban.Dcb.WithoutResult.dll</Left>
     <Right>lib/net10.0/Sekiban.Dcb.WithoutResult.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:Sekiban.Dcb.Actors.GeneralSekibanExecutor.CommitSerializableEventConditionallyAsync(Sekiban.Dcb.Commands.SerializedConditionalCommitRequest,System.Threading.CancellationToken)</Target>
+    <Left>lib/net11.0/Sekiban.Dcb.WithoutResult.dll</Left>
+    <Right>lib/net11.0/Sekiban.Dcb.WithoutResult.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:Sekiban.Dcb.Actors.GeneralSekibanExecutor.CommitSerializableEventsAsync(Sekiban.Dcb.Commands.SerializedCommitRequest,System.Threading.CancellationToken)</Target>
+    <Left>lib/net11.0/Sekiban.Dcb.WithoutResult.dll</Left>
+    <Right>lib/net11.0/Sekiban.Dcb.WithoutResult.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:Sekiban.Dcb.Actors.GeneralSekibanExecutor.CommitSerializableEventsWithExpectedTagPositionsAsync(Sekiban.Dcb.Commands.VersionedExpectedTagPositionSerializedCommitRequest,System.Threading.CancellationToken)</Target>
+    <Left>lib/net11.0/Sekiban.Dcb.WithoutResult.dll</Left>
+    <Right>lib/net11.0/Sekiban.Dcb.WithoutResult.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:Sekiban.Dcb.Actors.GeneralSekibanExecutor.GetSerializableTagStateAsync(Sekiban.Dcb.Tags.TagStateId)</Target>
+    <Left>lib/net11.0/Sekiban.Dcb.WithoutResult.dll</Left>
+    <Right>lib/net11.0/Sekiban.Dcb.WithoutResult.dll</Right>
     <IsBaselineSuppression>true</IsBaselineSuppression>
   </Suppression>
   <Suppression>

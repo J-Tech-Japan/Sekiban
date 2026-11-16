@@ -72,6 +72,31 @@ public sealed class MvApplyReplayRegressionTests
         Assert.Equal(events[2].SortableUniqueIdValue, await database.ReadPositionAsync());
     }
 
+    [Fact]
+    public async Task ProtectedCatchUp_FailedRead_IsClassifiedLikeAnInternalRead()
+    {
+        using var database = new TestDatabase();
+        var events = CreateEvents();
+        var (_, executor, host) = await database.CreateAsync(events[0].SortableUniqueIdValue);
+        var snapshot = new MvProjectionStatusSnapshot(
+            MvCheckpointTruth.Known(new SortableUniqueId(events[0].SortableUniqueIdValue),
+                MvCheckpointProvenance.AppliedEvent(MvApplySource.CatchUp)), MvStatus.CatchingUp, 0);
+
+        var failed = await executor.CompleteFailedReadAsync(host, new IOException("read failed"), snapshot, true);
+        Assert.Equal(MvCatchUpOutcome.FailedRead, failed.Outcome);
+        Assert.Equal("event-read-failed", failed.ErrorCode);
+        Assert.True(failed.IsRetryable);
+
+        var unsupported = await executor.CompleteFailedReadAsync(host, new NotSupportedException(), snapshot, true);
+        Assert.Equal(MvCatchUpOutcome.PermanentUnsupported, unsupported.Outcome);
+        Assert.Equal("unsupported-read", unsupported.ErrorCode);
+
+        var unclassified = new IOException("read failed");
+        Assert.Same(unclassified, await Assert.ThrowsAsync<IOException>(
+            () => executor.CompleteFailedReadAsync(host, unclassified, snapshot, false)));
+        Assert.Equal(events[0].SortableUniqueIdValue, await database.ReadPositionAsync());
+    }
+
     private static SerializableEvent[] CreateEvents() => Enumerable.Range(1, 4)
         .Select(index => new SerializableEvent([], SortableUniqueId.Generate(DateTime.UtcNow.AddMinutes(-10).AddSeconds(index), Guid.NewGuid()),
             Guid.NewGuid(), new EventMetadata("cause", "correlation", "test"), [], "Replay"))
@@ -142,8 +167,11 @@ public sealed class MvApplyReplayRegressionTests
         protected override MvDbType DatabaseType => MvDbType.Sqlite;
         public Task<MvCatchUpResult> CompleteAsync(IMvApplyHost host, IEnumerable<SerializableEvent> events,
             MvProjectionStatusSnapshot snapshot, bool additiveOverload) => additiveOverload
-                ? CompleteCatchUpAsync(host, Service, ResultBox.FromValue(events), snapshot, CancellationToken.None, true)
-                : CompleteCatchUpAsync(host, Service, ResultBox.FromValue(events), snapshot, CancellationToken.None);
+                ? CompleteCatchUpAsync(host, Service, events, snapshot, CancellationToken.None, true)
+                : CompleteCatchUpAsync(host, Service, events, snapshot, CancellationToken.None);
+        public Task<MvCatchUpResult> CompleteFailedReadAsync(IMvApplyHost host, Exception readFailure,
+            MvProjectionStatusSnapshot snapshot, bool classifyFailures) =>
+            CompleteCatchUpAsync(host, Service, readFailure, snapshot, CancellationToken.None, classifyFailures);
         public override Task<MvCatchUpResult> CatchUpOnceAsync(IMvApplyHost host, string? serviceId = null,
             CancellationToken cancellationToken = default) => throw new NotSupportedException();
         protected override IEventStore SelectEventStoreForService(string serviceId) => throw new NotSupportedException();

@@ -19,6 +19,7 @@ using Sekiban.Dcb.Testing;
 using Sekiban.Dcb.Tags;
 using Xunit;
 using Sekiban.Dcb.TestSupport;
+using ResultBoxes;
 
 namespace Sekiban.Dcb.Orleans.Tests;
 
@@ -459,12 +460,12 @@ public sealed class AzureQueueSizeGateTests
         var conditionalPublisher = new FailingDestinationPublisher(failOnCapture: 1);
         var conditionalExecutor = CreateDestinationExecutor(
             domain, conditionalStore, ExecutorSizeStrictness.Strict, conditionalPublisher);
-        var conditional = await ((ISerializedConditionalSekibanDcbExecutor)conditionalExecutor)
+        var conditional = await ResultBox.WrapTry(() => ((ISerializedConditionalSekibanDcbExecutor)conditionalExecutor)
             .CommitSerializableEventConditionallyAsync(
                 new SerializedConditionalCommitRequest(
                     SerializedConditionalCommitRequest.CurrentVersion,
                     CreateCandidate(domain, Guid.NewGuid()),
-                    "g76-strict-capture-failure"));
+                    "g76-strict-capture-failure")));
 
         Assert.IsType<ExecutorSizeCapabilityException>(conditional.GetException());
         Assert.Empty((await conditionalStore.ReadAllSerializableEventsAsync().AsResultBoxAsync()).GetValue());
@@ -764,7 +765,7 @@ public sealed class AzureQueueSizeGateTests
         DcbDomainTypes domain,
         SerializableEvent serialized)
     {
-        var eventResult = serialized.ToEvent(domain.EventTypes);
+        var eventResult = ResultBox.WrapTry(() => serialized.ToEvent(domain.EventTypes));
         Assert.True(eventResult.IsSuccess, eventResult.IsSuccess ? null : eventResult.GetException().ToString());
         var normalized = eventResult.GetValue().ToSerializableEvent(domain.EventTypes);
         return AdapterTextBytes(adapter, StreamId.Create("AllEvents", Guid.Empty), normalized);
@@ -841,12 +842,12 @@ public sealed class AzureQueueSizeGateTests
 
         if (route == "conditional")
         {
-            var conditional = await ((ISerializedConditionalSekibanDcbExecutor)executor)
+            var conditional = await ResultBox.WrapTry(() => ((ISerializedConditionalSekibanDcbExecutor)executor)
                 .CommitSerializableEventConditionallyAsync(
                     new SerializedConditionalCommitRequest(
                         SerializedConditionalCommitRequest.CurrentVersion,
                         CreateCandidate(domain, id),
-                        $"g76-failure-{id:N}"));
+                        $"g76-failure-{id:N}")));
             return new FailureRouteResult(
                 conditional.IsSuccess,
                 conditional.IsSuccess ? conditional.GetValue().SizeGateDiagnostics : [],

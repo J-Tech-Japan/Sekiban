@@ -50,7 +50,7 @@ public class TagConsistentActorCatchupTest
             null,
             new TagConsistentActorOptions(),
             _domainTypes.TagTypes);
-        var latestIdResult = await tagConsistentActor.GetLatestSortableUniqueIdAsync();
+        var latestIdResult = await ResultBox.WrapTry(() => tagConsistentActor.GetLatestSortableUniqueIdAsync());
         Assert.True(latestIdResult.IsSuccess);
         Assert.Equal("", latestIdResult.GetValue()); // Verify it's empty
 
@@ -87,11 +87,11 @@ public class TagConsistentActorCatchupTest
 
         // Create accessor and get TagConsistentActor (should trigger catchup)
         var accessor = new InMemoryObjectAccessor(_eventStore, _domainTypes);
-        var actorResult = await accessor.GetActorAsync<ITagConsistentActorCommon>(tagConsistentId);
+        var actorResult = await ResultBox.WrapTry(() => accessor.GetActorAsync<ITagConsistentActorCommon>(tagConsistentId));
         Assert.True(actorResult.IsSuccess);
 
         var tagConsistentActor = actorResult.GetValue();
-        var latestIdResult = await tagConsistentActor.GetLatestSortableUniqueIdAsync();
+        var latestIdResult = await ResultBox.WrapTry(() => tagConsistentActor.GetLatestSortableUniqueIdAsync());
 
         // Assert - should have caught up to the latest event
         Assert.True(latestIdResult.IsSuccess);
@@ -127,10 +127,10 @@ public class TagConsistentActorCatchupTest
         Assert.Equal(event2.SortableUniqueIdValue, state1.LastSortedUniqueId);
 
         // Verify TagConsistentActor was created and caught up
-        var actorResult = await accessor.GetActorAsync<ITagConsistentActorCommon>(tagConsistentId);
+        var actorResult = await ResultBox.WrapTry(() => accessor.GetActorAsync<ITagConsistentActorCommon>(tagConsistentId));
         Assert.True(actorResult.IsSuccess);
         var tagConsistentActor = actorResult.GetValue();
-        var latestIdResult = await tagConsistentActor.GetLatestSortableUniqueIdAsync();
+        var latestIdResult = await ResultBox.WrapTry(() => tagConsistentActor.GetLatestSortableUniqueIdAsync());
         Assert.True(latestIdResult.IsSuccess);
         Assert.Equal(event2.SortableUniqueIdValue, latestIdResult.GetValue());
     }
@@ -145,14 +145,14 @@ public class TagConsistentActorCatchupTest
         public TestActorAccessor(ITagConsistentActorCommon tagConsistentActor) =>
             _tagConsistentActor = tagConsistentActor;
 
-        public Task<ResultBox<T>> GetActorAsync<T>(string actorId) where T : class
+        public Task<T> GetActorAsync<T>(string actorId) where T : class
         {
             if (typeof(T) == typeof(ITagConsistentActorCommon) && _tagConsistentActor is T actor)
             {
-                return Task.FromResult(ResultBox.FromValue(actor));
+                return Task.FromResult(actor);
             }
 
-            return Task.FromResult(ResultBox.Error<T>(new NotSupportedException()));
+            return Task.FromException<T>(new NotSupportedException());
         }
 
         public Task<bool> ActorExistsAsync(string actorId) => Task.FromResult(true);

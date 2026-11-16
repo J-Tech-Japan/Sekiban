@@ -67,7 +67,7 @@ public sealed class ProjectionStatusRegistryTests
         Assert.True(heartbeatWrite.IsSuccess);
 
         var reader = new ProjectionStatusReader(statusStore, eventStore, provider);
-        var result = await reader.ReadAsync(new ProjectionStatusReadRequest(ProjectorName: "students"));
+        var result = await ResultBox.WrapTry(() => reader.ReadAsync(new ProjectionStatusReadRequest(ProjectorName: "students")));
 
         Assert.True(result.IsSuccess);
         var snapshot = Assert.Single(result.GetValue());
@@ -117,10 +117,10 @@ public sealed class ProjectionStatusRegistryTests
             eventStore,
             provider,
             new ProjectionStatusOptions { FreshnessWindow = TimeSpan.FromMinutes(5) });
-        var result = await reader.ReadAsync(new ProjectionStatusReadRequest
+        var result = await ResultBox.WrapTry(() => reader.ReadAsync(new ProjectionStatusReadRequest
         {
             ExpectedProjectorVersion = "v1"
-        });
+        }));
 
         Assert.True(result.IsSuccess);
         var snapshots = result.GetValue();
@@ -144,18 +144,18 @@ public sealed class ProjectionStatusRegistryTests
             new ProjectionStatusReader(statusStore, eventStore, provider),
             provider);
 
-        var serialized = await reader.ReadSerializedAsync();
+        var serialized = await ResultBox.WrapTry(() => reader.ReadSerializedAsync());
         Assert.True(serialized.IsSuccess);
         using var document = JsonDocument.Parse(serialized.GetValue());
         Assert.Equal(1, document.RootElement.GetProperty("version").GetInt32());
         Assert.Equal("server-service", document.RootElement.GetProperty("serviceId").GetString());
 
-        var roundTrip = SerializedProjectionStatusReader.Deserialize(serialized.GetValue());
+        var roundTrip = ResultBox.WrapTry(() => SerializedProjectionStatusReader.Deserialize(serialized.GetValue()));
         Assert.True(roundTrip.IsSuccess);
         Assert.Equal("server-service", roundTrip.GetValue().ServiceId);
 
-        var unsupported = SerializedProjectionStatusReader.Deserialize(
-            Encoding.UTF8.GetBytes("{\"version\":99,\"serviceId\":\"client\",\"snapshots\":[]}"));
+        var unsupported = ResultBox.WrapTry(() => SerializedProjectionStatusReader.Deserialize(
+            Encoding.UTF8.GetBytes("{\"version\":99,\"serviceId\":\"client\",\"snapshots\":[]}")));
         Assert.False(unsupported.IsSuccess);
         Assert.IsType<UnsupportedSerializedProjectionStatusVersionException>(unsupported.GetException());
     }
@@ -186,13 +186,13 @@ public sealed class ProjectionStatusRegistryTests
 
         foreach (var input in rejectedInputs)
         {
-            var result = await serialized.AcceptAsync(Encoding.UTF8.GetBytes(input));
+            var result = await ResultBox.WrapTry(() => serialized.AcceptAsync(Encoding.UTF8.GetBytes(input)));
             Assert.False(result.IsSuccess);
             Assert.IsType<SerializedProjectionStatusShapeException>(result.GetException());
         }
 
-        var unsupported = await serialized.AcceptAsync(
-            Encoding.UTF8.GetBytes("{\"version\":99,\"unknown\":{\"malformed\":true}}"));
+        var unsupported = await ResultBox.WrapTry(() => serialized.AcceptAsync(
+            Encoding.UTF8.GetBytes("{\"version\":99,\"unknown\":{\"malformed\":true}}")));
         Assert.False(unsupported.IsSuccess);
         Assert.IsType<UnsupportedSerializedProjectionStatusVersionException>(unsupported.GetException());
         Assert.Equal(0, statusStore.ListCalls);
@@ -234,7 +234,7 @@ public sealed class ProjectionStatusRegistryTests
             VersionMatch = ProjectionStatusVersionMatch.Match
         };
         var adapter = new SerializedProjectionStatusReader(new FixedStatusReader(snapshot), new MutableServiceIdProvider("server-service"));
-        var response = await adapter.ReadSerializedAsync();
+        var response = await ResultBox.WrapTry(() => adapter.ReadSerializedAsync());
 
         Assert.True(response.IsSuccess);
         Assert.Equal(
@@ -278,7 +278,7 @@ public sealed class ProjectionStatusRegistryTests
             eventStore,
             provider,
             new ProjectionStatusOptions { FreshnessWindow = TimeSpan.FromMinutes(2), SamplingWindow = TimeSpan.Zero });
-        var snapshots = (await reader.ReadAsync(request)).GetValue();
+        var snapshots = (await ResultBox.WrapTry(() => reader.ReadAsync(request))).GetValue();
 
         var current = Assert.Single(snapshots, snapshot => snapshot.ProjectorVersion == "v2");
         Assert.Equal("v2", current.ExpectedProjectorVersion);
@@ -301,9 +301,9 @@ public sealed class ProjectionStatusRegistryTests
         Assert.False(expiredOrphan.IsCaughtUp);
 
         var serialized = new SerializedProjectionStatusReader(reader, provider);
-        var v2 = await serialized.AcceptAsync(SerializedProjectionStatusReader.SerializeRequestV2(request));
+        var v2 = await ResultBox.WrapTry(() => serialized.AcceptAsync(SerializedProjectionStatusReader.SerializeRequestV2(request)));
         Assert.True(v2.IsSuccess);
-        var envelope = SerializedProjectionStatusReader.DeserializeV2(v2.GetValue());
+        var envelope = ResultBox.WrapTry(() => SerializedProjectionStatusReader.DeserializeV2(v2.GetValue()));
         Assert.True(envelope.IsSuccess);
         Assert.Equal(2, envelope.GetValue().Version);
         var serializedCurrent = Assert.Single(
@@ -455,7 +455,7 @@ public sealed class ProjectionStatusRegistryTests
             new FixedStatusReader(snapshot),
             new MutableServiceIdProvider("server-service"));
 
-        var serialized = await adapter.ReadSerializedV2Async();
+        var serialized = await ResultBox.WrapTry(() => adapter.ReadSerializedV2Async());
         Assert.True(serialized.IsSuccess);
         var json = Encoding.UTF8.GetString(serialized.GetValue());
         Assert.Contains("\"recordedAtUtc\":\"2026-01-01T00:00:30+00:00\"", json);
@@ -465,8 +465,8 @@ public sealed class ProjectionStatusRegistryTests
         var preG36Wrapper = preG36Json["snapshots"]!.AsArray()[0]!.AsObject();
         preG36Wrapper.Remove("recordedAtUtc");
         preG36Wrapper.Remove("versionMatch");
-        var preG36 = SerializedProjectionStatusReader.DeserializeV2(
-            Encoding.UTF8.GetBytes(preG36Json.ToJsonString()));
+        var preG36 = ResultBox.WrapTry(() => SerializedProjectionStatusReader.DeserializeV2(
+            Encoding.UTF8.GetBytes(preG36Json.ToJsonString())));
 
         Assert.True(preG36.IsSuccess);
         var restored = Assert.Single(preG36.GetValue().Snapshots);
@@ -475,8 +475,8 @@ public sealed class ProjectionStatusRegistryTests
         Assert.Null(restored.Snapshot.RecordedAtUtc);
         Assert.Equal(ProjectionStatusVersionMatch.Unknown, restored.Snapshot.VersionMatch);
 
-        var undefinedVersionMatch = SerializedProjectionStatusReader.DeserializeV2(
-            Encoding.UTF8.GetBytes(json.Replace("\"versionMatch\":1", "\"versionMatch\":99", StringComparison.Ordinal)));
+        var undefinedVersionMatch = ResultBox.WrapTry(() => SerializedProjectionStatusReader.DeserializeV2(
+            Encoding.UTF8.GetBytes(json.Replace("\"versionMatch\":1", "\"versionMatch\":99", StringComparison.Ordinal))));
         Assert.False(undefinedVersionMatch.IsSuccess);
         Assert.IsType<SerializedProjectionStatusShapeException>(undefinedVersionMatch.GetException());
     }
@@ -542,10 +542,10 @@ public sealed class ProjectionStatusRegistryTests
             provider,
             new ProjectionStatusOptions { SamplingWindow = TimeSpan.FromMinutes(1), MaxConcurrentReads = 2 });
 
-        var first = await reader.ReadAsync();
+        var first = await ResultBox.WrapTry(() => reader.ReadAsync());
         Assert.True(first.IsSuccess);
         Assert.Equal(2, eventStore.CursorCountCalls);
-        var second = await reader.ReadAsync();
+        var second = await ResultBox.WrapTry(() => reader.ReadAsync());
 
         Assert.True(second.IsSuccess);
         Assert.Equal(1, eventStore.TotalCountCalls);
@@ -573,7 +573,7 @@ public sealed class ProjectionStatusRegistryTests
             eventStore,
             provider,
             new ProjectionStatusOptions { SamplingWindow = TimeSpan.Zero });
-        var empty = await reader.ReadAsync();
+        var empty = await ResultBox.WrapTry(() => reader.ReadAsync());
         Assert.True(empty.IsSuccess);
         Assert.True(Assert.Single(empty.GetValue()).IsCaughtUp);
         Assert.Equal(0, Assert.Single(empty.GetValue()).TotalEventCount);
@@ -587,7 +587,7 @@ public sealed class ProjectionStatusRegistryTests
             FaultMessage = "fold failed",
             LeaseExpiresAtUtc = now.AddMinutes(1)
         }, 0).AsResultBoxAsync();
-        var withFault = await reader.ReadAsync();
+        var withFault = await ResultBox.WrapTry(() => reader.ReadAsync());
         Assert.True(withFault.IsSuccess);
         Assert.Contains(withFault.GetValue(), item => item.IsFaulted && !item.IsCaughtUp);
     }
@@ -643,7 +643,7 @@ public sealed class ProjectionStatusRegistryTests
             var persistedFirst = Assert.Single((await store.ListAsync("students", "v1").AsResultBoxAsync()).GetValue());
             Assert.Equal(1, persistedFirst.Sequence);
             Assert.Equal(t1, persistedFirst.RecordedAtUtc);
-            var firstSnapshot = Assert.Single((await reader.ReadAsync()).GetValue());
+            var firstSnapshot = Assert.Single((await ResultBox.WrapTry(() => reader.ReadAsync())).GetValue());
             Assert.Equal(1, firstSnapshot.Sequence);
             Assert.Equal(t1, firstSnapshot.RecordedAtUtc);
             Assert.NotEqual(t1, firstSnapshot.SampledAtUtc);
@@ -660,7 +660,7 @@ public sealed class ProjectionStatusRegistryTests
             var persistedSecond = Assert.Single((await store.ListAsync("students", "v1").AsResultBoxAsync()).GetValue());
             Assert.Equal(2, persistedSecond.Sequence);
             Assert.Equal(t2, persistedSecond.RecordedAtUtc);
-            var secondSnapshot = Assert.Single((await reader.ReadAsync()).GetValue());
+            var secondSnapshot = Assert.Single((await ResultBox.WrapTry(() => reader.ReadAsync())).GetValue());
             Assert.Equal(2, secondSnapshot.Sequence);
             Assert.Equal(t2, secondSnapshot.RecordedAtUtc);
             Assert.NotEqual(t2, secondSnapshot.SampledAtUtc);
@@ -938,7 +938,7 @@ public sealed class ProjectionStatusRegistryTests
         {
             ExpectedProjectorVersion = expectedProjectorVersion
         };
-        var result = await reader.ReadAsync(request);
+        var result = await ResultBox.WrapTry(() => reader.ReadAsync(request));
 
         Assert.True(
             result.IsSuccess,
@@ -1069,10 +1069,10 @@ public sealed class ProjectionStatusRegistryTests
 
         public FixedStatusReader(ProjectionStatusSnapshot snapshot) => _snapshots = new[] { snapshot };
 
-        public Task<ResultBox<IReadOnlyList<ProjectionStatusSnapshot>>> ReadAsync(
+        public Task<IReadOnlyList<ProjectionStatusSnapshot>> ReadAsync(
             ProjectionStatusReadRequest? request = null,
             CancellationToken cancellationToken = default) =>
-            Task.FromResult(ResultBox.FromValue(_snapshots));
+            Task.FromResult(_snapshots);
     }
 
     private sealed class CountingStatusStore : IProjectionStatusStore

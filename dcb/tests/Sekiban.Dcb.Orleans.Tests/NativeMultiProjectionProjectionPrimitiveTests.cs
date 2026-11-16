@@ -53,7 +53,7 @@ public class NativeMultiProjectionProjectionPrimitiveTests
 
         Assert.True(applied);
 
-        var snapshotResult = accumulator.GetSnapshot();
+        var snapshotResult = ResultBox.WrapTry(() => accumulator.GetSnapshot());
         Assert.True(snapshotResult.IsSuccess);
         var envelope = snapshotResult.GetValue();
         Assert.NotNull(envelope.InlineState);
@@ -74,7 +74,7 @@ public class NativeMultiProjectionProjectionPrimitiveTests
         var events = BuildSerializableEvents(domain, 2);
         accumulator.ApplyEvents(events, events.Last().SortableUniqueIdValue);
 
-        var metadataResult = accumulator.GetMetadata();
+        var metadataResult = ResultBox.WrapTry(() => accumulator.GetMetadata());
         Assert.True(metadataResult.IsSuccess);
         var metadata = metadataResult.GetValue();
 
@@ -115,7 +115,7 @@ public class NativeMultiProjectionProjectionPrimitiveTests
 
         Assert.True(applied);
 
-        var metadataResult = accumulator.GetMetadata();
+        var metadataResult = ResultBox.WrapTry(() => accumulator.GetMetadata());
         Assert.True(metadataResult.IsSuccess);
         var metadata = metadataResult.GetValue();
         Assert.Equal(2, metadata.SafeVersion);
@@ -135,7 +135,7 @@ public class NativeMultiProjectionProjectionPrimitiveTests
         accumulator1.ApplySnapshot(null);
         var events1 = BuildSerializableEvents(domain, 2);
         accumulator1.ApplyEvents(events1, events1.Last().SortableUniqueIdValue);
-        var snapshot1 = accumulator1.GetSnapshot();
+        var snapshot1 = ResultBox.WrapTry(() => accumulator1.GetSnapshot());
         Assert.True(snapshot1.IsSuccess);
 
         // Restore from snapshot and apply more events
@@ -148,7 +148,7 @@ public class NativeMultiProjectionProjectionPrimitiveTests
         var events2 = BuildSerializableEvents(domain, 1);
         accumulator2.ApplyEvents(events2, events2.Last().SortableUniqueIdValue);
 
-        var snapshot2 = accumulator2.GetSnapshot();
+        var snapshot2 = ResultBox.WrapTry(() => accumulator2.GetSnapshot());
         Assert.True(snapshot2.IsSuccess);
         Assert.NotNull(snapshot2.GetValue().InlineState);
     }

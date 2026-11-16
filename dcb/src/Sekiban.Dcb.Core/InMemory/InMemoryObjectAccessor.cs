@@ -1,4 +1,3 @@
-using ResultBoxes;
 using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Capabilities;
 using Sekiban.Dcb.Domains;
@@ -75,12 +74,11 @@ public class InMemoryObjectAccessor : IActorObjectAccessor, IServiceProvider, IE
         return null;
     }
 
-    public Task<ResultBox<T>> GetActorAsync<T>(string actorId) where T : class
+    public Task<T> GetActorAsync<T>(string actorId) where T : class
     {
         if (string.IsNullOrWhiteSpace(actorId))
         {
-            return Task.FromResult(
-                ResultBox.Error<T>(new ArgumentException("Actor ID cannot be null or empty", nameof(actorId))));
+            return Task.FromException<T>(new ArgumentException("Actor ID cannot be null or empty", nameof(actorId)));
         }
 
         try
@@ -90,12 +88,11 @@ public class InMemoryObjectAccessor : IActorObjectAccessor, IServiceProvider, IE
             {
                 if (existingActor is T typedActor)
                 {
-                    return Task.FromResult(ResultBox.FromValue(typedActor));
+                    return Task.FromResult(typedActor);
                 }
 
-                return Task.FromResult(
-                    ResultBox.Error<T>(
-                        new InvalidCastException($"Actor {actorId} exists but is not of type {typeof(T).Name}")));
+                return Task.FromException<T>(
+                    new InvalidCastException($"Actor {actorId} exists but is not of type {typeof(T).Name}"));
             }
 
             // Create new actor based on the requested type
@@ -106,29 +103,28 @@ public class InMemoryObjectAccessor : IActorObjectAccessor, IServiceProvider, IE
                 {
                     if (existingActor is T typedActor)
                     {
-                        return Task.FromResult(ResultBox.FromValue(typedActor));
+                        return Task.FromResult(typedActor);
                     }
 
-                    return Task.FromResult(
-                        ResultBox.Error<T>(
-                            new InvalidCastException($"Actor {actorId} exists but is not of type {typeof(T).Name}")));
+                    return Task.FromException<T>(
+                        new InvalidCastException($"Actor {actorId} exists but is not of type {typeof(T).Name}"));
                 }
 
                 // Create the appropriate actor
                 var newActor = CreateActor<T>(actorId);
                 if (newActor == null)
                 {
-                    return Task.FromResult(
-                        ResultBox.Error<T>(new NotSupportedException($"Actor type {typeof(T).Name} is not supported")));
+                    return Task.FromException<T>(
+                        new NotSupportedException($"Actor type {typeof(T).Name} is not supported"));
                 }
 
                 _actors[actorId] = newActor;
-                return Task.FromResult(ResultBox.FromValue(newActor));
+                return Task.FromResult(newActor);
             }
         }
         catch (Exception ex)
         {
-            return Task.FromResult(ResultBox.Error<T>(ex));
+            return Task.FromException<T>(ex);
         }
     }
 
@@ -185,8 +181,8 @@ public class InMemoryObjectAccessor : IActorObjectAccessor, IServiceProvider, IE
 
             // Initial catch-up: feed all existing events. Failures used to be swallowed here, which made a projection
             // that could NOT be built present as an empty, successful one — the exact silence issue #1075 was about.
-            // Now a failed read and a failed fold both propagate: GetActorAsync's outer catch turns whatever is thrown
-            // into ResultBox.Error<T>, so the original exception reaches that boundary and the query fails instead of
+            // Now a failed read and a failed fold both propagate: GetActorAsync's outer catch faults the returned task
+            // with whatever is thrown, so the original exception reaches that boundary and the query fails instead of
             // returning empty. GetAwaiter().GetResult() is used over Wait() so the fold's own exception surfaces, not
             // the AggregateException Wait() would wrap it in.
             var events = _eventStore.ReadAllSerializableEventsAsync().GetAwaiter().GetResult().ToList();

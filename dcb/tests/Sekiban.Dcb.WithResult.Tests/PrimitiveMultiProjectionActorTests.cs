@@ -6,6 +6,7 @@ using Sekiban.Dcb.Events;
 using Sekiban.Dcb.Primitives;
 using Sekiban.Dcb.Queries;
 using Xunit;
+using ResultBoxes;
 
 namespace Sekiban.Dcb.Tests;
 
@@ -41,7 +42,7 @@ public class PrimitiveMultiProjectionActorTests
         await actor.ApplyEventAsync(MakeEvent(1));
         await actor.ApplyEventAsync(MakeEvent(2));
 
-        var queryResult = await actor.QueryAsync(new GetValueQuery());
+        var queryResult = await ResultBox.WrapTry(() => actor.QueryAsync(new GetValueQuery()));
         Assert.True(queryResult.IsSuccess);
         Assert.Equal(3, queryResult.GetValue());
         Assert.Equal(0, instance.SerializeCallCount);
@@ -68,11 +69,11 @@ public class PrimitiveMultiProjectionActorTests
         var restoredActor = new PrimitiveMultiProjectionActor(domain, restoredHost, "primitive-counter");
         await restoredActor.RestoreSnapshotAsync(snapshot);
 
-        var queryResult = await restoredActor.QueryAsync(new GetValueQuery());
+        var queryResult = await ResultBox.WrapTry(() => restoredActor.QueryAsync(new GetValueQuery()));
         Assert.True(queryResult.IsSuccess);
         Assert.Equal(5, queryResult.GetValue());
 
-        var listResult = await restoredActor.ListQueryAsync(new GetValuesQuery());
+        var listResult = await ResultBox.WrapTry(() => restoredActor.ListQueryAsync(new GetValuesQuery()));
         Assert.True(listResult.IsSuccess);
         var list = listResult.GetValue();
         Assert.Single(list.Items);

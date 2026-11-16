@@ -1,4 +1,3 @@
-using ResultBoxes;
 namespace Sekiban.Dcb.Commands;
 
 /// <summary>
@@ -15,11 +14,11 @@ public interface ISerializedCommitAcceptor
     /// <summary>
     ///     Accepts a raw serialized-commit request. Phase 1 reads the <c>version</c> discriminator before any typed binding
     ///     or side effect; phase 2 binds the resolved shape and routes a supported version to the executor with identical
-    ///     semantics. The error slot carries a typed
+    ///     semantics. A rejected request faults the returned task with a typed
     ///     <see cref="UnsupportedSerializedCommitEnvelopeVersionException" /> or
     ///     <see cref="MalformedSerializedCommitException" />; a null-reference failure is never surfaced.
     /// </summary>
-    Task<ResultBox<SerializedCommitResult>> AcceptAsync(
+    Task<SerializedCommitResult> AcceptAsync(
         ReadOnlyMemory<byte> utf8Json,
         CancellationToken cancellationToken = default);
 }

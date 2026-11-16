@@ -53,7 +53,7 @@ public class SafeWindowConvergenceTests
         await actor.AddEventsAsync(new[] { earlier });
 
         // Served/unsafe state must reconcile to the globally-earliest winner ("A"), not the first-arrived ("B").
-        var served = await actor.GetStateAsync();
+        var served = await ResultBox.WrapTry(() => actor.GetStateAsync());
         var servedPayload = (FirstWinsProjector)served.GetValue().Payload;
         Assert.Equal("A", servedPayload.Winners["team-1"]);
 
@@ -69,9 +69,9 @@ public class SafeWindowConvergenceTests
         });
 
         var safe = await actor.GetStateAsync(canGetUnsafeState: false);
-        Assert.Equal("A", ((FirstWinsProjector)safe.GetValue().Payload).Winners["team-1"]);
+        Assert.Equal("A", ((FirstWinsProjector)safe.Payload).Winners["team-1"]);
 
-        var servedAfter = await actor.GetStateAsync();
+        var servedAfter = await ResultBox.WrapTry(() => actor.GetStateAsync());
         Assert.Equal("A", ((FirstWinsProjector)servedAfter.GetValue().Payload).Winners["team-1"]);
         Assert.True(servedAfter.GetValue().IsSafeState);
     }
@@ -84,7 +84,7 @@ public class SafeWindowConvergenceTests
         // The LATER event is already outside the window and graduates to safe first (locally-originated winner).
         var later = CreateEvent(new CreatedWithId("team-2", "B"), DateTime.UtcNow.AddSeconds(-8));
         await actor.AddEventsAsync(new[] { later });
-        Assert.Equal("B", ((FirstWinsProjector)(await actor.GetStateAsync(canGetUnsafeState: false)).GetValue().Payload).Winners["team-2"]);
+        Assert.Equal("B", ((FirstWinsProjector)(await ResultBox.WrapTry(() => actor.GetStateAsync(canGetUnsafeState: false))).GetValue().Payload).Winners["team-2"]);
 
         // The globally-EARLIER event arrives later (cross-silo catch-up), already outside the window and OUT of global
         // order versus the safe head. In the fresh (non-compacted) path the wrapper re-sorts the retained history locally.
@@ -92,7 +92,7 @@ public class SafeWindowConvergenceTests
         await actor.AddEventsAsync(new[] { earlier });
 
         var safe = await actor.GetStateAsync(canGetUnsafeState: false);
-        Assert.Equal("A", ((FirstWinsProjector)safe.GetValue().Payload).Winners["team-2"]); // converged to earliest
+        Assert.Equal("A", ((FirstWinsProjector)safe.Payload).Winners["team-2"]); // converged to earliest
     }
 
     [Fact]
@@ -125,7 +125,7 @@ public class SafeWindowConvergenceTests
         await Task.Delay(5500);
         await actor.AddEventsAsync(new[] { CreateEvent(new CreatedWithId("flush", "f"), baseTime) });
 
-        var safe = (FirstWinsProjector)(await actor.GetStateAsync(canGetUnsafeState: false)).GetValue().Payload;
+        var safe = (FirstWinsProjector)(await ResultBox.WrapTry(() => actor.GetStateAsync(canGetUnsafeState: false))).GetValue().Payload;
         foreach (var id in expected.Winners.Keys)
         {
             Assert.Equal(expected.Winners[id], safe.Winners[id]);
@@ -186,8 +186,8 @@ public class SafeWindowConvergenceTests
         await instanceB.AddEventsAsync(new[] { earlier });
         await instanceB.AddEventsAsync(new[] { later });
 
-        var safeA = (FirstWinsProjector)(await instanceA.GetStateAsync(canGetUnsafeState: false)).GetValue().Payload;
-        var safeB = (FirstWinsProjector)(await instanceB.GetStateAsync(canGetUnsafeState: false)).GetValue().Payload;
+        var safeA = (FirstWinsProjector)(await ResultBox.WrapTry(() => instanceA.GetStateAsync(canGetUnsafeState: false))).GetValue().Payload;
+        var safeB = (FirstWinsProjector)(await ResultBox.WrapTry(() => instanceB.GetStateAsync(canGetUnsafeState: false))).GetValue().Payload;
 
         Assert.Equal("A", safeA.Winners["team-shared"]);
         Assert.Equal("A", safeB.Winners["team-shared"]); // both converged to the globally-earliest event

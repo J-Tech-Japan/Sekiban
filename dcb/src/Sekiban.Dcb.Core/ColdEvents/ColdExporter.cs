@@ -2,7 +2,6 @@ using System.Runtime.CompilerServices;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using ResultBoxes;
 using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.Storage;
@@ -63,29 +62,30 @@ public sealed class ColdExporter : IColdEventExporter, IColdEventProgressReader
             ManifestVersion: manifest?.ManifestVersion ?? InitialManifestVersion);
     }
 
-    public Task<ExportResult> ExportIncrementalAsync(string serviceId, CancellationToken ct)
-        => ExportIncrementalBoxAsync(serviceId, ct).GetValueOrRethrowAsync();
-
-    private async Task<ResultBox<ExportResult>> ExportIncrementalBoxAsync(string serviceId, CancellationToken ct)
+    public async Task<ExportResult> ExportIncrementalAsync(string serviceId, CancellationToken ct)
     {
         if (!_options.Enabled)
         {
-            return ResultBox.Error<ExportResult>(
-                new InvalidOperationException("Cold event store is disabled"));
+            throw new InvalidOperationException("Cold event store is disabled");
         }
 
         var leaseDuration = _options.PullInterval < MaxLeaseDuration ? _options.PullInterval : MaxLeaseDuration;
-        var leaseResult = await _leaseManager.AcquireAsync(
-            $"cold-export-{serviceId}", leaseDuration, ct).ToResultBoxAsync();
-        if (!leaseResult.IsSuccess)
+        var acquire = _leaseManager.AcquireAsync($"cold-export-{serviceId}", leaseDuration, ct);
+        ColdLease lease;
+        try
         {
-            var leaseException = leaseResult.GetException();
-            if (leaseException is OperationCanceledException || ct.IsCancellationRequested)
+            lease = await acquire;
+        }
+        catch (Exception leaseException)
+        {
+            if (leaseException is OperationCanceledException)
             {
-                return ResultBox.Error<ExportResult>(
-                    leaseException is OperationCanceledException
-                        ? leaseException
-                        : new OperationCanceledException(ct));
+                throw;
+            }
+
+            if (ct.IsCancellationRequested)
+            {
+                throw new OperationCanceledException(ct);
             }
 
             var leaseHeld = leaseException is InvalidOperationException &&
@@ -101,16 +101,14 @@ public sealed class ColdExporter : IColdEventExporter, IColdEventProgressReader
                     "Skipping export for {ServiceId}: failed to acquire lease due to unexpected error",
                     serviceId);
             }
-            return ResultBox.FromValue(new ExportResult(
+            return new ExportResult(
                 ExportedEventCount: 0,
                 NewSegments: [],
                 UpdatedManifestVersion: InitialManifestVersion,
                 Reason: leaseHeld ? ReasonLeaseNotAcquired : ReasonLeaseAcquireFailed,
                 ReasonDetail: leaseException.Message,
-                ShouldContinueWithinCycle: false));
+                ShouldContinueWithinCycle: false);
         }
-
-        var lease = leaseResult.GetValue();
 
         try
         {
@@ -118,33 +116,44 @@ public sealed class ColdExporter : IColdEventExporter, IColdEventProgressReader
         }
         finally
         {
-            var releaseResult = await _leaseManager.ReleaseAsync(lease, CancellationToken.None).ToResultBoxAsync();
-            if (!releaseResult.IsSuccess)
+            await ReleaseLeaseAsync(serviceId, lease);
+        }
+    }
+
+    // A failed release is logged and the lease is expired instead; neither failure affects the export result. A lease
+    // manager that throws before returning its task propagates as itself, as it always did.
+    private async Task ReleaseLeaseAsync(string serviceId, ColdLease lease)
+    {
+        var release = _leaseManager.ReleaseAsync(lease, CancellationToken.None);
+        try
+        {
+            await release;
+        }
+        catch (Exception releaseFailure)
+        {
+            _logger.LogWarning(
+                releaseFailure,
+                "Failed to release cold export lease for {ServiceId} (LeaseId: {LeaseId}). Trying to expire lease immediately.",
+                serviceId,
+                lease.LeaseId);
+
+            var expire = _leaseManager.RenewAsync(lease, TimeSpan.Zero, CancellationToken.None);
+            try
+            {
+                await expire;
+            }
+            catch (Exception expireFailure)
             {
                 _logger.LogWarning(
-                    releaseResult.GetException(),
-                    "Failed to release cold export lease for {ServiceId} (LeaseId: {LeaseId}). Trying to expire lease immediately.",
+                    expireFailure,
+                    "Failed to force-expire cold export lease for {ServiceId} (LeaseId: {LeaseId}).",
                     serviceId,
                     lease.LeaseId);
-
-                var expireResult = await _leaseManager.RenewAsync(
-                    lease,
-                    TimeSpan.Zero,
-                    CancellationToken.None).ToResultBoxAsync();
-
-                if (!expireResult.IsSuccess)
-                {
-                    _logger.LogWarning(
-                        expireResult.GetException(),
-                        "Failed to force-expire cold export lease for {ServiceId} (LeaseId: {LeaseId}).",
-                        serviceId,
-                        lease.LeaseId);
-                }
             }
         }
     }
 
-    private async Task<ResultBox<ExportResult>> ExecuteExportAsync(
+    private async Task<ExportResult> ExecuteExportAsync(
         string serviceId,
         CancellationToken ct)
     {
@@ -153,16 +162,10 @@ public sealed class ColdExporter : IColdEventExporter, IColdEventProgressReader
             ? new SortableUniqueId(checkpoint.NextSinceSortableUniqueId)
             : (SortableUniqueId?)null;
 
-        var stageResult = await StageSegmentsAsync(serviceId, since, ct);
-        if (!stageResult.IsSuccess)
-        {
-            return ResultBox.Error<ExportResult>(stageResult.GetException());
-        }
-
-        var stage = stageResult.GetValue();
+        var stage = await StageSegmentsAsync(serviceId, since, ct);
         if (stage.ImmediateResult is not null)
         {
-            return ResultBox.FromValue(stage.ImmediateResult);
+            return stage.ImmediateResult;
         }
 
         try
@@ -170,7 +173,7 @@ public sealed class ColdExporter : IColdEventExporter, IColdEventProgressReader
             for (var attempt = 0; attempt < MaxManifestRetries; attempt++)
             {
                 var updateResult = await TryUpdateManifestAndCheckpointAsync(serviceId, stage, ct);
-                if (updateResult.IsSuccess)
+                if (updateResult is not null)
                 {
                     return updateResult;
                 }
@@ -185,11 +188,10 @@ public sealed class ColdExporter : IColdEventExporter, IColdEventProgressReader
             await stage.DisposeAsync();
         }
 
-        return ResultBox.Error<ExportResult>(
-            new InvalidOperationException($"Manifest update failed after {MaxManifestRetries} retries"));
+        throw new InvalidOperationException($"Manifest update failed after {MaxManifestRetries} retries");
     }
 
-    private async Task<ResultBox<StagedExportResult>> StageSegmentsAsync(
+    private async Task<StagedExportResult> StageSegmentsAsync(
         string serviceId,
         SortableUniqueId? since,
         CancellationToken ct)
@@ -238,16 +240,16 @@ public sealed class ColdExporter : IColdEventExporter, IColdEventProgressReader
                 return CreateImmediateStageResult(ReasonNoSafeEvents);
             }
 
-            return ResultBox.FromValue(new StagedExportResult(
+            return new StagedExportResult(
                 ImmediateResult: null,
                 Segments: stagedSegments,
                 LastSafeSortableUniqueId: lastSafeSortableUniqueId,
-                ExportedEventCount: stagedSegments.Sum(x => x.Info.EventCount)));
+                ExportedEventCount: stagedSegments.Sum(x => x.Info.EventCount));
         }
-        catch (Exception ex)
+        catch (Exception)
         {
             await DisposeStagedResourcesAsync(stagedSegments, currentSegment);
-            return ResultBox.Error<StagedExportResult>(ex);
+            throw;
         }
     }
 
@@ -274,8 +276,8 @@ public sealed class ColdExporter : IColdEventExporter, IColdEventProgressReader
         return await _segmentFormatHandler.CreateBuilderAsync(evt, ct);
     }
 
-    private static ResultBox<StagedExportResult> CreateImmediateStageResult(string reason) =>
-        ResultBox.FromValue(new StagedExportResult(
+    private static StagedExportResult CreateImmediateStageResult(string reason) =>
+        new(
             new ExportResult(
                 ExportedEventCount: 0,
                 NewSegments: [],
@@ -284,7 +286,7 @@ public sealed class ColdExporter : IColdEventExporter, IColdEventProgressReader
                 ShouldContinueWithinCycle: false),
             [],
             null,
-            0));
+            0);
 
     private static async Task DisposeStagedResourcesAsync(
         IEnumerable<StagedSegment> stagedSegments,
@@ -301,7 +303,8 @@ public sealed class ColdExporter : IColdEventExporter, IColdEventProgressReader
         }
     }
 
-    private async Task<ResultBox<ExportResult>> TryUpdateManifestAndCheckpointAsync(
+    // Returns null when this attempt failed to write a segment, the manifest or the checkpoint; the caller retries.
+    private async Task<ExportResult?> TryUpdateManifestAndCheckpointAsync(
         string serviceId,
         StagedExportResult stage,
         CancellationToken ct)
@@ -318,11 +321,10 @@ public sealed class ColdExporter : IColdEventExporter, IColdEventProgressReader
 
         foreach (var segment in updatePlan.SegmentsToUpload)
         {
-            var putResult = await segment.UploadAsync(_storage, ct);
-            if (!putResult.IsSuccess)
+            if (!await segment.UploadAsync(_storage, ct))
             {
                 await CleanupUploadedSegmentsAsync(uploadedPaths, ct);
-                return ResultBox.Error<ExportResult>(putResult.GetException());
+                return null;
             }
             uploadedPaths.Add(segment.Info.Path);
         }
@@ -337,12 +339,10 @@ public sealed class ColdExporter : IColdEventExporter, IColdEventProgressReader
 
         var manifestData = JsonSerializer.SerializeToUtf8Bytes(manifest, ColdEventJsonOptions.Default);
         var manifestPath = ColdStoragePaths.ManifestPath(serviceId);
-        var manifestResult = await _storage.PutAsync(
-            manifestPath, manifestData, existingManifest?.ETag, ct).ToResultBoxAsync();
-        if (!manifestResult.IsSuccess)
+        if (!await TryPutAsync(_storage.PutAsync(manifestPath, manifestData, existingManifest?.ETag, ct)))
         {
             await CleanupUploadedSegmentsAsync(uploadedPaths, ct);
-            return ResultBox.Error<ExportResult>(manifestResult.GetException());
+            return null;
         }
 
         var checkpoint = new ColdCheckpoint(
@@ -351,24 +351,37 @@ public sealed class ColdExporter : IColdEventExporter, IColdEventProgressReader
             UpdatedAtUtc: DateTimeOffset.UtcNow);
         var checkpointData = JsonSerializer.SerializeToUtf8Bytes(checkpoint, ColdEventJsonOptions.Default);
         var checkpointPath = ColdStoragePaths.CheckpointPath(serviceId);
-        var checkpointResult = await _storage.PutAsync(
-            checkpointPath,
-            checkpointData,
-            expectedETag: existingCheckpoint?.ETag,
-            ct).ToResultBoxAsync();
-        if (!checkpointResult.IsSuccess)
+        if (!await TryPutAsync(_storage.PutAsync(
+                checkpointPath,
+                checkpointData,
+                expectedETag: existingCheckpoint?.ETag,
+                ct)))
         {
-            return ResultBox.Error<ExportResult>(checkpointResult.GetException());
+            return null;
         }
 
         await DeleteSegmentsAsync(updatePlan.ReplacedSegmentPaths, ct);
 
-        return ResultBox.FromValue(new ExportResult(
+        return new ExportResult(
             ExportedEventCount: updatePlan.AppliedEventCount,
             NewSegments: updatePlan.ResultSegments.Select(x => x.Info).ToList(),
             UpdatedManifestVersion: newVersion,
             Reason: ReasonExported,
-            ShouldContinueWithinCycle: true));
+            ShouldContinueWithinCycle: true);
+    }
+
+    // A failed put (an ETag conflict or a storage failure) fails only this attempt.
+    private static async Task<bool> TryPutAsync(Task put)
+    {
+        try
+        {
+            await put;
+            return true;
+        }
+        catch (Exception)
+        {
+            return false;
+        }
     }
 
     private async Task<ManifestUpdatePlan> BuildManifestUpdatePlanAsync(
@@ -409,11 +422,11 @@ public sealed class ColdExporter : IColdEventExporter, IColdEventProgressReader
                 adjustedStage.AppliedEventCount);
         }
 
-        var mergeResult = await TryMergeTailSegmentAsync(serviceId, existingTail, firstStagedSegment, ct);
-        if (!mergeResult.IsSuccess)
+        var mergeAttempt = await TryMergeTailSegmentAsync(serviceId, existingTail, firstStagedSegment, ct);
+        if (mergeAttempt.Failure is { } mergeFailure)
         {
             _logger.LogWarning(
-                mergeResult.GetException(),
+                mergeFailure,
                 "Tail merge fallback for {ServiceId}: failed to merge staged segment into existing tail",
                 serviceId);
             return ManifestUpdatePlan.ForAppend(
@@ -423,7 +436,6 @@ public sealed class ColdExporter : IColdEventExporter, IColdEventProgressReader
                 adjustedStage.AppliedEventCount);
         }
 
-        var mergeAttempt = mergeResult.GetValue();
         if (!mergeAttempt.Merged)
         {
             return ManifestUpdatePlan.ForAppend(
@@ -523,7 +535,7 @@ public sealed class ColdExporter : IColdEventExporter, IColdEventProgressReader
         }
     }
 
-    private async Task<ResultBox<MergeTailAttempt>> TryMergeTailSegmentAsync(
+    private async Task<MergeTailAttempt> TryMergeTailSegmentAsync(
         string serviceId,
         ColdSegmentInfo existingTail,
         StagedSegment firstStagedSegment,
@@ -534,37 +546,26 @@ public sealed class ColdExporter : IColdEventExporter, IColdEventProgressReader
             || existingTail.EventCount + firstStagedSegment.Info.EventCount > _options.SegmentMaxEvents
             || existingTail.SizeBytes + firstStagedSegment.Info.SizeBytes > _options.SegmentMaxBytes)
         {
-            return ResultBox.FromValue(new MergeTailAttempt(false, null));
+            return new MergeTailAttempt(false, null);
         }
 
         IColdSegmentFileBuilder? builder = null;
         try
         {
-            var existingEventsResult = await AppendExistingTailAsync(existingTail, ct);
-            if (!existingEventsResult.IsSuccess)
+            builder = await AppendExistingTailAsync(existingTail, ct);
+            if (!await TryAppendLocalSegmentToBuilderAsync(firstStagedSegment, builder, ct))
             {
-                return ResultBox.Error<MergeTailAttempt>(existingEventsResult.GetException());
-            }
-
-            builder = existingEventsResult.GetValue();
-            var appendResult = await TryAppendLocalSegmentToBuilderAsync(firstStagedSegment, builder, ct);
-            if (!appendResult.IsSuccess)
-            {
-                return ResultBox.Error<MergeTailAttempt>(appendResult.GetException());
-            }
-
-            if (!appendResult.GetValue())
-            {
-                return ResultBox.FromValue(new MergeTailAttempt(false, null));
+                return new MergeTailAttempt(false, null);
             }
 
             var completed = await builder.CompleteAsync(serviceId, ct);
             builder = null;
-            return ResultBox.FromValue(new MergeTailAttempt(true, new StagedSegment(completed.FilePath, completed.Info)));
+            return new MergeTailAttempt(true, new StagedSegment(completed.FilePath, completed.Info));
         }
         catch (Exception ex)
         {
-            return ResultBox.Error<MergeTailAttempt>(ex);
+            // A failed merge falls back to appending the staged segment; the caller logs the failure.
+            return new MergeTailAttempt(false, null, ex);
         }
         finally
         {
@@ -608,7 +609,7 @@ public sealed class ColdExporter : IColdEventExporter, IColdEventProgressReader
                 continue;
             }
 
-            var stagedEvents = (await ReadEventsFromLocalSegmentAsync(stagedSegment, ct)).GetValue();
+            var stagedEvents = await ReadEventsFromLocalSegmentAsync(stagedSegment, ct);
             var filteredEvents = stagedEvents
                 .Where(evt => string.Compare(evt.SortableUniqueIdValue, existingTail.ToSortableUniqueId, StringComparison.Ordinal) > 0)
                 .ToList();
@@ -635,19 +636,13 @@ public sealed class ColdExporter : IColdEventExporter, IColdEventProgressReader
         return new TailOverlapAdjustment(adjustedSegments, ownedSegments, appliedEventCount);
     }
 
-    private async Task<ResultBox<IColdSegmentFileBuilder>> AppendExistingTailAsync(
+    private async Task<IColdSegmentFileBuilder> AppendExistingTailAsync(
         ColdSegmentInfo existingTail,
         CancellationToken ct)
     {
         IColdSegmentFileBuilder? builder = null;
-        var streamResult = await _storage.OpenReadAsync(existingTail.Path, ct).ToResultBoxAsync();
-        if (!streamResult.IsSuccess)
-        {
-            return ResultBox.Error<IColdSegmentFileBuilder>(streamResult.GetException());
-        }
-
-        await using var stream = streamResult.GetValue();
-        var readResult = await _segmentFormatHandler.StreamSegmentAsync(
+        await using var stream = await _storage.OpenReadAsync(existingTail.Path, ct);
+        var read = _segmentFormatHandler.StreamSegmentAsync(
             stream,
             since: null,
             maxCount: null,
@@ -661,24 +656,26 @@ public sealed class ColdExporter : IColdEventExporter, IColdEventProgressReader
 
                 await builder.AppendAsync(evt, ct);
             },
-            ct).ToResultBoxAsync();
-        if (!readResult.IsSuccess)
+            ct);
+        try
+        {
+            await read;
+        }
+        catch (Exception)
         {
             if (builder is not null)
             {
                 await builder.DisposeAsync();
-                builder = null;
             }
-            return ResultBox.Error<IColdSegmentFileBuilder>(readResult.GetException());
+            throw;
         }
 
-        return builder is null
-            ? ResultBox.Error<IColdSegmentFileBuilder>(
-                new InvalidOperationException($"Cold segment {existingTail.Path} did not contain any events."))
-            : ResultBox.FromValue<IColdSegmentFileBuilder>(builder);
+        return builder
+            ?? throw new InvalidOperationException($"Cold segment {existingTail.Path} did not contain any events.");
     }
 
-    private async Task<ResultBox<bool>> TryAppendLocalSegmentToBuilderAsync(
+    // Returns false when the staged segment does not fit into the existing tail.
+    private async Task<bool> TryAppendLocalSegmentToBuilderAsync(
         StagedSegment stagedSegment,
         IColdSegmentFileBuilder builder,
         CancellationToken ct)
@@ -707,19 +704,15 @@ public sealed class ColdExporter : IColdEventExporter, IColdEventProgressReader
                     await builder.AppendAsync(evt, ct);
                 },
                 ct);
-            return ResultBox.FromValue(true);
+            return true;
         }
         catch (MergeCapacityExceededException)
         {
-            return ResultBox.FromValue(false);
-        }
-        catch (Exception ex)
-        {
-            return ResultBox.Error<bool>(ex);
+            return false;
         }
     }
 
-    private async Task<ResultBox<List<SerializableEvent>>> ReadEventsFromLocalSegmentAsync(
+    private async Task<List<SerializableEvent>> ReadEventsFromLocalSegmentAsync(
         StagedSegment stagedSegment,
         CancellationToken ct)
     {
@@ -732,7 +725,7 @@ public sealed class ColdExporter : IColdEventExporter, IColdEventProgressReader
             bufferSize: 81920,
             FileOptions.Asynchronous | FileOptions.SequentialScan);
 
-        var readResult = await _segmentFormatHandler.StreamSegmentAsync(
+        await _segmentFormatHandler.StreamSegmentAsync(
             stream,
             since: null,
             maxCount: null,
@@ -741,11 +734,9 @@ public sealed class ColdExporter : IColdEventExporter, IColdEventProgressReader
                 events.Add(evt);
                 return ValueTask.CompletedTask;
             },
-            ct).ToResultBoxAsync();
+            ct);
 
-        return !readResult.IsSuccess
-            ? ResultBox.Error<List<SerializableEvent>>(readResult.GetException())
-            : ResultBox.FromValue(events);
+        return events;
     }
 
     private async Task<StagedSegment> CreateSegmentFromEventsAsync(
@@ -788,10 +779,14 @@ public sealed class ColdExporter : IColdEventExporter, IColdEventProgressReader
     {
         foreach (var path in uploadedPaths)
         {
-            var deleteResult = await _storage.DeleteAsync(path, ct).ToResultBoxAsync();
-            if (!deleteResult.IsSuccess)
+            var delete = _storage.DeleteAsync(path, ct);
+            try
             {
-                _logger.LogWarning(deleteResult.GetException(), "Failed to delete uploaded cold segment {Path}", path);
+                await delete;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to delete uploaded cold segment {Path}", path);
             }
         }
     }
@@ -802,10 +797,14 @@ public sealed class ColdExporter : IColdEventExporter, IColdEventProgressReader
     {
         foreach (var path in segmentPaths)
         {
-            var deleteResult = await _storage.DeleteAsync(path, ct).ToResultBoxAsync();
-            if (!deleteResult.IsSuccess)
+            var delete = _storage.DeleteAsync(path, ct);
+            try
             {
-                _logger.LogWarning(deleteResult.GetException(), "Failed to delete replaced cold segment {Path}", path);
+                await delete;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to delete replaced cold segment {Path}", path);
             }
         }
     }
@@ -829,36 +828,32 @@ public sealed class ColdExporter : IColdEventExporter, IColdEventProgressReader
             yield break;
         }
 
-        var readResult = await ReadExportCandidatesAsync(since);
-        if (!readResult.IsSuccess)
-        {
-            throw new InvalidOperationException(
-                "Failed to read export candidates from event store.",
-                readResult.GetException());
-        }
+        var candidates = await ReadExportCandidatesAsync(since);
 
-        foreach (var evt in readResult.GetValue())
+        foreach (var evt in candidates)
         {
             ct.ThrowIfCancellationRequested();
             yield return evt;
         }
     }
 
-    private async Task<ResultBox<IEnumerable<SerializableEvent>>> ReadExportCandidatesAsync(SortableUniqueId? since)
+    private async Task<IEnumerable<SerializableEvent>> ReadExportCandidatesAsync(SortableUniqueId? since)
     {
         var limit = _options.ExportMaxEventsPerRun;
         if (limit > 0)
         {
-            var limited = await _hotStore.ReadAllSerializableEventsAsync(since, limit).ToResultBoxAsync();
-            if (limited.IsSuccess)
+            var limitedRead = _hotStore.ReadAllSerializableEventsAsync(since, limit);
+            try
             {
-                return limited;
+                return await limitedRead;
             }
-
-            var ex = limited.GetException();
-            if (ex is not NotSupportedException)
+            catch (NotSupportedException)
             {
-                return ResultBox.Error<IEnumerable<SerializableEvent>>(ex);
+                // Fall through to the unbounded read below.
+            }
+            catch (Exception ex)
+            {
+                throw ExportCandidateReadFailure(ex);
             }
 
             _logger.LogDebug(
@@ -866,8 +861,20 @@ public sealed class ColdExporter : IColdEventExporter, IColdEventProgressReader
                 _hotStore.GetType().Name);
         }
 
-        return await _hotStore.ReadAllSerializableEventsAsync(since).ToResultBoxAsync();
+        var read = _hotStore.ReadAllSerializableEventsAsync(since);
+        try
+        {
+            return await read;
+        }
+        catch (Exception ex)
+        {
+            throw ExportCandidateReadFailure(ex);
+        }
     }
+
+    // Only a failed read task is reported this way; a store that throws before returning its task propagates as itself.
+    private static InvalidOperationException ExportCandidateReadFailure(Exception readFailure) =>
+        new("Failed to read export candidates from event store.", readFailure);
 
     private static bool IsSafe(SerializableEvent evt, DateTime cutoffUtc)
     {
@@ -911,7 +918,8 @@ public sealed class ColdExporter : IColdEventExporter, IColdEventProgressReader
         public string FilePath { get; }
         public ColdSegmentInfo Info { get; }
 
-        public async Task<ResultBox<bool>> UploadAsync(IColdObjectStorage storage, CancellationToken ct)
+        // Returns false when the put fails; a failure to open the local file propagates.
+        public async Task<bool> UploadAsync(IColdObjectStorage storage, CancellationToken ct)
         {
             await using var stream = new FileStream(
                 FilePath,
@@ -920,7 +928,7 @@ public sealed class ColdExporter : IColdEventExporter, IColdEventProgressReader
                 FileShare.Read,
                 bufferSize: 81920,
                 FileOptions.Asynchronous | FileOptions.SequentialScan);
-            return await storage.PutAsync(Info.Path, stream, expectedETag: null, ct).ToResultBoxAsync();
+            return await TryPutAsync(storage.PutAsync(Info.Path, stream, expectedETag: null, ct));
         }
 
         public ValueTask DisposeAsync()
@@ -971,7 +979,7 @@ public sealed class ColdExporter : IColdEventExporter, IColdEventProgressReader
         }
     }
 
-    private sealed record MergeTailAttempt(bool Merged, StagedSegment? Segment);
+    private sealed record MergeTailAttempt(bool Merged, StagedSegment? Segment, Exception? Failure = null);
 
     private sealed record TailOverlapAdjustment(
         IReadOnlyList<StagedSegment> Segments,
