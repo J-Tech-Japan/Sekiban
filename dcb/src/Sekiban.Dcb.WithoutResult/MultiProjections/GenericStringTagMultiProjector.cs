@@ -1,5 +1,3 @@
-using ResultBoxes;
-using Sekiban.Dcb.Boundaries;
 using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Events;
@@ -109,9 +107,8 @@ public record
                     var itemVersion = item["version"]?.GetValue<int>() ?? 0;
                     var itemLast = item["last"]?.GetValue<string>() ?? string.Empty;
                     var payloadBytes = System.Text.Encoding.UTF8.GetBytes(payloadJson);
-                    var rb = ResultBox.WrapTry(() => domainTypes.TagStatePayloadTypes.DeserializePayload(type, payloadBytes));
-                    if (!rb.IsSuccess) continue;
-                    var payload = rb.GetValue();
+                    var payload = GenericTagPayloadReader.TryDeserialize(domainTypes, type, payloadBytes);
+                    if (payload is null) continue;
                     var tag = TTagGroup.FromContent(id);
                     var tagStateId = new TagStateId(tag, tagProjectorName);
                     var ts = TagState.GetEmpty(tagStateId) with
@@ -143,9 +140,9 @@ public record
     }
 
     /// <summary>
-    ///     Project with tag filtering - processes events based on tags (internal ResultBox version)
+    ///     Project with tag filtering - processes events based on tags (internal version)
     /// </summary>
-    private static ResultBox<GenericStringTagMultiProjector<TTagProjector, TTagGroup>> ProjectInternal(
+    private static GenericStringTagMultiProjector<TTagProjector, TTagGroup> ProjectInternal(
         GenericStringTagMultiProjector<TTagProjector, TTagGroup> payload,
         Event ev,
         List<ITag> tags,
@@ -158,7 +155,7 @@ public record
         if (relevantTags.Count == 0)
         {
             // No tags of the specified group, skip this event
-            return ResultBox.FromValue(payload);
+            return payload;
         }
 
         // Get affected IDs from the passed tags for fallback
@@ -195,7 +192,7 @@ public record
 
         var newPayload = payload with { State = updatedState };
 
-        return ResultBox.FromValue(newPayload);
+        return newPayload;
     }
 
     /// <summary>
@@ -208,10 +205,7 @@ public record
         DcbDomainTypes domainTypes,
         SortableUniqueId safeWindowThreshold)
     {
-        var result = ProjectInternal(payload, ev, tags, domainTypes, safeWindowThreshold);
-        return GuardedUnwrap.Unwrap(
-            result,
-            new BoundaryContext("GenericStringTagMultiProjector.Project", ev?.EventType));
+        return ProjectInternal(payload, ev, tags, domainTypes, safeWindowThreshold);
     }
 
     /// <summary>

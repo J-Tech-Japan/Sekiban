@@ -159,7 +159,7 @@ public sealed class ExpectedTagPositionUnsupportedProviderInvocationTests
     private static void AssertSerializedBoundary(Exception exception) =>
         Assert.Equal(
             "ISerializedExpectedTagPositionSekibanDcbExecutor.CommitSerializableEventsWithExpectedTagPositionsAsync",
-            exception.Data[GuardedUnwrap.OperationDataKey]);
+            exception.Data[BoundaryGuard.OperationDataKey]);
 
     private static void AssertUnsupported(Exception exception)
     {

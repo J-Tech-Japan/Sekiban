@@ -1,13 +1,10 @@
-using ResultBoxes;
 using Sekiban.Dcb.Boundaries;
 using Xunit;
 namespace Sekiban.Dcb.WithoutResult.Tests.Boundaries;
 
 /// <summary>
-///     A failure reaches a boundary two ways: carried inside the box, or thrown by the Task that was supposed to
-///     produce the box. To the caller they are the same failure, so they must be treated the same — original
-///     exception, original stack, and the boundary it crossed. Awaiting the Task naively would have let the second
-///     kind through unannotated.
+///     A failure can reach a boundary as a faulted or cancelled Task. It must arrive as itself — original exception,
+///     original stack — carrying the boundary it crossed. Awaiting the Task naively would let it through unannotated.
 /// </summary>
 public class TaskCarriedFailureTests
 {
@@ -19,11 +16,11 @@ public class TaskCarriedFailureTests
         var failure = new InvalidOperationException("the task itself blew up");
 
         var thrown = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => GuardedUnwrap.UnwrapAsync(Task.FromException<ResultBox<bool>>(failure), Context));
+            () => BoundaryGuard.AwaitAsync(Task.FromException<bool>(failure), Context));
 
         Assert.Same(failure, thrown);
-        Assert.Equal("ICommandContext.TagExistsAsync", thrown.Data[GuardedUnwrap.OperationDataKey]);
-        Assert.Equal("Student:1", thrown.Data[GuardedUnwrap.TargetDataKey]);
+        Assert.Equal("ICommandContext.TagExistsAsync", thrown.Data[BoundaryGuard.OperationDataKey]);
+        Assert.Equal("Student:1", thrown.Data[BoundaryGuard.TargetDataKey]);
     }
 
     [Fact]
@@ -42,7 +39,7 @@ public class TaskCarriedFailureTests
         var firstFrame = failure.StackTrace!.Trim().Split('\n')[0].Trim();
 
         var thrown = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => GuardedUnwrap.UnwrapAsync(Task.FromException<ResultBox<string>>(failure), Context));
+            () => BoundaryGuard.AwaitAsync(Task.FromException<string>(failure), Context));
 
         Assert.Contains(firstFrame, thrown.StackTrace);
     }
@@ -55,7 +52,7 @@ public class TaskCarriedFailureTests
         var cancellation = new OperationCanceledException("cancelled", cts.Token);
 
         var thrown = await Assert.ThrowsAsync<OperationCanceledException>(
-            () => GuardedUnwrap.UnwrapAsync(Task.FromException<ResultBox<bool>>(cancellation), Context));
+            () => BoundaryGuard.AwaitAsync(Task.FromException<bool>(cancellation), Context));
 
         Assert.Same(cancellation, thrown);
         Assert.Equal(cts.Token, thrown.CancellationToken);
@@ -72,11 +69,11 @@ public class TaskCarriedFailureTests
         // TaskCanceledException itself, so identity is not ours to assert — the type, the token and the annotation
         // are.
         var thrown = await Assert.ThrowsAnyAsync<OperationCanceledException>(
-            () => GuardedUnwrap.UnwrapAsync(Task.FromCanceled<ResultBox<bool>>(cts.Token), Context));
+            () => BoundaryGuard.AwaitAsync(Task.FromCanceled<bool>(cts.Token), Context));
 
         Assert.Equal(cts.Token, thrown.CancellationToken);
         Assert.IsNotType<SekibanBoundaryException>(thrown);
-        Assert.Equal("ICommandContext.TagExistsAsync", thrown.Data[GuardedUnwrap.OperationDataKey]);
+        Assert.Equal("ICommandContext.TagExistsAsync", thrown.Data[BoundaryGuard.OperationDataKey]);
     }
 
     [Fact]
@@ -87,13 +84,13 @@ public class TaskCarriedFailureTests
         var failure = new InvalidOperationException("event store unreachable");
 
         await Assert.ThrowsAsync<InvalidOperationException>(
-            () => GuardedUnwrap.UnwrapAsync(Task.FromException<ResultBox<bool>>(failure), Context));
+            () => BoundaryGuard.AwaitAsync(Task.FromException<bool>(failure), Context));
     }
 
     [Fact]
     public async Task SuccessfulTask_IsUntouched()
     {
-        var value = await GuardedUnwrap.UnwrapAsync(Task.FromResult(ResultBox.FromValue(true)), Context);
+        var value = await BoundaryGuard.AwaitAsync(Task.FromResult(true), Context);
         Assert.True(value);
     }
 }

@@ -1,6 +1,5 @@
 using System.Reflection;
 using Dcb.Domain.WithoutResult;
-using ResultBoxes;
 using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Boundaries;
 using Sekiban.Dcb.Commands;
@@ -33,13 +32,13 @@ public class TagStateCancellationCompatibilityTests
     }
 
     [Fact]
-    public async Task GuardedUnwrap_RethrowsTheOriginalCancellationException()
+    public async Task BoundaryGuard_RethrowsTheOriginalCancellationException()
     {
         var cancellation = new OperationCanceledException("expected cancellation");
-        var result = Task.FromResult(ResultBox.Error<TagState>(cancellation));
+        var result = Task.FromException<TagState>(cancellation);
 
         var observed = await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
-            await GuardedUnwrap.UnwrapAsync(
+            await BoundaryGuard.AwaitAsync(
                 result,
                 new BoundaryContext("ISekibanExecutor.GetTagStateAsync", "Legacy:without-result:Projector")));
 

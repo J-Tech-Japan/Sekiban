@@ -20,7 +20,7 @@ internal class CommandContextAdapter : ICommandContext
         where TState : ITagStatePayload
         where TProjector : ITagProjector<TProjector>
     {
-        return await GuardedUnwrap.AwaitAsync(
+        return await BoundaryGuard.AwaitAsync(
             _core.GetStateAsync<TState, TProjector>(tag),
             new BoundaryContext("ICommandContext.GetStateAsync", $"{typeof(TProjector).Name} on {tag.GetTag()}"));
     }
@@ -28,35 +28,35 @@ internal class CommandContextAdapter : ICommandContext
     public async Task<TagState> GetStateAsync<TProjector>(ITag tag)
         where TProjector : ITagProjector<TProjector>
     {
-        return await GuardedUnwrap.AwaitAsync(
+        return await BoundaryGuard.AwaitAsync(
             _core.GetStateAsync<TProjector>(tag),
             new BoundaryContext("ICommandContext.GetStateAsync", $"{typeof(TProjector).Name} on {tag.GetTag()}"));
     }
 
     public async Task<bool> TagExistsAsync(ITag tag)
     {
-        return await GuardedUnwrap.AwaitAsync(
+        return await BoundaryGuard.AwaitAsync(
             _core.TagExistsAsync(tag),
             new BoundaryContext("ICommandContext.TagExistsAsync", tag.GetTag()));
     }
 
     public async Task<string> GetTagLatestSortableUniqueIdAsync(ITag tag)
     {
-        return await GuardedUnwrap.AwaitAsync(
+        return await BoundaryGuard.AwaitAsync(
             _core.GetTagLatestSortableUniqueIdAsync(tag),
             new BoundaryContext("ICommandContext.GetTagLatestSortableUniqueIdAsync", tag.GetTag()));
     }
 
     public async Task<EventOrNone> AppendEvent(IEventPayload ev, params ITag[] tags)
     {
-        return await GuardedUnwrap.AwaitAsync(
+        return await BoundaryGuard.AwaitAsync(
             _core.AppendEvent(ev, tags),
             new BoundaryContext("ICommandContext.AppendEvent", ev.GetType().Name));
     }
 
     public async Task<EventOrNone> AppendEvent(EventPayloadWithTags eventPayloadWithTags)
     {
-        return await GuardedUnwrap.AwaitAsync(
+        return await BoundaryGuard.AwaitAsync(
             _core.AppendEvent(eventPayloadWithTags),
             new BoundaryContext(
                 "ICommandContext.AppendEvent",

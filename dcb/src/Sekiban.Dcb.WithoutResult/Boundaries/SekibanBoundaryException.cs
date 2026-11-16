@@ -3,17 +3,15 @@ namespace Sekiban.Dcb.Boundaries;
 /// <summary>
 ///     Thrown when a WithoutResult boundary cannot produce the value it promised, and has no failure of its own to
 ///     rethrow.
-///     The WithoutResult packages are a facade: internally everything is a <c>ResultBox</c>, and at the edge the box
-///     is opened and the value handed back. Usually a box that holds no value holds an exception instead, and that
-///     exception is rethrown as itself — a <c>SekibanValidationException</c> stays a
-///     <c>SekibanValidationException</c>, an <see cref="OperationCanceledException" /> stays an
-///     <see cref="OperationCanceledException" />, on its original stack — so the <c>catch</c> blocks callers have
-///     already written keep working. This type is NOT a wrapper around those.
+///     The WithoutResult packages are a facade over the exception-based core. A failure the core throws is rethrown
+///     as itself — a <c>SekibanValidationException</c> stays a <c>SekibanValidationException</c>, an
+///     <see cref="OperationCanceledException" /> stays an <see cref="OperationCanceledException" />, on its original
+///     stack — so the <c>catch</c> blocks callers have already written keep working. This type is NOT a wrapper
+///     around those.
 ///     This is for the cases where there is nothing to rethrow, and the caller would otherwise get silence or a bare
-///     <see cref="NullReferenceException" />: a null box, a success carrying no value, or a failure carrying no
-///     exception. Each of them means an internal path returned something it should not have. The message names the
-///     boundary — the operation the caller invoked, and what it was working on — so that a bug report has somewhere
-///     to start.
+///     <see cref="NullReferenceException" />: a null Task, or a success carrying no value. Each of them means an
+///     internal path returned something it should not have. The message names the boundary — the operation the
+///     caller invoked, and what it was working on — so that a bug report has somewhere to start.
 /// </summary>
 public sealed class SekibanBoundaryException : Exception
 {

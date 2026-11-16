@@ -26,9 +26,9 @@ public sealed record ProjectionFaultDescriptor(
 {
     /// <summary>
     ///     The <see cref="System.Exception.Data" /> keys the descriptor writes onto a surfaced exception. They match the
-    ///     boundary-context keys SEK-G9's GuardedUnwrap already uses, so a fault that reaches a WithoutResult boundary
-    ///     reads the same way as any other annotated failure. Duplicated as literals here because the GuardedUnwrap
-    ///     constants are internal to another assembly; kept identical on purpose.
+    ///     boundary-context keys the WithoutResult boundary guard (SEK-G9) uses, so a fault that reaches a WithoutResult
+    ///     boundary reads the same way as any other annotated failure. Duplicated as literals here because the boundary
+    ///     guard's constants are internal to another assembly; kept identical on purpose.
     /// </summary>
     public const string OperationDataKey = "Sekiban.Boundary.Operation";
 

@@ -6,7 +6,7 @@ namespace Sekiban.Dcb.Storage;
 ///     resolved event store cannot enforce the requested <see cref="WriteConditionKind" />. Raised FAIL-CLOSED — before
 ///     the command handler runs, before any EventId is allocated, before serialization, and before any store call — so a
 ///     store that cannot guarantee the condition never silently degrades to an unconditional write. Following the G9/G14
-///     contract it is <c>ResultBox.Error</c> on WithResult and thrown by the WithoutResult guarded boundary.
+///     contract it is thrown by the core and the WithoutResult facade, and returned as <c>ResultBox.Error</c> by WithResult.
 /// </summary>
 public sealed class ConditionNotSupportedException : Exception
 {

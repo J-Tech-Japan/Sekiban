@@ -1,5 +1,4 @@
 using Dcb.Domain.WithoutResult;
-using ResultBoxes;
 using Sekiban.Dcb.Boundaries;
 using Sekiban.Dcb.Testing;
 using Sekiban.Dcb.Queries;
@@ -19,38 +18,34 @@ public class StructQueryBoundaryTests
     [Fact]
     public async Task FailedStructQuery_Throws_InsteadOfAnsweringZero()
     {
-        // A query the domain does not know: the core answers with a failed ResultBox<int>.
+        // A query the domain does not know: the core throws.
         var query = new UnregisteredStudentCountQuery();
 
         var thrown = await Assert.ThrowsAnyAsync<Exception>(() => _executor.QueryAsync(query));
 
         // Before this change this call returned 0 and the caller had no way to know the query never ran.
         Assert.IsNotType<SekibanBoundaryException>(thrown);
-        Assert.Equal("ISekibanExecutor.QueryAsync", thrown.Data[GuardedUnwrap.OperationDataKey]);
-        Assert.Equal(nameof(UnregisteredStudentCountQuery), thrown.Data[GuardedUnwrap.TargetDataKey]);
+        Assert.Equal("ISekibanExecutor.QueryAsync", thrown.Data[BoundaryGuard.OperationDataKey]);
+        Assert.Equal(nameof(UnregisteredStudentCountQuery), thrown.Data[BoundaryGuard.TargetDataKey]);
     }
 
     /// <summary>
     ///     The Orleans typed-result boundary, as the executor writes it:
-    ///     <c>generalBox.GetValue().ToTypedResult&lt;TResult&gt;()</c>. With a struct <c>TResult</c> a cast failure
-    ///     produced a failed <c>ResultBox&lt;int&gt;</c> — and <c>UnwrapBox()</c> turned it into <c>0</c>.
+    ///     <c>BoundaryGuard.Run(() =&gt; general.ToTypedResult&lt;TResult&gt;(), context)</c>. With a struct
+    ///     <c>TResult</c> a cast failure must throw, not answer <c>0</c>.
     /// </summary>
     [Fact]
     public void OrleansTypedResult_StructMismatch_Throws_InsteadOfAnsweringZero()
     {
         var general = new QueryResultGeneral("not an int", typeof(string).FullName!, new UnregisteredStudentCountQuery());
-        var typed = ResultBox.WrapTry(() => general.ToTypedResult<int>());
-        var carried = typed.GetException();
-
-        // The defect, stated: this is exactly the expression the Orleans executor used to end in.
-        Assert.Equal(0, typed.UnwrapBox());
 
         var thrown = Assert.ThrowsAny<Exception>(
-            () => GuardedUnwrap.Unwrap(typed, new BoundaryContext("ISekibanExecutor.QueryAsync", "StudentCount")));
+            () => BoundaryGuard.Run(
+                () => general.ToTypedResult<int>(),
+                new BoundaryContext("ISekibanExecutor.QueryAsync", "StudentCount")));
 
-        Assert.Same(carried, thrown);
         Assert.IsType<InvalidCastException>(thrown);
-        Assert.Equal("ISekibanExecutor.QueryAsync", thrown.Data[GuardedUnwrap.OperationDataKey]);
+        Assert.Equal("ISekibanExecutor.QueryAsync", thrown.Data[BoundaryGuard.OperationDataKey]);
     }
 
     [Fact]
@@ -58,7 +53,7 @@ public class StructQueryBoundaryTests
     {
         var general = new QueryResultGeneral(42, typeof(int).FullName!, new UnregisteredStudentCountQuery());
 
-        var value = GuardedUnwrap.Run(
+        var value = BoundaryGuard.Run(
             () => general.ToTypedResult<int>(),
             new BoundaryContext("ISekibanExecutor.QueryAsync", "StudentCount"));
 

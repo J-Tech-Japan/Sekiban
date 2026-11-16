@@ -35,9 +35,6 @@
     </ItemGroup>
 
     <ItemGroup>
-        <!-- GuardedUnwrap and the generic tag projectors still use ResultBox internally until the facade slice of 11.0
-             removes them; Sekiban.Dcb.Core no longer brings the package, so it must flow to consumers from here. -->
-        <PackageReference Include="ResultBoxes" Version="0.4.0" />
         <PackageReference Include="Microsoft.Sbom.Targets" Version="4.1.5">
             <PrivateAssets>all</PrivateAssets>
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
@@ -45,7 +42,7 @@
     </ItemGroup>
 
     <ItemGroup>
-        <!-- GuardedUnwrap is internal on purpose: it is boundary plumbing, not public API. The Orleans
+        <!-- BoundaryGuard is internal on purpose: it is boundary plumbing, not public API. The Orleans
              facade is the same boundary in another assembly, and the tests have to be able to drive it. -->
         <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
             <_Parameter1>Sekiban.Dcb.Orleans.WithoutResult</_Parameter1>

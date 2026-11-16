@@ -168,7 +168,7 @@ public class GeneralSekibanExecutor : ISekibanExecutor, ISerializedSekibanDcbExe
         Func<TCommand, ICoreCommandContext, Task<EventOrNone>> coreHandler = (cmd, coreCtx) =>
             TCommand.HandleAsync(cmd, new CommandContextAdapter(coreCtx));
 
-        return await GuardedUnwrap.AwaitAsync(
+        return await BoundaryGuard.AwaitAsync(
             _core.ExecuteAsync(command, coreHandler, cancellationToken),
             new BoundaryContext("ISekibanExecutor.ExecuteAsync", typeof(TCommand).Name));
     }
@@ -185,7 +185,7 @@ public class GeneralSekibanExecutor : ISekibanExecutor, ISerializedSekibanDcbExe
         Func<TCommand, ICoreCommandContext, Task<EventOrNone>> coreHandler = (cmd, coreCtx) =>
             handlerFunc(cmd, new CommandContextAdapter(coreCtx));
 
-        return await GuardedUnwrap.AwaitAsync(
+        return await BoundaryGuard.AwaitAsync(
             _core.ExecuteAsync(command, coreHandler, cancellationToken),
             new BoundaryContext("ISekibanExecutor.ExecuteAsync", typeof(TCommand).Name));
     }
@@ -200,7 +200,7 @@ public class GeneralSekibanExecutor : ISekibanExecutor, ISerializedSekibanDcbExe
         Func<AnonymousCommand, ICoreCommandContext, Task<EventOrNone>> coreHandler = (_, coreCtx) =>
             handlerFunc(new CommandContextAdapter(coreCtx));
 
-        return await GuardedUnwrap.AwaitAsync(
+        return await BoundaryGuard.AwaitAsync(
             _core.ExecuteAsync(NoCommandInstance, coreHandler, cancellationToken),
             new BoundaryContext("ISekibanExecutor.ExecuteCommandAsync"));
     }
@@ -210,14 +210,14 @@ public class GeneralSekibanExecutor : ISekibanExecutor, ISerializedSekibanDcbExe
     /// </summary>
     public async Task<TagState> GetTagStateAsync(TagStateId tagStateId)
     {
-        return await GuardedUnwrap.AwaitAsync(
+        return await BoundaryGuard.AwaitAsync(
             _core.GetTagStateAsync(tagStateId),
             new BoundaryContext("ISekibanExecutor.GetTagStateAsync", tagStateId.GetTagStateId()));
     }
 
     public async Task<TagState> GetTagStateAsync(TagStateId tagStateId, CancellationToken cancellationToken)
     {
-        return await GuardedUnwrap.AwaitAsync(
+        return await BoundaryGuard.AwaitAsync(
             _core.GetTagStateAsync(tagStateId, cancellationToken),
             new BoundaryContext("ISekibanExecutor.GetTagStateAsync", tagStateId.GetTagStateId()));
     }
@@ -227,7 +227,7 @@ public class GeneralSekibanExecutor : ISekibanExecutor, ISerializedSekibanDcbExe
     /// </summary>
     public async Task<TResult> QueryAsync<TResult>(IQueryCommon<TResult> queryCommon) where TResult : notnull
     {
-        return await GuardedUnwrap.AwaitAsync(
+        return await BoundaryGuard.AwaitAsync(
             _core.QueryAsync(queryCommon),
             new BoundaryContext("ISekibanExecutor.QueryAsync", queryCommon?.GetType().Name));
     }
@@ -238,39 +238,39 @@ public class GeneralSekibanExecutor : ISekibanExecutor, ISerializedSekibanDcbExe
     public async Task<ListQueryResult<TResult>> QueryAsync<TResult>(IListQueryCommon<TResult> queryCommon)
         where TResult : notnull
     {
-        return await GuardedUnwrap.AwaitAsync(
+        return await BoundaryGuard.AwaitAsync(
             _core.QueryAsync(queryCommon),
             new BoundaryContext("ISekibanExecutor.QueryAsync (list)", queryCommon?.GetType().Name));
     }
 
     public async Task<string> GetLatestSortableUniqueIdAsync()
     {
-        return await GuardedUnwrap.AwaitAsync(_core.GetLatestSortableUniqueIdAsync(), new BoundaryContext("ISekibanExecutor.GetLatestSortableUniqueIdAsync"));
+        return await BoundaryGuard.AwaitAsync(_core.GetLatestSortableUniqueIdAsync(), new BoundaryContext("ISekibanExecutor.GetLatestSortableUniqueIdAsync"));
     }
 
     public async Task<ProjectionHeadStatus> GetProjectionHeadStatusAsync(
         string projectorName,
         string? expectedProjectorVersion = null)
     {
-        return await GuardedUnwrap.AwaitAsync(
+        return await BoundaryGuard.AwaitAsync(
             _core.GetProjectionHeadStatusAsync(projectorName, expectedProjectorVersion),
             new BoundaryContext("ISekibanExecutor.GetProjectionHeadStatusAsync", projectorName));
     }
 
     public async Task<EventStoreHeadStatus> GetEventStoreHeadStatusAsync(bool includeTotalEventCount = false)
     {
-        return await GuardedUnwrap.AwaitAsync(_core.GetEventStoreHeadStatusAsync(includeTotalEventCount), new BoundaryContext("ISekibanExecutor.GetEventStoreHeadStatusAsync"));
+        return await BoundaryGuard.AwaitAsync(_core.GetEventStoreHeadStatusAsync(includeTotalEventCount), new BoundaryContext("ISekibanExecutor.GetEventStoreHeadStatusAsync"));
     }
 
     public Task<SerializableTagState> GetSerializableTagStateAsync(TagStateId tagStateId) =>
-        GuardedUnwrap.AwaitAsync(
+        BoundaryGuard.AwaitAsync(
             _core.GetSerializableTagStateAsync(tagStateId),
             new BoundaryContext("ISerializedSekibanDcbExecutor.GetSerializableTagStateAsync", tagStateId.GetTagStateId()));
 
     public Task<SerializedCommitResult> CommitSerializableEventsAsync(
         SerializedCommitRequest request,
         CancellationToken cancellationToken = default) =>
-        GuardedUnwrap.AwaitAsync(
+        BoundaryGuard.AwaitAsync(
             _core.CommitSerializableEventsAsync(request, cancellationToken),
             new BoundaryContext("ISerializedSekibanDcbExecutor.CommitSerializableEventsAsync"));
 
@@ -278,7 +278,7 @@ public class GeneralSekibanExecutor : ISekibanExecutor, ISerializedSekibanDcbExe
     public Task<SerializedCommitResult> CommitSerializableEventsWithExpectedTagPositionsAsync(
         VersionedExpectedTagPositionSerializedCommitRequest request,
         CancellationToken cancellationToken = default) =>
-        GuardedUnwrap.AwaitAsync(
+        BoundaryGuard.AwaitAsync(
             _core.CommitSerializableEventsWithExpectedTagPositionsAsync(request, cancellationToken),
             new BoundaryContext("ISerializedExpectedTagPositionSekibanDcbExecutor.CommitSerializableEventsWithExpectedTagPositionsAsync"));
 
@@ -290,7 +290,7 @@ public class GeneralSekibanExecutor : ISekibanExecutor, ISerializedSekibanDcbExe
     {
         Func<TCommand, ICoreCommandContext, Task<EventOrNone>> coreHandler = (cmd, coreCtx) =>
             TCommand.HandleAsync(cmd, new CommandContextAdapter(coreCtx));
-        return await GuardedUnwrap.AwaitAsync(
+        return await BoundaryGuard.AwaitAsync(
             _core.ExecuteAsync(command, coreHandler, options, cancellationToken),
             new BoundaryContext("ISekibanExecutor.ExecuteAsync", typeof(TCommand).Name));
     }
@@ -304,7 +304,7 @@ public class GeneralSekibanExecutor : ISekibanExecutor, ISerializedSekibanDcbExe
     {
         Func<TCommand, ICoreCommandContext, Task<EventOrNone>> coreHandler = (cmd, coreCtx) =>
             handlerFunc(cmd, new CommandContextAdapter(coreCtx));
-        return await GuardedUnwrap.AwaitAsync(
+        return await BoundaryGuard.AwaitAsync(
             _core.ExecuteAsync(command, coreHandler, options, cancellationToken),
             new BoundaryContext("ISekibanExecutor.ExecuteAsync", typeof(TCommand).Name));
     }
@@ -313,7 +313,7 @@ public class GeneralSekibanExecutor : ISekibanExecutor, ISerializedSekibanDcbExe
     public Task<SerializedConditionalCommitResult> CommitSerializableEventConditionallyAsync(
         SerializedConditionalCommitRequest request,
         CancellationToken cancellationToken = default) =>
-        GuardedUnwrap.AwaitAsync(
+        BoundaryGuard.AwaitAsync(
             _core.CommitSerializableEventConditionallyAsync(request, cancellationToken),
             new BoundaryContext("ISerializedConditionalSekibanDcbExecutor.CommitSerializableEventConditionallyAsync"));
 

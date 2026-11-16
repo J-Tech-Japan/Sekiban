@@ -26,8 +26,8 @@ public class CommandContextBoundaryTests
             () => new CommandContextAdapter(context).TagExistsAsync(Tag));
 
         Assert.Same(failure, thrown);
-        Assert.Equal("ICommandContext.TagExistsAsync", thrown.Data[GuardedUnwrap.OperationDataKey]);
-        Assert.Equal(Tag.GetTag(), thrown.Data[GuardedUnwrap.TargetDataKey]);
+        Assert.Equal("ICommandContext.TagExistsAsync", thrown.Data[BoundaryGuard.OperationDataKey]);
+        Assert.Equal(Tag.GetTag(), thrown.Data[BoundaryGuard.TargetDataKey]);
     }
 
     [Fact]
@@ -67,7 +67,7 @@ public class CommandContextBoundaryTests
                 .GetTagLatestSortableUniqueIdAsync(Tag));
 
         Assert.Same(failure, thrown);
-        Assert.Equal("ICommandContext.GetTagLatestSortableUniqueIdAsync", thrown.Data[GuardedUnwrap.OperationDataKey]);
+        Assert.Equal("ICommandContext.GetTagLatestSortableUniqueIdAsync", thrown.Data[BoundaryGuard.OperationDataKey]);
     }
 
     [Fact]

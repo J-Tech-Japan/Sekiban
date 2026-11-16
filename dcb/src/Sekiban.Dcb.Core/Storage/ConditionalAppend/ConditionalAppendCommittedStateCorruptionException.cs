@@ -11,8 +11,8 @@ namespace Sekiban.Dcb.Storage;
 ///     deterministic EventId), and an optional DERIVED row id (a hash, never row content). It never carries the raw
 ///     idempotency key, the payload, the tag content, or a provider integrity exception whose message/properties could
 ///     disclose the disagreeing row's content — the offending provider exception is deliberately NOT chained. Following
-///     the G9/G14 contract it is <c>ResultBox.Error</c> on the WithResult facade and rethrown as-is by the WithoutResult
-///     guarded boundary.
+///     the G9/G14 contract it is thrown as-is by the core and the WithoutResult facade, and the WithResult facade returns
+///     it as <c>ResultBox.Error</c>.
 /// </summary>
 public sealed class ConditionalAppendCommittedStateCorruptionException : Exception
 {
