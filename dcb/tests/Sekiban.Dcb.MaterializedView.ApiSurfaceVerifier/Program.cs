@@ -30,7 +30,10 @@ var removedMembers = baselineSurface
     .ToList();
 var unexpected = IntendedRemovals.Unexpected(
     removedTypes.Concat(removedMembers).ToList(),
-    Path.Combine("dcb", "src", "Sekiban.Dcb.MaterializedView", "CompatibilitySuppressions.xml"));
+    IntendedRemovals.LocateSuppressionFile(
+        Directory.GetCurrentDirectory(),
+        AppContext.BaseDirectory,
+        Path.GetDirectoryName(candidatePath)!));
 if (unexpected.Count != 0)
 {
     var removed = string.Join(Environment.NewLine, unexpected);

@@ -22,11 +22,12 @@ internal sealed record TaggedStreamProjectionState(
 internal static class TaggedStreamProjectionHelper
 {
     /// <summary>
-    ///     Projects the tag's native stream. Cancellation propagates; any other failure of the stream call (a store
-    ///     failure or one thrown by the projection callback) is rethrown as itself after the caller's token has been
-    ///     observed.
+    ///     Projects the tag's native stream. Cancellation propagates, and so does a store that throws before returning
+    ///     its stream task. Any other failure of the stream task (a store failure or one thrown by the projection
+    ///     callback) is returned as <c>StreamFailure</c> after the caller's token has been observed, so each caller keeps
+    ///     its own handling of a failed stream.
     /// </summary>
-    internal static async Task<TaggedStreamProjectionState> ProjectAsync(
+    internal static async Task<(TaggedStreamProjectionState? Projection, Exception? StreamFailure)> ProjectAsync(
         IStreamingTaggedSerializableEventStore streamStore,
         ITag tag,
         SortableUniqueId? since,
@@ -112,10 +113,10 @@ internal static class TaggedStreamProjectionHelper
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            throw;
+            return (null, ex);
         }
 
         cancellationToken.ThrowIfCancellationRequested();
-        return new TaggedStreamProjectionState(state, eventCount, lastSortableUniqueId);
+        return (new TaggedStreamProjectionState(state, eventCount, lastSortableUniqueId), null);
     }
 }

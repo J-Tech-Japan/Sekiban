@@ -1,3 +1,4 @@
+using System.Runtime.ExceptionServices;
 using Sekiban.Dcb.Capabilities;
 using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Events;
@@ -180,7 +181,7 @@ public class TagStateService
 
         if (taggedStream.IsSupported)
         {
-            var streamProjection = await TaggedStreamProjectionHelper.ProjectAsync(
+            var (streamProjection, streamFailure) = await TaggedStreamProjectionHelper.ProjectAsync(
                 taggedStream.StreamStore!,
                 tag,
                 null,
@@ -192,7 +193,12 @@ public class TagStateService
                 string.Empty,
                 cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
-            state = streamProjection.State;
+            if (streamFailure is not null)
+            {
+                ExceptionDispatchInfo.Capture(streamFailure).Throw();
+            }
+
+            state = streamProjection!.State;
             eventCount = streamProjection.EventCount;
             lastSortableUniqueId = streamProjection.LastSortableUniqueId;
         }

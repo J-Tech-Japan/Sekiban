@@ -84,14 +84,14 @@ public sealed class DurableSubscriptionRunner : BackgroundService
         var identity = Identity;
         var safeTail = DurableSubscriptionSafeTail.Calculate(_registration.Options.SafeWindow);
         // Store failures are logged and handled here, as the runner always did; they never stop the host.
+        var pendingInitializeOrGet = _stateStore.InitializeOrGetAsync(
+            identity,
+            _registration.Options.StartPolicy,
+            safeTail,
+            stoppingToken);
         try
         {
-            await _stateStore.InitializeOrGetAsync(
-                    identity,
-                    _registration.Options.StartPolicy,
-                    safeTail,
-                    stoppingToken)
-                .ConfigureAwait(false);
+            await pendingInitializeOrGet.ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -141,9 +141,10 @@ public sealed class DurableSubscriptionRunner : BackgroundService
     {
         var identity = Identity;
         DurableSubscriptionState state;
+        var pendingRead = _stateStore.ReadAsync(identity, cancellationToken);
         try
         {
-            state = await _stateStore.ReadAsync(identity, cancellationToken).ConfigureAwait(false);
+            state = await pendingRead.ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -162,14 +163,14 @@ public sealed class DurableSubscriptionRunner : BackgroundService
         // A row read immediately precedes each acquisition attempt. The provider repeats the predicate under its
         // transaction, but this read makes standby state observable and prevents an optimistic local lease assumption.
         DurableSubscriptionLease lease;
+        var pendingTryAcquire = _stateStore.TryAcquireAsync(
+            identity,
+            _ownerId,
+            _registration.Options.LeaseDuration,
+            cancellationToken);
         try
         {
-            lease = await _stateStore.TryAcquireAsync(
-                    identity,
-                    _ownerId,
-                    _registration.Options.LeaseDuration,
-                    cancellationToken)
-                .ConfigureAwait(false);
+            lease = await pendingTryAcquire.ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -197,9 +198,10 @@ public sealed class DurableSubscriptionRunner : BackgroundService
         {
             while (!cancellationToken.IsCancellationRequested)
             {
+                var pendingCurrentRead = _stateStore.ReadAsync(identity, cancellationToken);
                 try
                 {
-                    state = await _stateStore.ReadAsync(identity, cancellationToken).ConfigureAwait(false);
+                    state = await pendingCurrentRead.ConfigureAwait(false);
                 }
                 catch (Exception ex)
                 {
@@ -214,7 +216,12 @@ public sealed class DurableSubscriptionRunner : BackgroundService
                     return;
                 }
 
-                if (!await TryRenewAsync(state.OwnerGeneration, cancellationToken).ConfigureAwait(false))
+                if (!await TryRenewAsync(_stateStore.RenewAsync(
+                        identity,
+                        _ownerId,
+                        state.OwnerGeneration,
+                        _registration.Options.LeaseDuration,
+                        cancellationToken)).ConfigureAwait(false))
                 {
                     Interlocked.Exchange(ref _ownerGeneration, 0);
                     Volatile.Write(ref _status, (int)DurableSubscriptionRunnerStatus.Standby);
@@ -224,14 +231,14 @@ public sealed class DurableSubscriptionRunner : BackgroundService
                 if (state.Phase == DurableSubscriptionPhase.Retrying)
                 {
                     bool retryDue;
+                    var pendingIsRetryDue = _stateStore.IsRetryDueAsync(
+                        identity,
+                        _ownerId,
+                        state.OwnerGeneration,
+                        cancellationToken);
                     try
                     {
-                        retryDue = await _stateStore.IsRetryDueAsync(
-                                identity,
-                                _ownerId,
-                                state.OwnerGeneration,
-                                cancellationToken)
-                            .ConfigureAwait(false);
+                        retryDue = await pendingIsRetryDue.ConfigureAwait(false);
                     }
                     catch (Exception ex)
                     {
@@ -264,9 +271,10 @@ public sealed class DurableSubscriptionRunner : BackgroundService
                 var events = readEvents.OrderBy(e => e.SortableUniqueIdValue, StringComparer.Ordinal).ToList();
                 if (events.Count == 0)
                 {
+                    var pendingMarkIdle = _stateStore.MarkIdleAsync(identity, _ownerId, state.OwnerGeneration, cancellationToken);
                     try
                     {
-                        await _stateStore.MarkIdleAsync(identity, _ownerId, state.OwnerGeneration, cancellationToken).ConfigureAwait(false);
+                        await pendingMarkIdle.ConfigureAwait(false);
                     }
                     catch (Exception ex)
                     {
@@ -335,15 +343,15 @@ public sealed class DurableSubscriptionRunner : BackgroundService
                         return;
                     }
 
+                    var pendingAcknowledge = _stateStore.AcknowledgeAsync(
+                        identity,
+                        _ownerId,
+                        state.OwnerGeneration,
+                        serializableEvent.SortableUniqueIdValue,
+                        cancellationToken);
                     try
                     {
-                        await _stateStore.AcknowledgeAsync(
-                                identity,
-                                _ownerId,
-                                state.OwnerGeneration,
-                                serializableEvent.SortableUniqueIdValue,
-                                cancellationToken)
-                            .ConfigureAwait(false);
+                        await pendingAcknowledge.ConfigureAwait(false);
                     }
                     catch (Exception ex)
                     {
@@ -370,19 +378,19 @@ public sealed class DurableSubscriptionRunner : BackgroundService
         CancellationToken cancellationToken)
     {
         DurableSubscriptionState state;
+        var pendingRecordFailure = _stateStore.RecordFailureAsync(
+            Identity,
+            _ownerId,
+            ownerGeneration,
+            serializableEvent.SortableUniqueIdValue,
+            reason,
+            conversionFailure,
+            _registration.Options.MaxHandlerAttempts,
+            _registration.Options.RetryDelay,
+            cancellationToken);
         try
         {
-            state = await _stateStore.RecordFailureAsync(
-                    Identity,
-                    _ownerId,
-                    ownerGeneration,
-                    serializableEvent.SortableUniqueIdValue,
-                    reason,
-                    conversionFailure,
-                    _registration.Options.MaxHandlerAttempts,
-                    _registration.Options.RetryDelay,
-                    cancellationToken)
-                .ConfigureAwait(false);
+            state = await pendingRecordFailure.ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -450,7 +458,12 @@ public sealed class DurableSubscriptionRunner : BackgroundService
 
             try
             {
-                if (!await TryRenewAsync(ownerGeneration, handlerCts.Token).ConfigureAwait(false))
+                if (!await TryRenewAsync(_stateStore.RenewAsync(
+                        Identity,
+                        _ownerId,
+                        ownerGeneration,
+                        _registration.Options.LeaseDuration,
+                        handlerCts.Token)).ConfigureAwait(false))
                 {
                     markLeaseLost();
                     handlerCts.Cancel();
@@ -473,18 +486,13 @@ public sealed class DurableSubscriptionRunner : BackgroundService
     private Task<DurableSubscriptionState> GetStateOrThrowAsync(CancellationToken cancellationToken) =>
         _stateStore.ReadAsync(Identity, cancellationToken);
 
-    // A renewal the store reports as failed, or that fails outright, means the lease is no longer held.
-    private async Task<bool> TryRenewAsync(long ownerGeneration, CancellationToken cancellationToken)
+    // A renewal the store reports as failed, or whose task fails, means the lease is no longer held. The renewal task is
+    // created by the caller, so a store that throws before returning it propagates there as it always did.
+    private static async Task<bool> TryRenewAsync(Task<bool> renewal)
     {
         try
         {
-            return await _stateStore.RenewAsync(
-                    Identity,
-                    _ownerId,
-                    ownerGeneration,
-                    _registration.Options.LeaseDuration,
-                    cancellationToken)
-                .ConfigureAwait(false);
+            return await renewal.ConfigureAwait(false);
         }
         catch (Exception)
         {

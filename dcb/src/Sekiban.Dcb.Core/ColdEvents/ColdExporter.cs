@@ -120,12 +120,14 @@ public sealed class ColdExporter : IColdEventExporter, IColdEventProgressReader
         }
     }
 
-    // A failed release is logged and the lease is expired instead; neither failure affects the export result.
+    // A failed release is logged and the lease is expired instead; neither failure affects the export result. A lease
+    // manager that throws before returning its task propagates as itself, as it always did.
     private async Task ReleaseLeaseAsync(string serviceId, ColdLease lease)
     {
+        var release = _leaseManager.ReleaseAsync(lease, CancellationToken.None);
         try
         {
-            await _leaseManager.ReleaseAsync(lease, CancellationToken.None);
+            await release;
         }
         catch (Exception releaseFailure)
         {
@@ -135,9 +137,10 @@ public sealed class ColdExporter : IColdEventExporter, IColdEventProgressReader
                 serviceId,
                 lease.LeaseId);
 
+            var expire = _leaseManager.RenewAsync(lease, TimeSpan.Zero, CancellationToken.None);
             try
             {
-                await _leaseManager.RenewAsync(lease, TimeSpan.Zero, CancellationToken.None);
+                await expire;
             }
             catch (Exception expireFailure)
             {
@@ -825,17 +828,7 @@ public sealed class ColdExporter : IColdEventExporter, IColdEventProgressReader
             yield break;
         }
 
-        IEnumerable<SerializableEvent> candidates;
-        try
-        {
-            candidates = await ReadExportCandidatesAsync(since);
-        }
-        catch (Exception ex)
-        {
-            throw new InvalidOperationException(
-                "Failed to read export candidates from event store.",
-                ex);
-        }
+        var candidates = await ReadExportCandidatesAsync(since);
 
         foreach (var evt in candidates)
         {
@@ -858,14 +851,30 @@ public sealed class ColdExporter : IColdEventExporter, IColdEventProgressReader
             {
                 // Fall through to the unbounded read below.
             }
+            catch (Exception ex)
+            {
+                throw ExportCandidateReadFailure(ex);
+            }
 
             _logger.LogDebug(
                 "Falling back to unbounded cold export read because max-count overload is not supported by {StoreType}",
                 _hotStore.GetType().Name);
         }
 
-        return await _hotStore.ReadAllSerializableEventsAsync(since);
+        var read = _hotStore.ReadAllSerializableEventsAsync(since);
+        try
+        {
+            return await read;
+        }
+        catch (Exception ex)
+        {
+            throw ExportCandidateReadFailure(ex);
+        }
     }
+
+    // Only a failed read task is reported this way; a store that throws before returning its task propagates as itself.
+    private static InvalidOperationException ExportCandidateReadFailure(Exception readFailure) =>
+        new("Failed to read export candidates from event store.", readFailure);
 
     private static bool IsSafe(SerializableEvent evt, DateTime cutoffUtc)
     {

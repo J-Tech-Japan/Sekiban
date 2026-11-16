@@ -139,14 +139,17 @@ public class GeneralQueryExecutor
             }
 
             var queryType = typeof(TQuery);
-            var method = queryType.GetMethod("HandleQuery", BindingFlags.Public | BindingFlags.Static)
-                ?? throw new InvalidOperationException(
-                    $"Query type {queryType.Name} must define a public static HandleQuery method.");
+            var method = queryType.GetMethod("HandleQuery", BindingFlags.Public | BindingFlags.Static);
+            if (method is null)
+            {
+                return Unsupported<TMultiProjector, TQuery, IQueryContext, TOutput>(
+                    $"Query type {queryType.FullName} must define a public static HandleQuery method.");
+            }
 
             if (!typeof(TOutput).IsAssignableFrom(method.ReturnType))
             {
-                throw new InvalidOperationException(
-                    $"HandleQuery return type mismatch. Expected {typeof(TOutput).Name} but got {method.ReturnType.Name}.");
+                return Unsupported<TMultiProjector, TQuery, IQueryContext, TOutput>(
+                    UnsupportedShapeMessage(queryType, "HandleQuery", typeof(TOutput), method.ReturnType, isList: false));
             }
 
             return method.CreateDelegate<Func<TMultiProjector, TQuery, IQueryContext, TOutput>>();
@@ -175,8 +178,9 @@ public class GeneralQueryExecutor
             }
 
             return CreateByName<Func<TMultiProjector, TQuery, IQueryContext, IEnumerable<TOutput>>>(
-                "HandleFilter",
-                "List query type {0} must define a public static HandleFilter method.");
+                    "HandleFilter",
+                    out var unsupported)
+                ?? Unsupported<TMultiProjector, TQuery, IQueryContext, IEnumerable<TOutput>>(unsupported!);
         }
 
         private static Func<IEnumerable<TOutput>, TQuery, IQueryContext, IEnumerable<TOutput>> CreateSort()
@@ -187,24 +191,60 @@ public class GeneralQueryExecutor
             }
 
             return CreateByName<Func<IEnumerable<TOutput>, TQuery, IQueryContext, IEnumerable<TOutput>>>(
-                "HandleSort",
-                "List query type {0} must define a public static HandleSort method.");
+                    "HandleSort",
+                    out var unsupported)
+                ?? Unsupported<IEnumerable<TOutput>, TQuery, IQueryContext, IEnumerable<TOutput>>(unsupported!);
         }
 
-        private static TDelegate CreateByName<TDelegate>(string methodName, string missingMessage)
+        private static TDelegate? CreateByName<TDelegate>(string methodName, out string? unsupported)
             where TDelegate : Delegate
         {
             var queryType = typeof(TQuery);
-            var method = queryType.GetMethod(methodName, BindingFlags.Public | BindingFlags.Static)
-                ?? throw new InvalidOperationException(string.Format(missingMessage, queryType.Name));
+            var method = queryType.GetMethod(methodName, BindingFlags.Public | BindingFlags.Static);
+            if (method is null)
+            {
+                unsupported = $"List query type {queryType.FullName} must define a public static {methodName} method.";
+                return null;
+            }
 
             if (!typeof(IEnumerable<TOutput>).IsAssignableFrom(method.ReturnType))
             {
-                throw new InvalidOperationException(
-                    $"{methodName} return type mismatch. Expected IEnumerable<{typeof(TOutput).Name}> but got {method.ReturnType.Name}.");
+                unsupported = UnsupportedShapeMessage(
+                    queryType,
+                    methodName,
+                    typeof(IEnumerable<TOutput>),
+                    method.ReturnType,
+                    isList: true);
+                return null;
             }
 
+            unsupported = null;
             return method.CreateDelegate<TDelegate>();
         }
     }
+
+    // The invokers are cached per closed generic type, so an unsupported query shape must not fail the type
+    // initializer: that would surface as a TypeInitializationException on every later use. Instead the cached delegate
+    // throws the explanation each time the query is executed.
+    private static Func<T1, T2, T3, TResult> Unsupported<T1, T2, T3, TResult>(string message) =>
+        (_, _, _) => throw new InvalidOperationException(message);
+
+    private static string UnsupportedShapeMessage(
+        Type queryType,
+        string methodName,
+        Type expected,
+        Type actual,
+        bool isList)
+    {
+        var withResultContract = isList ? "IMultiProjectionListQuery" : "IMultiProjectionQuery";
+        var coreContract = isList ? "ICoreMultiProjectionListQuery" : "ICoreMultiProjectionQuery";
+        return $"Query type {queryType.FullName} cannot be executed: its {methodName} returns {FormatType(actual)}, " +
+            $"but {FormatType(expected)} is required. A query whose handlers return a ResultBox must implement " +
+            $"the WithResult {withResultContract} interface; otherwise implement {coreContract} and return the value directly.";
+    }
+
+    private static string FormatType(Type type) =>
+        type.IsGenericType
+            ? $"{type.Name[..type.Name.IndexOf('`')]}<{string.Join(", ", type.GetGenericArguments().Select(FormatType))}>"
+            : type.Name;
 }

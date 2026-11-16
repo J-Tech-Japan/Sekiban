@@ -36,7 +36,7 @@ public class CoreGeneralCommandContext : ICoreCommandContext, ICommandContextRes
         var tagStateId = new TagStateId(tag, TProjector.ProjectorName);
         var tagStateActorId = tagStateId.GetTagStateId();
 
-        var actor = await TryGetActorAsync<ITagStateActorCommon>(tagStateActorId);
+        var actor = await TryGetActorAsync(_actorAccessor.GetActorAsync<ITagStateActorCommon>(tagStateActorId));
         if (actor is null)
         {
             // If actor doesn't exist, return empty state with EmptyTagStatePayload
@@ -102,7 +102,7 @@ public class CoreGeneralCommandContext : ICoreCommandContext, ICommandContextRes
         var tagStateId = new TagStateId(tag, TProjector.ProjectorName);
         var tagStateActorId = tagStateId.GetTagStateId();
 
-        var actor = await TryGetActorAsync<ITagStateActorCommon>(tagStateActorId);
+        var actor = await TryGetActorAsync(_actorAccessor.GetActorAsync<ITagStateActorCommon>(tagStateActorId));
         if (actor is null)
         {
             // If actor doesn't exist, return empty state
@@ -150,7 +150,7 @@ public class CoreGeneralCommandContext : ICoreCommandContext, ICommandContextRes
         // Get the TagConsistentActor for this tag
         var tagConsistentActorId = tag.GetTag();
 
-        var actor = await TryGetActorAsync<ITagConsistentActorCommon>(tagConsistentActorId);
+        var actor = await TryGetActorAsync(_actorAccessor.GetActorAsync<ITagConsistentActorCommon>(tagConsistentActorId));
         if (actor is null)
         {
             // Actor doesn't exist means tag doesn't exist (not an error, just no data)
@@ -190,7 +190,7 @@ public class CoreGeneralCommandContext : ICoreCommandContext, ICommandContextRes
         // Get the TagConsistentActor for this tag
         var tagConsistentActorId = tag.GetTag();
 
-        var actor = await TryGetActorAsync<ITagConsistentActorCommon>(tagConsistentActorId);
+        var actor = await TryGetActorAsync(_actorAccessor.GetActorAsync<ITagConsistentActorCommon>(tagConsistentActorId));
         if (actor is null)
         {
             // If actor doesn't exist, return empty string (not an error, just no data)
@@ -206,11 +206,12 @@ public class CoreGeneralCommandContext : ICoreCommandContext, ICommandContextRes
     ///     Resolves an actor, or returns <c>null</c> when the accessor cannot provide it. A failed actor lookup has
     ///     always meant "no data" for the reads above (empty state, <c>false</c>, empty position), not an error.
     /// </summary>
-    private async Task<T?> TryGetActorAsync<T>(string actorId) where T : class
+    private static async Task<T?> TryGetActorAsync<T>(Task<T> actorLookup) where T : class
     {
+        // The lookup task is created by the caller, so an accessor that throws before returning it propagates.
         try
         {
-            return await _actorAccessor.GetActorAsync<T>(actorId);
+            return await actorLookup;
         }
         catch (Exception)
         {
