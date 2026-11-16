@@ -263,18 +263,24 @@ public class GeneralSekibanExecutor : ISekibanExecutor, ISerializedSekibanDcbExe
     }
 
     public Task<SerializableTagState> GetSerializableTagStateAsync(TagStateId tagStateId) =>
-        _core.GetSerializableTagStateAsync(tagStateId);
+        GuardedUnwrap.AwaitAsync(
+            _core.GetSerializableTagStateAsync(tagStateId),
+            new BoundaryContext("ISerializedSekibanDcbExecutor.GetSerializableTagStateAsync", tagStateId.GetTagStateId()));
 
     public Task<SerializedCommitResult> CommitSerializableEventsAsync(
         SerializedCommitRequest request,
         CancellationToken cancellationToken = default) =>
-        _core.CommitSerializableEventsAsync(request, cancellationToken);
+        GuardedUnwrap.AwaitAsync(
+            _core.CommitSerializableEventsAsync(request, cancellationToken),
+            new BoundaryContext("ISerializedSekibanDcbExecutor.CommitSerializableEventsAsync"));
 
     /// <summary>Opt-in V2 serialized commit with PostgreSQL's durable expected-tag-position protocol.</summary>
     public Task<SerializedCommitResult> CommitSerializableEventsWithExpectedTagPositionsAsync(
         VersionedExpectedTagPositionSerializedCommitRequest request,
         CancellationToken cancellationToken = default) =>
-        _core.CommitSerializableEventsWithExpectedTagPositionsAsync(request, cancellationToken);
+        GuardedUnwrap.AwaitAsync(
+            _core.CommitSerializableEventsWithExpectedTagPositionsAsync(request, cancellationToken),
+            new BoundaryContext("ISerializedExpectedTagPositionSekibanDcbExecutor.CommitSerializableEventsWithExpectedTagPositionsAsync"));
 
     /// <summary>Opt-in: execute a self-handling command with conditional (unique-key) append options.</summary>
     public async Task<ExecutionResult> ExecuteAsync<TCommand>(
@@ -307,7 +313,9 @@ public class GeneralSekibanExecutor : ISekibanExecutor, ISerializedSekibanDcbExe
     public Task<SerializedConditionalCommitResult> CommitSerializableEventConditionallyAsync(
         SerializedConditionalCommitRequest request,
         CancellationToken cancellationToken = default) =>
-        _core.CommitSerializableEventConditionallyAsync(request, cancellationToken);
+        GuardedUnwrap.AwaitAsync(
+            _core.CommitSerializableEventConditionallyAsync(request, cancellationToken),
+            new BoundaryContext("ISerializedConditionalSekibanDcbExecutor.CommitSerializableEventConditionallyAsync"));
 
     private sealed record AnonymousCommand : ICommand;
 }

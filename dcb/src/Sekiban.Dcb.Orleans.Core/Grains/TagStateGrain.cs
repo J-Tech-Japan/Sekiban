@@ -349,12 +349,9 @@ public class TagStateGrain : Grain, ITagStateGrain
             return null;
         }
 
-        var latestSortableUniqueIdResult = await tagConsistentActorResult.GetValue().GetLatestSortableUniqueIdAsync()
-            .ToResultBoxAsync();
+        var latestSortableUniqueId = await TagConsistentLatestPositionReader.TryReadAsync(tagConsistentActorResult.GetValue());
         cancellationToken.ThrowIfCancellationRequested();
-        return latestSortableUniqueIdResult.IsSuccess
-            ? latestSortableUniqueIdResult.GetValue()
-            : null;
+        return latestSortableUniqueId;
     }
 
     private static SortableUniqueId? ResolveSinceForRead(

@@ -1,3 +1,4 @@
+using Sekiban.Dcb.Boundaries;
 using System.Reflection;
 using Amazon.DynamoDBv2;
 using Dcb.Domain.WithoutResult;
@@ -75,11 +76,13 @@ public sealed class ExpectedTagPositionUnsupportedProviderInvocationTests
             Assert.IsAssignableFrom<ISerializedExpectedTagPositionSekibanDcbExecutor>(executor)
                 .CommitSerializableEventsWithExpectedTagPositionsAsync(ExpectedV2Request()));
         AssertUnsupported(directV2);
+        AssertSerializedBoundary(directV2);
         Assert.Equal(0, observed.ProviderWriteCalls);
 
         var wire = await Assert.ThrowsAsync<ConditionNotSupportedException>(() =>
             new SerializedCommitAcceptor(executor).AcceptAsync(ExpectedV2Wire()));
         AssertUnsupported(wire);
+        AssertSerializedBoundary(wire);
         Assert.Equal(0, observed.ProviderWriteCalls);
 
         var cluster = DispatchProxy.Create<IClusterClient, UnreachableClusterClient>();
@@ -88,11 +91,13 @@ public sealed class ExpectedTagPositionUnsupportedProviderInvocationTests
             Assert.IsAssignableFrom<ISerializedExpectedTagPositionSekibanDcbExecutor>(orleans)
                 .CommitSerializableEventsWithExpectedTagPositionsAsync(ExpectedV2Request()));
         AssertUnsupported(orleansDirectV2);
+        AssertSerializedBoundary(orleansDirectV2);
         Assert.Equal(0, observed.ProviderWriteCalls);
 
         var orleansWire = await Assert.ThrowsAsync<ConditionNotSupportedException>(() =>
             new SerializedCommitAcceptor(orleans).AcceptAsync(ExpectedV2Wire()));
         AssertUnsupported(orleansWire);
+        AssertSerializedBoundary(orleansWire);
         Assert.Equal(0, observed.ProviderWriteCalls);
     }
 
@@ -149,6 +154,12 @@ public sealed class ExpectedTagPositionUnsupportedProviderInvocationTests
         });
         return new DynamoDbEventStore(new DynamoDbContext(client, options), domain.EventTypes, new DefaultServiceIdProvider());
     }
+
+    // The serialized members record the boundary they failed at, like every other WithoutResult member.
+    private static void AssertSerializedBoundary(Exception exception) =>
+        Assert.Equal(
+            "ISerializedExpectedTagPositionSekibanDcbExecutor.CommitSerializableEventsWithExpectedTagPositionsAsync",
+            exception.Data[GuardedUnwrap.OperationDataKey]);
 
     private static void AssertUnsupported(Exception exception)
     {

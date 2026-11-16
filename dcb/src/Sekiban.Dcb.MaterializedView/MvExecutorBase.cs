@@ -1045,14 +1045,39 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvOrleansCatch
         CancellationToken cancellationToken,
         bool classifyFailures) => await CompleteCatchUpInternalAsync(
             host, serviceId, readResult, null, currentStatus, cancellationToken, classifyFailures,
-            currentStatus.OriginalEntries ?? [new MvRegistryEntry
-            {
-                ServiceId = serviceId, ViewName = host.ViewName, ViewVersion = host.ViewVersion,
-                LogicalTable = string.Empty, PhysicalTable = string.Empty, Status = currentStatus.Status,
-                CurrentCheckpointTruth = currentStatus.CurrentCheckpointTruth
-            }]).ConfigureAwait(false);
+            LegacyOriginalEntries(host, serviceId, currentStatus)).ConfigureAwait(false);
+
+    private static IReadOnlyList<MvRegistryEntry> LegacyOriginalEntries(
+        IMvApplyHost host,
+        string serviceId,
+        MvProjectionStatusSnapshot currentStatus) =>
+        currentStatus.OriginalEntries ?? [new MvRegistryEntry
+        {
+            ServiceId = serviceId, ViewName = host.ViewName, ViewVersion = host.ViewVersion,
+            LogicalTable = string.Empty, PhysicalTable = string.Empty, Status = currentStatus.Status,
+            CurrentCheckpointTruth = currentStatus.CurrentCheckpointTruth
+        }];
 
     // Exactly one of readEvents and readFailure is set: the events read for this catch-up, or why the read failed.
+    /// <summary>
+    ///     Completes a catch-up whose event read failed. The failure is classified exactly as a failed read inside
+    ///     <see cref="CatchUpOnceAsync" /> is (after the same lifecycle checks), so a derived executor that performs its
+    ///     own read reports it the same way.
+    /// </summary>
+    protected async Task<MvCatchUpResult> CompleteCatchUpAsync(
+        IMvApplyHost host,
+        string serviceId,
+        Exception readFailure,
+        MvProjectionStatusSnapshot currentStatus,
+        CancellationToken cancellationToken,
+        bool classifyFailures = true)
+    {
+        ArgumentNullException.ThrowIfNull(readFailure);
+        return await CompleteCatchUpInternalAsync(
+            host, serviceId, null, readFailure, currentStatus, cancellationToken, classifyFailures,
+            LegacyOriginalEntries(host, serviceId, currentStatus)).ConfigureAwait(false);
+    }
+
     internal async Task<MvCatchUpResult> CompleteCatchUpInternalAsync(
         IMvApplyHost host, string serviceId, IEnumerable<SerializableEvent>? readEvents, Exception? readFailure,
         MvProjectionStatusSnapshot currentStatus, CancellationToken cancellationToken,

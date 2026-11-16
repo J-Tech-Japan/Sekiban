@@ -8,11 +8,15 @@ namespace Sekiban.Dcb;
 /// </summary>
 internal static class ResultBoxBridge
 {
-    internal static T Unwrap<T>(ResultBox<T> box) where T : notnull
+    internal static T Unwrap<T>(ResultBox<T> box) where T : notnull =>
+        Unwrap(box, "A WithResult projector, query or handler returned a null ResultBox.");
+
+    /// <summary>Opens a box; a null box fails with an <see cref="InvalidOperationException" /> carrying <paramref name="nullBoxMessage" />.</summary>
+    internal static T Unwrap<T>(ResultBox<T> box, string nullBoxMessage) where T : notnull
     {
         if (box is null)
         {
-            throw new InvalidOperationException("A WithResult projector, query or handler returned a null ResultBox.");
+            throw new InvalidOperationException(nullBoxMessage);
         }
 
         if (!box.IsSuccess)
@@ -26,6 +30,10 @@ internal static class ResultBoxBridge
     }
 
     /// <summary>Awaits a box returned by WithResult user code and opens it as <see cref="Unwrap{T}" /> does.</summary>
+    // The query execution core has always reported these null results with these messages.
+    internal const string NullQueryResultMessage = "HandleQuery returned null result";
+    internal const string NullListQueryResultMessage = "Query handler returned invalid result type";
+
     internal static async Task<T> UnwrapAsync<T>(Task<ResultBox<T>> boxTask) where T : notnull =>
         Unwrap(await boxTask);
 }

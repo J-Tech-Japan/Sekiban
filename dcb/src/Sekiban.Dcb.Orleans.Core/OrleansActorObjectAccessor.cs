@@ -138,7 +138,7 @@ public class OrleansActorObjectAccessor : IActorObjectAccessor, IExecutorRuntime
     ///     Wrapper for TagConsistentGrain to implement ITagConsistentActorCommon. A failed result from the grain is
     ///     thrown as the exception it carries.
     /// </summary>
-    private class TagConsistentGrainWrapper : ITagConsistentActorCommon
+    private class TagConsistentGrainWrapper : ITagConsistentActorCommon, IGrainBackedTagConsistentActor
     {
         private readonly ITagConsistentGrain _grain;
 
@@ -148,6 +148,8 @@ public class OrleansActorObjectAccessor : IActorObjectAccessor, IExecutorRuntime
 
         public Task<string> GetLatestSortableUniqueIdAsync() =>
             _grain.GetLatestSortableUniqueIdAsync().GetValueOrRethrowAsync();
+
+        public Task<ResultBox<string>> GetLatestSortableUniqueIdResultAsync() => _grain.GetLatestSortableUniqueIdAsync();
 
         public Task<TagWriteReservation> MakeReservationAsync(string? lastSortableUniqueId) =>
             _grain.MakeReservationAsync(lastSortableUniqueId).GetValueOrRethrowAsync();
