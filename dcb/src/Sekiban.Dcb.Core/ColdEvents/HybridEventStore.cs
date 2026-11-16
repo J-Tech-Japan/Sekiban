@@ -484,8 +484,10 @@ public sealed class HybridEventStore : IEventStore, IStreamingSerializableEventS
                 events,
                 alignToSegmentBoundary);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception)
         {
+            // The list read has no caller token (the cold read runs on CancellationToken.None), so every failure,
+            // a provider timeout surfacing as OperationCanceledException included, falls back to the hot store.
             _logger.LogWarning("Cold read failed for {ServiceId}, falling back to hot store", context.ServiceId);
             return await ReadHotOnlyAsync(
                 context,
@@ -560,8 +562,9 @@ public sealed class HybridEventStore : IEventStore, IStreamingSerializableEventS
                 cancellationToken,
                 alignToSegmentBoundary);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception) when (!cancellationToken.IsCancellationRequested)
         {
+            // Only the caller's own cancellation stops the read; any other cold failure falls back to the hot store.
             _logger.LogWarning("Cold read failed for {ServiceId}, falling back to hot store", context.ServiceId);
             return await StreamHotOnlyAsync(
                 context,
@@ -896,7 +899,7 @@ public sealed class HybridEventStore : IEventStore, IStreamingSerializableEventS
                     onEvent,
                     cancellationToken);
             }
-            catch (Exception ex) when (ex is not OperationCanceledException)
+            catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
             {
                 _logger.LogWarning(
                     ex,
@@ -939,7 +942,7 @@ public sealed class HybridEventStore : IEventStore, IStreamingSerializableEventS
         {
             stream = await _coldStorage.OpenReadAsync(path, cancellationToken);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception) when (!cancellationToken.IsCancellationRequested)
         {
             _logger.LogWarning("Failed to read cold segment {Path}", path);
             throw;

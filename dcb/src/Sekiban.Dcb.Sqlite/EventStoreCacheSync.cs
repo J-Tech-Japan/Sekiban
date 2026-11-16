@@ -298,8 +298,11 @@ public class EventStoreCacheSync
             stopwatch.Elapsed);
     }
 
-    /// <summary>Awaits a store call and returns its value, or the exception it failed with (reported, not thrown).</summary>
-    private static async Task<(T Value, Exception? Error)> CaptureAsync<T>(Task<T> task)
+    /// <summary>
+    ///     Awaits a store call and returns its value, or the exception it failed with (reported, not thrown). A sync
+    ///     failure is logged as "Cache sync failed", as 10.x did for store failures it did not receive as a result.
+    /// </summary>
+    private async Task<(T Value, Exception? Error)> CaptureAsync<T>(Task<T> task, bool logFailure = true)
     {
         try
         {
@@ -307,6 +310,11 @@ public class EventStoreCacheSync
         }
         catch (Exception ex)
         {
+            if (logFailure)
+            {
+                _logger?.LogError(ex, "Cache sync failed");
+            }
+
             return (default!, ex);
         }
     }
@@ -314,7 +322,7 @@ public class EventStoreCacheSync
     /// <summary>An unreadable local cache counts as empty.</summary>
     private async Task<long> GetLocalEventCountOrZeroAsync()
     {
-        var (count, error) = await CaptureAsync(_localStore.GetEventCountAsync());
+        var (count, error) = await CaptureAsync(_localStore.GetEventCountAsync(), logFailure: false);
         return error is null ? count : 0;
     }
 

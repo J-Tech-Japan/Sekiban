@@ -657,6 +657,39 @@ public sealed partial class MultiProjectionGrainCatchUpProductionPathTests
         typeof(Grain).GetField("<Runtime>k__BackingField", BindingFlags.Instance | BindingFlags.NonPublic)!
             .SetValue(grain, DispatchProxy.Create<IGrainRuntime, DeactivationOnlyRuntime>());
 
+    [Fact]
+    public async Task Streaming_callback_failure_propagates_instead_of_counting_as_a_read_failure()
+    {
+        // The store read itself succeeds; applying a full chunk inside the stream callback fails in the host.
+        var store = new StreamingOnlyEventStore();
+        var host = new ProductionCatchUpProjectionHost
+        {
+            AllowApply = true, ThrowOnApply = true, FailInitialStateRead = false
+        };
+        var grain = CreateGrain(store, host, processedEvents: []);
+        SetPrivateField(grain, "_eventsProcessed", 0L);
+        var progress = GetPrivateField<object>(grain, "_catchUpProgress");
+        progress.GetType().GetProperty("IsActive")!.SetValue(progress, true);
+        progress.GetType().GetProperty("StartTime")!.SetValue(progress, DateTime.UtcNow);
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => InvokePrivateTaskAsync(grain, "ProcessSingleCatchUpBatch", []));
+
+        Assert.Equal("pending event application failed", error.Message);
+        Assert.Null(GetPrivateFieldValue(grain, "_catchUpReadException"));
+    }
+
+    private sealed class StreamingOnlyEventStore() : ProductionCatchUpEventStore([4096]), IStreamingSerializableEventStore
+    {
+        public async Task<SerializableEventStreamReadResult> StreamAllSerializableEventsAsync(
+            SortableUniqueId? since, int? maxCount, Func<SerializableEvent, ValueTask> onEvent,
+            CancellationToken cancellationToken = default)
+        {
+            foreach (var ev in Events) await onEvent(ev);
+            return new SerializableEventStreamReadResult(Events.Count, Events[^1].SortableUniqueIdValue);
+        }
+    }
+
     private sealed class ChunkFailureEventStore() : ProductionCatchUpEventStore([4096]), IStreamingSerializableEventStore
     {
         private int _attempt;

@@ -61,8 +61,8 @@ public static class ColdControlFileHelper
     }
 
     /// <summary>
-    ///     A control file that is missing or cannot be read is treated as absent (the behaviour callers rely on).
-    ///     Cancellation still propagates.
+    ///     A control file that is missing or cannot be read is treated as absent (the behaviour callers rely on),
+    ///     including a provider timeout. Only the caller's own cancellation propagates.
     /// </summary>
     private static async Task<ColdStorageObject?> TryGetAsync(IColdObjectStorage storage, string path, CancellationToken ct)
     {
@@ -70,7 +70,7 @@ public static class ColdControlFileHelper
         {
             return await storage.GetAsync(path, ct);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception) when (!ct.IsCancellationRequested)
         {
             return null;
         }

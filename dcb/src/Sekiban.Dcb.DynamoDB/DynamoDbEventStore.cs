@@ -276,6 +276,9 @@ public partial class DynamoDbEventStore : IHotEventStore, IStorageDurabilityDesc
     public async Task<IEnumerable<Event>> ReadEventsByTagAsync(ITag tag, SortableUniqueId? since = null)
     {
         ArgumentNullException.ThrowIfNull(tag);
+        // Failures 10.x returned as a failed result without logging (a dangling tag entry, an unreadable payload)
+        // keep their exception but are not logged as read failures.
+        Exception? unloggedFailure = null;
         try
         {
             await _context.EnsureTablesAsync().ConfigureAwait(false);
@@ -296,10 +299,19 @@ public partial class DynamoDbEventStore : IHotEventStore, IStorageDurabilityDesc
             {
                 if (!eventsById.TryGetValue(tagItem.EventId, out var dynEvent))
                 {
-                    throw new InvalidOperationException($"Event not found for tag entry: {tagItem.EventId}");
+                    throw unloggedFailure = new InvalidOperationException($"Event not found for tag entry: {tagItem.EventId}");
                 }
 
-                var payload = DeserializeEventPayload(dynEvent.EventType, dynEvent.Payload);
+                IEventPayload payload;
+                try
+                {
+                    payload = DeserializeEventPayload(dynEvent.EventType, dynEvent.Payload);
+                }
+                catch (Exception deserializeFailure)
+                {
+                    unloggedFailure = deserializeFailure;
+                    throw;
+                }
 
                 result.Add(dynEvent.ToEvent(payload));
             }
@@ -308,7 +320,7 @@ public partial class DynamoDbEventStore : IHotEventStore, IStorageDurabilityDesc
         }
         catch (Exception ex)
         {
-            if (_logger != null)
+            if (_logger != null && !ReferenceEquals(ex, unloggedFailure))
                 LogReadFailed(_logger, ex.Message, ex);
             throw;
         }
@@ -319,6 +331,9 @@ public partial class DynamoDbEventStore : IHotEventStore, IStorageDurabilityDesc
     /// </summary>
     public async Task<Event?> ReadEventAsync(Guid eventId)
     {
+        // Failures 10.x returned as a failed result without logging (a dangling tag entry, an unreadable payload)
+        // keep their exception but are not logged as read failures.
+        Exception? unloggedFailure = null;
         try
         {
             await _context.EnsureTablesAsync().ConfigureAwait(false);
@@ -336,13 +351,22 @@ public partial class DynamoDbEventStore : IHotEventStore, IStorageDurabilityDesc
                 return null;
 
             var dynEvent = DynamoEvent.FromAttributeValues(response.Item);
-            var payload = DeserializeEventPayload(dynEvent.EventType, dynEvent.Payload);
+            IEventPayload payload;
+            try
+            {
+                payload = DeserializeEventPayload(dynEvent.EventType, dynEvent.Payload);
+            }
+            catch (Exception deserializeFailure)
+            {
+                unloggedFailure = deserializeFailure;
+                throw;
+            }
 
             return dynEvent.ToEvent(payload);
         }
         catch (Exception ex)
         {
-            if (_logger != null)
+            if (_logger != null && !ReferenceEquals(ex, unloggedFailure))
                 LogReadFailed(_logger, ex.Message, ex);
             throw;
         }
@@ -1222,6 +1246,9 @@ public partial class DynamoDbEventStore : IHotEventStore, IStorageDurabilityDesc
     public async Task<IEnumerable<SerializableEvent>> ReadSerializableEventsByTagAsync(ITag tag, SortableUniqueId? since = null)
     {
         ArgumentNullException.ThrowIfNull(tag);
+        // Failures 10.x returned as a failed result without logging (a dangling tag entry, an unreadable payload)
+        // keep their exception but are not logged as read failures.
+        Exception? unloggedFailure = null;
         try
         {
             await _context.EnsureTablesAsync().ConfigureAwait(false);
@@ -1242,7 +1269,7 @@ public partial class DynamoDbEventStore : IHotEventStore, IStorageDurabilityDesc
             {
                 if (!eventsById.TryGetValue(tagItem.EventId, out var dynEvent))
                 {
-                    throw new InvalidOperationException($"Event not found for tag entry: {tagItem.EventId}");
+                    throw unloggedFailure = new InvalidOperationException($"Event not found for tag entry: {tagItem.EventId}");
                 }
 
                 result.Add(new SerializableEvent(
@@ -1261,7 +1288,7 @@ public partial class DynamoDbEventStore : IHotEventStore, IStorageDurabilityDesc
         }
         catch (Exception ex)
         {
-            if (_logger != null)
+            if (_logger != null && !ReferenceEquals(ex, unloggedFailure))
                 LogReadFailed(_logger, ex.Message, ex);
             throw;
         }

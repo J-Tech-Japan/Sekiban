@@ -5346,35 +5346,55 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         {
             var readStartedAt = System.Diagnostics.Stopwatch.GetTimestamp();
             using var projectionContext = HybridReadProjectionContext.Push(projectorName);
-            var streamResult = await streamingCatchUpStore.StreamAllSerializableEventsAsync(
-                _catchUpProgress.CurrentPosition,
-                batchSize,
-                async ev =>
-                {
-                    if (!IsCurrentCatchUpBatch(run, host)) return;
-                    fetchedCount++;
-                    lastFetchedSortableUniqueId = ev.SortableUniqueIdValue;
-                    UpdateTargetPosition(ev.SortableUniqueIdValue);
-                    MarkProjectionStatusDirty(ev.SortableUniqueIdValue);
-
-                    if (_processedEventIds.Contains(ev.Id))
+            // Only a failure of the store read is a stream read failure. An exception thrown by this grain's own
+            // callback (for example an event the host cannot apply) propagates to the batch failure handling, as it
+            // did when the store reported read failures as a failed ResultBox and let callback exceptions through.
+            Exception? callbackFailure = null;
+            ResultBox<SerializableEventStreamReadResult> streamResult;
+            try
+            {
+                streamResult = ResultBox.FromValue(await streamingCatchUpStore.StreamAllSerializableEventsAsync(
+                    _catchUpProgress.CurrentPosition,
+                    batchSize,
+                    async ev =>
                     {
-                        return;
-                    }
+                        try
+                        {
+                            if (!IsCurrentCatchUpBatch(run, host)) return;
+                            fetchedCount++;
+                            lastFetchedSortableUniqueId = ev.SortableUniqueIdValue;
+                            UpdateTargetPosition(ev.SortableUniqueIdValue);
+                            MarkProjectionStatusDirty(ev.SortableUniqueIdValue);
 
-                    if (_catchUpProgress.CurrentPosition != null &&
-                        string.Compare(ev.SortableUniqueIdValue, _catchUpProgress.CurrentPosition.Value, StringComparison.Ordinal) <= 0)
-                    {
-                        return;
-                    }
+                            if (_processedEventIds.Contains(ev.Id))
+                            {
+                                return;
+                            }
 
-                    buffer.Add(ev);
-                    eventTypeNames.Add(ev.EventPayloadName);
-                    if (buffer.Count >= StreamingCatchUpApplyChunkSize)
-                    {
-                        await FlushBufferAsync();
-                    }
-                }).ToResultBoxPropagatingCancellationAsync();
+                            if (_catchUpProgress.CurrentPosition != null &&
+                                string.Compare(ev.SortableUniqueIdValue, _catchUpProgress.CurrentPosition.Value, StringComparison.Ordinal) <= 0)
+                            {
+                                return;
+                            }
+
+                            buffer.Add(ev);
+                            eventTypeNames.Add(ev.EventPayloadName);
+                            if (buffer.Count >= StreamingCatchUpApplyChunkSize)
+                            {
+                                await FlushBufferAsync();
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            callbackFailure = ex;
+                            throw;
+                        }
+                    }));
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException && !ReferenceEquals(ex, callbackFailure))
+            {
+                streamResult = ResultBox.Error<SerializableEventStreamReadResult>(ex);
+            }
             if (!IsCurrentCatchUpBatch(run, host)) return new CatchUpBatchResult(0, 0, null, null);
             hybridReadBatchMetadata = HybridReadProjectionContext.BatchMetadata;
             var streamElapsedMs = (long)System.Diagnostics.Stopwatch.GetElapsedTime(readStartedAt).TotalMilliseconds;

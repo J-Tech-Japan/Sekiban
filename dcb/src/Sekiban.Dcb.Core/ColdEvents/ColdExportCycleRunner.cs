@@ -95,7 +95,7 @@ public sealed class ColdExportCycleRunner
             {
                 value = await _exporter.ExportIncrementalAsync(serviceId, ct);
             }
-            catch (Exception ex) when (ex is not OperationCanceledException)
+            catch (Exception ex) when (!(ex is OperationCanceledException && ct.IsCancellationRequested))
             {
                 _logger.LogError(
                     ex,

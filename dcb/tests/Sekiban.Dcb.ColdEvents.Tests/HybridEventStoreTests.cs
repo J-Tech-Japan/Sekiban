@@ -275,6 +275,52 @@ public class HybridEventStoreTests
     }
 
     [Fact]
+    public async Task Should_fall_back_to_hot_when_cold_read_times_out_without_caller_cancellation()
+    {
+        // Given: a cold segment whose read surfaces a provider timeout as an OperationCanceledException
+        var coldEvent = CreateEvent(DateTime.UtcNow.AddDays(-2), "Cold");
+        await StoreColdManifestAndSegmentsAsync([coldEvent], coldEvent.SortableUniqueIdValue);
+        var hotEvent = CreateEvent(DateTime.UtcNow.AddMinutes(-5), "HotFallback");
+        var hybrid = new HybridEventStore(
+            new StubSerializableEventStore([hotEvent]),
+            new TimingOutSegmentStorage(_coldStorage),
+            _segmentFormatHandler,
+            new DefaultServiceIdProvider(),
+            Options.Create(EnabledOptions),
+            NullLogger<HybridEventStore>.Instance);
+
+        // Then: both reads fall back to the hot store, as 10.x did for any failed cold read
+        var listed = Assert.Single(await hybrid.ReadAllSerializableEventsAsync());
+        Assert.Equal("HotFallback", listed.EventPayloadName);
+        var streamed = new List<string>();
+        await hybrid.StreamAllSerializableEventsAsync(null, null, evt =>
+        {
+            streamed.Add(evt.EventPayloadName);
+            return ValueTask.CompletedTask;
+        });
+        Assert.Equal(["HotFallback"], streamed);
+
+        // But the caller's own cancellation stops the streaming read
+        using var cancelled = new CancellationTokenSource();
+        await cancelled.CancelAsync();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => hybrid.StreamAllSerializableEventsAsync(
+            null, null, _ => ValueTask.CompletedTask, cancelled.Token));
+    }
+
+    private sealed class TimingOutSegmentStorage(IColdObjectStorage inner) : IColdObjectStorage
+    {
+        public Task<ColdStorageObject?> GetAsync(string path, CancellationToken ct) => inner.GetAsync(path, ct);
+        public Task<Stream> OpenReadAsync(string path, CancellationToken ct) =>
+            Task.FromException<Stream>(new TaskCanceledException("cold segment read timed out"));
+        public Task<bool> PutAsync(string path, Stream data, string? expectedETag, CancellationToken ct) =>
+            inner.PutAsync(path, data, expectedETag, ct);
+        public Task<bool> PutAsync(string path, byte[] data, string? expectedETag, CancellationToken ct) =>
+            inner.PutAsync(path, data, expectedETag, ct);
+        public Task<IReadOnlyList<string>> ListAsync(string prefix, CancellationToken ct) => inner.ListAsync(prefix, ct);
+        public Task<bool> DeleteAsync(string path, CancellationToken ct) => inner.DeleteAsync(path, ct);
+    }
+
+    [Fact]
     public async Task Should_not_drop_distinct_events_with_same_sortable_unique_id()
     {
         // Given: cold and hot have same sortable unique id but different event ids/payloads

@@ -1638,12 +1638,22 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvOrleansCatch
     private static SortableUniqueId CreateSafeThreshold(int safeWindowMs) =>
         new(SortableUniqueId.Generate(DateTime.UtcNow.AddMilliseconds(-safeWindowMs), Guid.Empty));
 
-    private static async Task<MvCheckpointTruth> CaptureTargetCheckpointFromStoreAsync(IEventStore eventStore)
+    internal static async Task<MvCheckpointTruth> CaptureTargetCheckpointFromStoreAsync(IEventStore eventStore)
     {
+        string latestSortableUniqueId;
         try
         {
-            // A failed read is reported as ReadUnavailable by the catch below.
-            var latestSortableUniqueId = await eventStore.GetLatestSortableUniqueIdAsync().ConfigureAwait(false);
+            latestSortableUniqueId = await eventStore.GetLatestSortableUniqueIdAsync().ConfigureAwait(false);
+        }
+        catch (Exception)
+        {
+            // Any failed read is ReadUnavailable, as every failed read was in 10.x. No caller token reaches this read,
+            // so an OperationCanceledException here is a provider timeout, not caller cancellation.
+            return MvCheckpointTruth.Unknown(MvCheckpointUnknownReason.ReadUnavailable);
+        }
+
+        try
+        {
             if (string.IsNullOrWhiteSpace(latestSortableUniqueId))
             {
                 return MvCheckpointTruth.KnownZero(MvCheckpointProvenance.AuthoritativeTargetCapture());

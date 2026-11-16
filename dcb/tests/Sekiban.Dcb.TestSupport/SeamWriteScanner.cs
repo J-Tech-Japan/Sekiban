@@ -71,10 +71,9 @@ public static class SeamWriteScanner
         {
             foreach (var (method, il, typeArgs, methodArgs, methodId) in MethodBodies(type))
             {
-                for (var i = 0; i + 5 <= il.Length; i++)
+                foreach (var (opCode, token) in IlInstructionReader.Read(il))
                 {
-                    var op = il[i];
-                    var token = BitConverter.ToInt32(il, i + 1);
+                    var op = opCode.Value;
                     if (op is 0x28 or 0x6F) // call / callvirt
                     {
                         MethodBase? callee;
@@ -125,14 +124,14 @@ public static class SeamWriteScanner
         {
             foreach (var (method, il, typeArgs, methodArgs, _) in MethodBodies(type))
             {
-                for (var i = 0; i + 5 <= il.Length; i++)
+                foreach (var (opCode, token) in IlInstructionReader.Read(il))
                 {
-                    if (il[i] is not (0x28 or 0x6F)) // call / callvirt
+                    if (opCode.Value is not (0x28 or 0x6F)) // call / callvirt
                     {
                         continue;
                     }
                     MethodBase? callee;
-                    try { callee = method.Module.ResolveMethod(BitConverter.ToInt32(il, i + 1), typeArgs, methodArgs); }
+                    try { callee = method.Module.ResolveMethod(token, typeArgs, methodArgs); }
                     catch { continue; }
                     if (callee?.Name == "SetValue" && callee.DeclaringType?.Namespace == "System.Reflection")
                     {
@@ -159,11 +158,11 @@ public static class SeamWriteScanner
         }
 
         var typeArgs = prop.DeclaringType is { IsGenericType: true } dt ? dt.GetGenericArguments() : Type.EmptyTypes;
-        for (var i = 0; i + 5 <= il.Length; i++)
+        foreach (var (opCode, token) in IlInstructionReader.Read(il))
         {
-            if (il[i] is 0x7B or 0x7E) // ldfld / ldsfld
+            if (opCode.Value is 0x7B or 0x7E) // ldfld / ldsfld
             {
-                try { return getter.Module.ResolveField(BitConverter.ToInt32(il, i + 1), typeArgs, Type.EmptyTypes); }
+                try { return getter.Module.ResolveField(token, typeArgs, Type.EmptyTypes); }
                 catch { return null; }
             }
         }
