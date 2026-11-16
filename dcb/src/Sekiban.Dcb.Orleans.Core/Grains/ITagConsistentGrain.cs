@@ -1,4 +1,3 @@
-using ResultBoxes;
 using Sekiban.Dcb.Tags;
 namespace Sekiban.Dcb.Orleans.Grains;
 
@@ -14,14 +13,23 @@ public interface ITagConsistentGrain : IGrainWithStringKey
     Task<string> GetTagActorIdAsync();
 
     /// <summary>
-    ///     Gets the latest sortable unique ID known to this actor
+    ///     Gets the latest sortable unique ID known to this actor. A failure of the actor (not initialized, catch-up
+    ///     read failed) faults the returned task.
     /// </summary>
-    Task<ResultBox<string>> GetLatestSortableUniqueIdAsync();
+    Task<string> GetLatestSortableUniqueIdAsync();
 
     /// <summary>
-    ///     Make a reservation for a tag write
+    ///     Gets the latest sortable unique ID known to this actor, or <c>null</c> when the actor reports a failure (the
+    ///     latest position is unknown). Only a failed grain call faults the returned task, so a caller can tell the
+    ///     grain's own failure from a transport or timeout failure.
     /// </summary>
-    Task<ResultBox<TagWriteReservation>> MakeReservationAsync(string? lastSortableUniqueId);
+    Task<string?> TryGetLatestSortableUniqueIdAsync();
+
+    /// <summary>
+    ///     Make a reservation for a tag write. A rejected reservation (the tag is reserved or has been modified) faults
+    ///     the returned task.
+    /// </summary>
+    Task<TagWriteReservation> MakeReservationAsync(string? lastSortableUniqueId);
 
     /// <summary>
     ///     Confirm a reservation

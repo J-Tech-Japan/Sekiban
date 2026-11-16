@@ -79,7 +79,7 @@ public class ProjectionFaultFirstQueryBarrierTests : IAsyncLifetime
 
         var grain = Client.GetGrain<IMultiProjectionGrain>(DomainTypes.FaultTestProjector.MultiProjectorName);
 
-        var state = await grain.GetSnapshotJsonAsync();
+        var state = await grain.GetSnapshotJsonAsync().AsResultBoxAsync();
         Assert.False(state.IsSuccess); // not an empty success
         var ex = state.GetException();
         Assert.Contains("InvalidOperationException", ex.ToString());   // original exception TYPE preserved
@@ -97,11 +97,11 @@ public class ProjectionFaultFirstQueryBarrierTests : IAsyncLifetime
         await Store.WriteSerializableEventsAsync(new List<SerializableEvent> { safeEvent }).AsResultBoxAsync();
 
         var grain = Client.GetGrain<IMultiProjectionGrain>(DomainTypes.FaultTestProjector.MultiProjectorName);
-        var baseline = await grain.GetStateAsync();
+        var baseline = await grain.GetStateAsync().AsResultBoxAsync();
         Assert.True(baseline.IsSuccess);
         Assert.True(baseline.GetValue().IsSafeState);
         Assert.Equal(1, ((DomainTypes.FaultTestProjector)baseline.GetValue().Payload).Count);
-        Assert.True((await grain.PersistStateAsync()).IsSuccess);
+        Assert.True((await grain.PersistStateAsync().AsResultBoxAsync()).IsSuccess);
 
         await grain.RequestDeactivationAsync();
 
@@ -119,23 +119,23 @@ public class ProjectionFaultFirstQueryBarrierTests : IAsyncLifetime
         };
         await firstQuery.WaitAsync(TimeSpan.FromSeconds(5));
 
-        var served = await cold.GetStateAsync(canGetUnsafeState: true);
+        var served = await cold.GetStateAsync(canGetUnsafeState: true).AsResultBoxAsync();
         Assert.True(served.IsSuccess);
         Assert.False(served.GetValue().IsSafeState);
         Assert.Equal(2, ((DomainTypes.FaultTestProjector)served.GetValue().Payload).Count);
         Assert.Equal(inWindowEvent.SortableUniqueIdValue, served.GetValue().LastSortableUniqueId);
 
-        var safe = await cold.GetStateAsync(canGetUnsafeState: false);
+        var safe = await cold.GetStateAsync(canGetUnsafeState: false).AsResultBoxAsync();
         Assert.True(safe.IsSuccess);
         Assert.True(safe.GetValue().IsSafeState);
         Assert.Equal(1, ((DomainTypes.FaultTestProjector)safe.GetValue().Payload).Count);
         Assert.Equal(safeEvent.SortableUniqueIdValue, safe.GetValue().LastSortableUniqueId);
 
         async Task AssertStateAsync(IMultiProjectionGrain target) =>
-            Assert.True((await target.GetStateAsync()).IsSuccess);
+            Assert.True((await target.GetStateAsync().AsResultBoxAsync()).IsSuccess);
 
         async Task AssertSnapshotAsync(IMultiProjectionGrain target) =>
-            Assert.True((await target.GetSnapshotJsonAsync()).IsSuccess);
+            Assert.True((await target.GetSnapshotJsonAsync().AsResultBoxAsync()).IsSuccess);
 
         async Task AssertScalarAsync()
         {
@@ -165,10 +165,10 @@ public class ProjectionFaultFirstQueryBarrierTests : IAsyncLifetime
 
         var grain = Client.GetGrain<IMultiProjectionGrain>(DomainTypes.FaultTestProjector.MultiProjectorName);
 
-        var stateResult = await grain.GetStateAsync();
+        var stateResult = await grain.GetStateAsync().AsResultBoxAsync();
         Assert.False(stateResult.IsSuccess);
         Assert.Contains("read failure", stateResult.GetException().ToString());
-        var firstState = await grain.GetSnapshotJsonAsync();
+        var firstState = await grain.GetSnapshotJsonAsync().AsResultBoxAsync();
         Assert.False(firstState.IsSuccess);
         var stateEx = firstState.GetException();
         Assert.Contains("InvalidOperationException", stateEx.ToString()); // original exception TYPE preserved
@@ -183,15 +183,15 @@ public class ProjectionFaultFirstQueryBarrierTests : IAsyncLifetime
 
         // A later query must NOT bypass the barrier into empty success while the read is still failing: the barrier was
         // not marked complete on the transient failure, so the query re-runs it and fails closed again.
-        Assert.False((await grain.GetSnapshotJsonAsync()).IsSuccess);
+        Assert.False((await grain.GetSnapshotJsonAsync().AsResultBoxAsync()).IsSuccess);
         Assert.False((await _executor.QueryAsync(new DomainTypes.FaultCountQuery())).IsSuccess);
         Assert.False((await _executor.QueryAsync(new DomainTypes.FaultRowListQuery())).IsSuccess);
 
         // The streaming provider recovers. Because the failed gate attempt was not marked complete, the next call
         // performs another authoritative traversal and all four surfaces become available.
         Store.FailReads = false;
-        Assert.True((await grain.GetStateAsync()).IsSuccess);
-        Assert.True((await grain.GetSnapshotJsonAsync()).IsSuccess);
+        Assert.True((await grain.GetStateAsync().AsResultBoxAsync()).IsSuccess);
+        Assert.True((await grain.GetSnapshotJsonAsync().AsResultBoxAsync()).IsSuccess);
         Assert.True((await _executor.QueryAsync(new DomainTypes.FaultCountQuery())).IsSuccess);
         Assert.True((await _executor.QueryAsync(new DomainTypes.FaultRowListQuery())).IsSuccess);
     }
@@ -208,11 +208,11 @@ public class ProjectionFaultFirstQueryBarrierTests : IAsyncLifetime
 
         var grain = Client.GetGrain<IMultiProjectionGrain>(DomainTypes.FaultTestProjector.MultiProjectorName);
 
-        var state = await grain.GetStateAsync();
+        var state = await grain.GetStateAsync().AsResultBoxAsync();
         Assert.False(state.IsSuccess);
         Assert.Contains("did not reach the event-store head", state.GetException().ToString());
 
-        var snapshot = await grain.GetSnapshotJsonAsync();
+        var snapshot = await grain.GetSnapshotJsonAsync().AsResultBoxAsync();
         Assert.False(snapshot.IsSuccess);
         Assert.Contains("did not reach the event-store head", snapshot.GetException().ToString());
 
@@ -225,8 +225,8 @@ public class ProjectionFaultFirstQueryBarrierTests : IAsyncLifetime
         Assert.Contains("did not reach the event-store head", list.GetException().ToString());
 
         Store.ShortReads = false;
-        Assert.True((await grain.GetStateAsync()).IsSuccess);
-        Assert.True((await grain.GetSnapshotJsonAsync()).IsSuccess);
+        Assert.True((await grain.GetStateAsync().AsResultBoxAsync()).IsSuccess);
+        Assert.True((await grain.GetSnapshotJsonAsync().AsResultBoxAsync()).IsSuccess);
         Assert.True((await _executor.QueryAsync(new DomainTypes.FaultCountQuery())).IsSuccess);
         Assert.True((await _executor.QueryAsync(new DomainTypes.FaultRowListQuery())).IsSuccess);
     }
@@ -237,22 +237,22 @@ public class ProjectionFaultFirstQueryBarrierTests : IAsyncLifetime
         var safeEvent = DomainTypes.Event(poison: false, tick: 2_000);
         await Store.WriteSerializableEventsAsync(new List<SerializableEvent> { safeEvent }).AsResultBoxAsync();
         var seed = Client.GetGrain<IMultiProjectionGrain>(DomainTypes.FaultTestProjector.MultiProjectorName);
-        Assert.True((await seed.GetStateAsync()).IsSuccess);
-        Assert.True((await seed.PersistStateAsync()).IsSuccess);
+        Assert.True((await seed.GetStateAsync().AsResultBoxAsync()).IsSuccess);
+        Assert.True((await seed.PersistStateAsync().AsResultBoxAsync()).IsSuccess);
         await seed.RequestDeactivationAsync();
 
         var poison = DomainTypes.Event(poison: true, tick: DateTime.UtcNow.Ticks);
         await Store.WriteSerializableEventsAsync(new List<SerializableEvent> { poison }).AsResultBoxAsync();
         var cold = Client.GetGrain<IMultiProjectionGrain>(DomainTypes.FaultTestProjector.MultiProjectorName);
 
-        Assert.False((await cold.GetStateAsync()).IsSuccess);
-        Assert.False((await cold.GetSnapshotJsonAsync()).IsSuccess);
+        Assert.False((await cold.GetStateAsync().AsResultBoxAsync()).IsSuccess);
+        Assert.False((await cold.GetSnapshotJsonAsync().AsResultBoxAsync()).IsSuccess);
         Assert.False((await _executor.QueryAsync(new DomainTypes.FaultCountQuery())).IsSuccess);
         Assert.False((await _executor.QueryAsync(new DomainTypes.FaultRowListQuery())).IsSuccess);
 
         await cold.RequestDeactivationAsync();
         var fresh = Client.GetGrain<IMultiProjectionGrain>(DomainTypes.FaultTestProjector.MultiProjectorName);
-        var restored = await fresh.GetSnapshotJsonAsync();
+        var restored = await fresh.GetSnapshotJsonAsync().AsResultBoxAsync();
         Assert.False(restored.IsSuccess);
         Assert.Contains(
             DomainTypes.FaultTestProjector.MultiProjectorName,
@@ -307,7 +307,7 @@ public class ProjectionFaultFirstQueryBarrierTests : IAsyncLifetime
 
         // Raw unsafe metadata would return Count=1 here and permanently miss the earlier poison. The first-query barrier
         // must instead start from the safe beginning, traverse the store, and re-establish the projection fault.
-        var result = await grain.GetStateAsync();
+        var result = await grain.GetStateAsync().AsResultBoxAsync();
         Assert.False(result.IsSuccess);
         Assert.Contains(DomainTypes.FaultTestProjector.MultiProjectorName, result.GetException().ToString());
         Assert.True(Store.SuccessfulStreamReadCount > 0);
@@ -324,13 +324,13 @@ public class ProjectionFaultFirstQueryBarrierTests : IAsyncLifetime
 
         var grain = Client.GetGrain<IMultiProjectionGrain>(DomainTypes.FaultTestProjector.MultiProjectorName);
 
-        var whileFailing = await grain.GetSnapshotJsonAsync();
+        var whileFailing = await grain.GetSnapshotJsonAsync().AsResultBoxAsync();
         Assert.False(whileFailing.IsSuccess);
         Assert.Contains("read failure", whileFailing.GetException().ToString());
 
         // Store recovers: the barrier retries on the next query, folds the poison and fails with the fault (not empty).
         Store.FailReads = false;
-        var afterRecovery = await grain.GetSnapshotJsonAsync();
+        var afterRecovery = await grain.GetSnapshotJsonAsync().AsResultBoxAsync();
         Assert.False(afterRecovery.IsSuccess);
         Assert.Contains(DomainTypes.FaultTestProjector.MultiProjectorName, afterRecovery.GetException().ToString());
         Assert.False((await _executor.QueryAsync(new DomainTypes.FaultCountQuery())).IsSuccess);
@@ -345,8 +345,8 @@ public class ProjectionFaultFirstQueryBarrierTests : IAsyncLifetime
 
         var grain = Client.GetGrain<IMultiProjectionGrain>(DomainTypes.FaultTestProjector.MultiProjectorName);
 
-        var a = grain.GetSnapshotJsonAsync();
-        var b = grain.GetSnapshotJsonAsync();
+        var a = grain.GetSnapshotJsonAsync().AsResultBoxAsync();
+        var b = grain.GetSnapshotJsonAsync().AsResultBoxAsync();
         var results = await Task.WhenAll(a, b);
         Assert.All(results, r => Assert.False(r.IsSuccess));
     }
@@ -360,7 +360,7 @@ public class ProjectionFaultFirstQueryBarrierTests : IAsyncLifetime
         // Persist a real empty checkpoint record, then reactivate. Its nullable position is authoritative presence:
         // background and barrier must share the restored "beginning" START instead of replacing it with host inference.
         var seed = Client.GetGrain<IMultiProjectionGrain>(DomainTypes.FaultTestProjector.MultiProjectorName);
-        Assert.True((await seed.PersistStateAsync()).IsSuccess);
+        Assert.True((await seed.PersistStateAsync().AsResultBoxAsync()).IsSuccess);
         await seed.RequestDeactivationAsync();
 
         var durable = DomainTypes.Event(poison: false, tick: 20_000);
@@ -437,10 +437,10 @@ public class ProjectionFaultFirstQueryBarrierTests : IAsyncLifetime
             // Start one known first-query owner and prove this is the post-deactivation activation before admitting
             // the second caller. This removes the old scheduler race where snapshot could own the barrier while the
             // state task was already complete before the held-gate assertion.
-            stateTask = cold.GetStateAsync();
+            stateTask = cold.GetStateAsync().AsResultBoxAsync();
             await activationStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
             await invocationBefore.Task.WaitAsync(TimeSpan.FromSeconds(5));
-            snapshotTask = cold.GetSnapshotJsonAsync();
+            snapshotTask = cold.GetSnapshotJsonAsync().AsResultBoxAsync();
 
             if (order == InterleaveOrder.BackgroundFirst)
             {

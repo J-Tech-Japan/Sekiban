@@ -108,15 +108,15 @@ public class TwoClusterGraduationReconcileConvergenceTests : IAsyncLifetime
         await Task.Delay(4000);
         var expected = GlobalReplay(new[] { earlier, later });
 
-        var safeA = (await grainA.GetStateAsync(canGetUnsafeState: false)).GetValue();
-        var safeB = (await grainB.GetStateAsync(canGetUnsafeState: false)).GetValue();
+        var safeA = (await grainA.GetStateAsync(canGetUnsafeState: false).AsResultBoxAsync()).GetValue();
+        var safeB = (await grainB.GetStateAsync(canGetUnsafeState: false).AsResultBoxAsync()).GetValue();
         Assert.Equal("earlier", ((FirstWinsProjector)safeA.Payload).Winners["team-1"]);
         Assert.Equal("earlier", ((FirstWinsProjector)safeB.Payload).Winners["team-1"]);
         Assert.Equal(expected.Winners["team-1"], ((FirstWinsProjector)safeA.Payload).Winners["team-1"]);
         Assert.Equal(safeA.LastSortableUniqueId, safeB.LastSortableUniqueId); // same converged safe position on both clusters
 
-        var servedAfterA = (await grainA.GetStateAsync()).GetValue();
-        var servedAfterB = (await grainB.GetStateAsync()).GetValue();
+        var servedAfterA = (await grainA.GetStateAsync().AsResultBoxAsync()).GetValue();
+        var servedAfterB = (await grainB.GetStateAsync().AsResultBoxAsync()).GetValue();
         Assert.True(servedAfterA.IsSafeState);
         Assert.True(servedAfterB.IsSafeState);
         Assert.Equal("earlier", ((FirstWinsProjector)servedAfterA.Payload).Winners["team-1"]);
@@ -134,10 +134,10 @@ public class TwoClusterGraduationReconcileConvergenceTests : IAsyncLifetime
         await SharedStores.EventStore.WriteSerializableEventsAsync(new[] { ToSerializable(baseline) }).AsResultBoxAsync();
 
         var seed = _clusterA.Client.GetGrain<IMultiProjectionGrain>(FirstWinsProjector.MultiProjectorName);
-        var seeded = await seed.GetStateAsync();
+        var seeded = await seed.GetStateAsync().AsResultBoxAsync();
         Assert.True(seeded.IsSuccess);
         Assert.True(seeded.GetValue().IsSafeState);
-        Assert.True((await seed.PersistStateAsync()).IsSuccess);
+        Assert.True((await seed.PersistStateAsync().AsResultBoxAsync()).IsSuccess);
         await seed.RequestDeactivationAsync();
 
         var recent = CreateEvent(new CreatedWithId("recent", "head"), DateTime.UtcNow);
@@ -188,8 +188,8 @@ public class TwoClusterGraduationReconcileConvergenceTests : IAsyncLifetime
             SharedStores.ReplicaB,
             SharedStores.Domain,
             serviceIdProvider: new FixedServiceIdProvider(ReplicaServiceB));
-        var stateA = grainA.GetStateAsync();
-        var stateB = grainB.GetStateAsync();
+        var stateA = grainA.GetStateAsync().AsResultBoxAsync();
+        var stateB = grainB.GetStateAsync().AsResultBoxAsync();
         var scalarA = execA.QueryAsync(new WinnerQuery("recent"));
         var scalarB = execB.QueryAsync(new WinnerQuery("recent"));
         var listA = execA.QueryAsync(new WinnerListQuery());
@@ -237,8 +237,8 @@ public class TwoClusterGraduationReconcileConvergenceTests : IAsyncLifetime
                 Assert.Equal("head", Assert.Single(rows, row => row.Id == "recent").Value);
             });
 
-        var safeA = (await grainA.GetStateAsync(canGetUnsafeState: false)).GetValue();
-        var safeB = (await grainB.GetStateAsync(canGetUnsafeState: false)).GetValue();
+        var safeA = (await grainA.GetStateAsync(canGetUnsafeState: false).AsResultBoxAsync()).GetValue();
+        var safeB = (await grainB.GetStateAsync(canGetUnsafeState: false).AsResultBoxAsync()).GetValue();
         Assert.DoesNotContain("recent", ((FirstWinsProjector)safeA.Payload).Winners.Keys);
         Assert.DoesNotContain("recent", ((FirstWinsProjector)safeB.Payload).Winners.Keys);
     }
@@ -261,7 +261,7 @@ public class TwoClusterGraduationReconcileConvergenceTests : IAsyncLifetime
     {
         for (var i = 0; i < 40; i++)
         {
-            var rb = await grain.GetStateAsync();
+            var rb = await grain.GetStateAsync().AsResultBoxAsync();
             if (rb.IsSuccess)
             {
                 var s = (FirstWinsProjector)rb.GetValue().Payload;
@@ -272,7 +272,7 @@ public class TwoClusterGraduationReconcileConvergenceTests : IAsyncLifetime
             }
             await Task.Delay(150);
         }
-        var final = await grain.GetStateAsync();
+        var final = await grain.GetStateAsync().AsResultBoxAsync();
         if (!final.IsSuccess)
         {
             throw new Xunit.Sdk.XunitException("grain.GetStateAsync failed: " + final.GetException());

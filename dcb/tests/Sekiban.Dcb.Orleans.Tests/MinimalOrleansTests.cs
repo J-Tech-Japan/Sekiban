@@ -237,7 +237,7 @@ public class MinimalOrleansTests : IAsyncLifetime
 
             var afterWorkStatus = await grain.GetStatusAsync();
             var health = await grain.GetHealthStatusAsync();
-            var snapshot = await grain.GetSnapshotJsonAsync(canGetUnsafeState: false);
+            var snapshot = await grain.GetSnapshotJsonAsync(canGetUnsafeState: false).AsResultBoxAsync();
             var received = await grain.IsSortableUniqueIdReceived(position);
 
             Assert.True(
@@ -397,7 +397,7 @@ public class MinimalOrleansTests : IAsyncLifetime
         var grain = _client.GetGrain<IMultiProjectionGrain>("serialization-test");
 
         // Act
-        var stateResult = await grain.GetSnapshotJsonAsync();
+        var stateResult = await grain.GetSnapshotJsonAsync().AsResultBoxAsync();
 
         // Assert
         Assert.NotNull(stateResult);
@@ -413,7 +413,7 @@ public class MinimalOrleansTests : IAsyncLifetime
         var grain = _client.GetGrain<IMultiProjectionGrain>("persistence-test");
 
         // Act
-        var persistResult = await grain.PersistStateAsync();
+        var persistResult = await grain.PersistStateAsync().AsResultBoxAsync();
 
         // Assert
         Assert.NotNull(persistResult);
@@ -436,7 +436,7 @@ public class MinimalOrleansTests : IAsyncLifetime
         await grain.SeedEventsAsync(ToSerializableEvents(firstEvents));
         await WaitUntilCatchUpIdleAsync(grain);
         await grain.RefreshAsync();
-        var initialPersistResult = await grain.PersistStateAsync();
+        var initialPersistResult = await grain.PersistStateAsync().AsResultBoxAsync();
         Assert.True(initialPersistResult.IsSuccess);
 
         var c0Result = await SharedStateStore.GetLatestForVersionAsync(
@@ -494,7 +494,7 @@ public class MinimalOrleansTests : IAsyncLifetime
         await grain.SeedEventsAsync(ToSerializableEvents(firstEvents));
         await grain.RefreshAsync();
         await WaitUntilCatchUpIdleAsync(grain);
-        var initialPersistResult = await grain.PersistStateAsync();
+        var initialPersistResult = await grain.PersistStateAsync().AsResultBoxAsync();
         Assert.True(initialPersistResult.IsSuccess);
 
         var c0Result = await SharedStateStore.GetLatestForVersionAsync(
@@ -593,10 +593,8 @@ public class MinimalOrleansTests : IAsyncLifetime
         var reservationA = await grainA.MakeReservationAsync(string.Empty);
         var reservationB = await grainB.MakeReservationAsync(string.Empty);
 
-        Assert.True(reservationA.IsSuccess);
-        Assert.True(reservationB.IsSuccess);
-        Assert.Equal(tagId, reservationA.GetValue().Tag);
-        Assert.Equal(tagId, reservationB.GetValue().Tag);
+        Assert.Equal(tagId, reservationA.Tag);
+        Assert.Equal(tagId, reservationB.Tag);
         Assert.Equal(tagId, await grainA.GetTagActorIdAsync());
         Assert.Equal(tagId, await grainB.GetTagActorIdAsync());
     }

@@ -1,4 +1,3 @@
-using ResultBoxes;
 using Orleans.Concurrency;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.MultiProjections;
@@ -19,13 +18,17 @@ public interface IMultiProjectionGrain : IGrainWithStringKey
     /// <param name="waitForCatchUp">Whether to wait for catch-up completion.
     /// If false (default), returns immediately with current state and catch-up progress info.
     /// If true, waits up to 30 seconds for catch-up to complete before returning.</param>
-    /// <returns>The current multi-projection state, including catch-up progress if in progress</returns>
-    Task<ResultBox<MultiProjectionState>> GetStateAsync(bool canGetUnsafeState = true, bool waitForCatchUp = false);
+    /// <returns>
+    ///     The current multi-projection state, including catch-up progress if in progress. A state that cannot be served
+    ///     (a projection fault, a pending rebuild, a failed activation) faults the returned task.
+    /// </returns>
+    Task<MultiProjectionState> GetStateAsync(bool canGetUnsafeState = true, bool waitForCatchUp = false);
 
     /// <summary>
-    ///     Get snapshot envelope (inline or offloaded) as JSON according to actor policy.
+    ///     Get snapshot envelope (inline or offloaded) as JSON according to actor policy. A snapshot that cannot be
+    ///     served faults the returned task.
     /// </summary>
-    Task<ResultBox<string>> GetSnapshotJsonAsync(bool canGetUnsafeState = true);
+    Task<string> GetSnapshotJsonAsync(bool canGetUnsafeState = true);
 
     /// <summary>
     ///     Manually add events to the projection (mainly for testing)
@@ -44,8 +47,11 @@ public interface IMultiProjectionGrain : IGrainWithStringKey
     /// <summary>
     ///     Force persist the current state
     /// </summary>
-    /// <returns>Success (true) or error</returns>
-    Task<ResultBox<bool>> PersistStateAsync();
+    /// <returns>
+    ///     True when the persist attempt completed (including a skip that needed no write); false when it stopped without
+    ///     a durable result (an integrity guard, a pending rebuild). A failed attempt faults the returned task.
+    /// </returns>
+    Task<bool> PersistStateAsync();
 
     /// <summary>
     ///     Stop the event subscription
@@ -148,26 +154,26 @@ public interface IMultiProjectionGrain : IGrainWithStringKey
 
     /// <summary>
     ///     Reads the committed projection-fault reset token for an upgraded serving silo. A successful empty value means
-    ///     only that no committed descriptor exists; an error means either this legacy implementation does not support
-    ///     the read surface or the committed descriptor could not be read. The default body is deliberately explicit
-    ///     unsupported rather than a false healthy/no-fault answer, while generated Orleans proxies invoke the grain's
-    ///     real implementation.
+    ///     only that no committed descriptor exists; a faulted task means either this legacy implementation does not
+    ///     support the read surface or the committed descriptor could not be read. The default body is deliberately
+    ///     explicit unsupported rather than a false healthy/no-fault answer, while generated Orleans proxies invoke the
+    ///     grain's real implementation.
     /// </summary>
-    Task<ResultBox<ProjectionFaultReadResult>> TryGetProjectionFaultAsync() =>
-        Task.FromResult(ResultBox.Error<ProjectionFaultReadResult>(
+    Task<ProjectionFaultReadResult> TryGetProjectionFaultAsync() =>
+        Task.FromException<ProjectionFaultReadResult>(
             new NotSupportedException(
                 "TryGetProjectionFaultAsync is not supported by this IMultiProjectionGrain implementation. "
-                + "Use an upgraded serving silo that implements the committed projection-fault read surface.")));
+                + "Use an upgraded serving silo that implements the committed projection-fault read surface."));
 
     /// <summary>
     ///     Operator-only admin surface: clear a persisted projection fault and rebuild. The request carries the exact
     ///     current fault identity (projector name, fault event id, fault stream position) as a concurrency token,
     ///     validated inside the single-writer gate against the CURRENT persisted descriptor. A mismatch, stale token,
-    ///     missing fault, or projector mismatch returns <c>ResultBox.Error</c> with no write and no fault clear. On a
+    ///     missing fault, or projector mismatch faults the returned task with no write and no fault clear. On a
     ///     correct token the persisted descriptor and derived checkpoint are durably cleared for a full rebuild; only
     ///     after that durable commit is the live actor fault cleared and a rebuild triggered. If the persisted clear
     ///     write fails, the descriptor and the live fault are retained and queries stay rejected. This surface is never
     ///     invoked automatically and is not exposed through <c>ISekibanExecutor</c>.
     /// </summary>
-    Task<ResultBox<bool>> ResetProjectionFaultAsync(ResetProjectionFaultRequest request);
+    Task<bool> ResetProjectionFaultAsync(ResetProjectionFaultRequest request);
 }

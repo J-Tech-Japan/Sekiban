@@ -59,7 +59,7 @@ public class CheckpointNonCapableFailClosedTests : IAsyncLifetime
         var safe = ToSerializable(CreateEvent(new Counted("safe"), DateTime.UtcNow.AddSeconds(-30)));
         await Shared.EventStore.WriteSerializableEventsAsync(new[] { safe }).AsResultBoxAsync();
         await grain.RefreshAsync();
-        Assert.True((await grain.PersistStateAsync()).IsSuccess);
+        Assert.True((await grain.PersistStateAsync().AsResultBoxAsync()).IsSuccess);
 
         // Deliver a globally-earlier already-safe event out of order -> RebuildRequired -> retrograde full rebuild. On a
         // NON-capable store this fails closed to the G14 fault path.
@@ -69,7 +69,7 @@ public class CheckpointNonCapableFailClosedTests : IAsyncLifetime
 
         // All query surfaces fail closed (a persisted fault requiring operator reset); never a silent rebuild that could
         // re-contaminate a shared row.
-        Assert.False((await grain.GetStateAsync()).IsSuccess);
+        Assert.False((await grain.GetStateAsync().AsResultBoxAsync()).IsSuccess);
         Assert.False((await executor.QueryAsync(new CountQuery())).IsSuccess);
         Assert.False((await executor.QueryAsync(new CountListQuery())).IsSuccess);
 
@@ -77,7 +77,7 @@ public class CheckpointNonCapableFailClosedTests : IAsyncLifetime
         await grain.RequestDeactivationAsync();
         await Task.Delay(1000);
         var grain2 = _client.GetGrain<IMultiProjectionGrain>(CountProjector.MultiProjectorName);
-        Assert.False((await grain2.GetStateAsync()).IsSuccess);
+        Assert.False((await grain2.GetStateAsync().AsResultBoxAsync()).IsSuccess);
     }
 
     private static Event CreateEvent(IEventPayload payload, DateTime timestamp) => new(

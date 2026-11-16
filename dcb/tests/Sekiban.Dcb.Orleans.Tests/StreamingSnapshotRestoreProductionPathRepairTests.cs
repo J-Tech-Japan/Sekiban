@@ -11,6 +11,7 @@ using Sekiban.Dcb.Runtime.Native;
 using Sekiban.Dcb.Snapshots;
 using Xunit;
 
+using Sekiban.Dcb.TestSupport;
 namespace Sekiban.Dcb.Orleans.Tests;
 
 public sealed partial class StreamingSnapshotRestoreProductionPathTests
@@ -83,7 +84,7 @@ public sealed partial class StreamingSnapshotRestoreProductionPathTests
         var host = CreateHost(targetDomain, services, logger);
 
         await host.AddSerializableEventsAsync([CreateSerializableEvent("old-state")], finishedCatchUp: true);
-        var before = await host.GetStateAsync(canGetUnsafeState: true);
+        var before = await host.GetStateAsync(canGetUnsafeState: true).AsResultBoxAsync();
         Assert.True(before.IsSuccess);
         var rollbackBefore = CaptureHostRestoreRollbackSnapshot(host);
 
@@ -95,10 +96,10 @@ public sealed partial class StreamingSnapshotRestoreProductionPathTests
         AssertNoCapabilityAbsentFallbackLog(logger);
 
         // The production host's ordinary query and metadata query cannot expose the state that existed before failure.
-        var query = await host.GetStateAsync(canGetUnsafeState: true);
+        var query = await host.GetStateAsync(canGetUnsafeState: true).AsResultBoxAsync();
         Assert.False(query.IsSuccess);
         Assert.Same(expected, query.GetException());
-        var metadata = await host.GetStateMetadataAsync(includeUnsafe: true);
+        var metadata = await host.GetStateMetadataAsync(includeUnsafe: true).AsResultBoxAsync();
         Assert.False(metadata.IsSuccess);
         Assert.Same(expected, metadata.GetException());
         Assert.False(await host.IsSortableUniqueIdReceivedAsync(before.GetValue().LastSortableUniqueId));
@@ -123,7 +124,7 @@ public sealed partial class StreamingSnapshotRestoreProductionPathTests
                 persistenceTarget,
                 canGetUnsafeState: false,
                 offloadThresholdBytes: 1,
-                CancellationToken.None);
+                CancellationToken.None).AsResultBoxAsync();
             Assert.False(persistence.IsSuccess);
             Assert.Same(expected, persistence.GetException());
             Assert.Equal(0, persistenceTarget.Length);
@@ -131,7 +132,7 @@ public sealed partial class StreamingSnapshotRestoreProductionPathTests
 
         await using (var snapshotTarget = new MemoryStream())
         {
-            var snapshot = await host.WriteSnapshotToStreamAsync(snapshotTarget, canGetUnsafeState: true, CancellationToken.None);
+            var snapshot = await host.WriteSnapshotToStreamAsync(snapshotTarget, canGetUnsafeState: true, CancellationToken.None).AsResultBoxAsync();
             Assert.False(snapshot.IsSuccess);
             Assert.Same(expected, snapshot.GetException());
             Assert.Equal(0, snapshotTarget.Length);
@@ -144,12 +145,12 @@ public sealed partial class StreamingSnapshotRestoreProductionPathTests
         blob.FailOnReadNumber = int.MaxValue;
         var recovered = await RestoreFromEnvelopeAsync(host, envelope, targetDomain);
         Assert.True(recovered.IsSuccess);
-        var recoveredState = await host.GetStateAsync(canGetUnsafeState: true);
+        var recoveredState = await host.GetStateAsync(canGetUnsafeState: true).AsResultBoxAsync();
         Assert.True(recoveredState.IsSuccess);
         Assert.Equal("recovered-snapshot", Assert.IsType<StreamingRestoreProjector>(recoveredState.GetValue().Payload).Value);
 
         await host.AddSerializableEventsAsync([CreateSerializableEvent("after-recovery")], finishedCatchUp: true);
-        var afterApply = await host.GetStateAsync(canGetUnsafeState: true);
+        var afterApply = await host.GetStateAsync(canGetUnsafeState: true).AsResultBoxAsync();
         Assert.True(afterApply.IsSuccess);
         Assert.Equal("after-recovery", Assert.IsType<StreamingRestoreProjector>(afterApply.GetValue().Payload).Value);
 
@@ -158,7 +159,7 @@ public sealed partial class StreamingSnapshotRestoreProductionPathTests
             recoveredPersistenceTarget,
             canGetUnsafeState: false,
             offloadThresholdBytes: 1,
-            CancellationToken.None);
+            CancellationToken.None).AsResultBoxAsync();
         Assert.True(recoveredPersistence.IsSuccess);
         Assert.True(recoveredPersistenceTarget.Length > 0);
     }
@@ -181,7 +182,7 @@ public sealed partial class StreamingSnapshotRestoreProductionPathTests
     {
         await using var stream = await SerializeEnvelopeAsync(envelope, domain.JsonSerializerOptions, gzipOuterEnvelope: false);
         stream.Position = 0;
-        return await host.RestoreSnapshotFromStreamAsync(stream, CancellationToken.None);
+        return await host.RestoreSnapshotFromStreamAsync(stream, CancellationToken.None).AsResultBoxAsync();
     }
 
     private static SerializableEvent CreateSerializableEvent(string value) => new(

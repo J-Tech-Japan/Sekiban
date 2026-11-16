@@ -76,7 +76,7 @@ public class SimpleOrleansCommandQueryTests : IAsyncLifetime
     {
         await EnsureInitializedAsync();
         var grain = _client.GetGrain<IMultiProjectionGrain>("serialization-test");
-        var stateResult = await grain.GetSnapshotJsonAsync();
+        var stateResult = await grain.GetSnapshotJsonAsync().AsResultBoxAsync();
         Assert.NotNull(stateResult);
         Assert.True(stateResult.IsSuccess);
         Assert.False(string.IsNullOrEmpty(stateResult.GetValue()));

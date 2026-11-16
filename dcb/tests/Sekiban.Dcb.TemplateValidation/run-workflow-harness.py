@@ -839,8 +839,8 @@ def resultboxes_ratchet_cases(f, feed, command):
             print(f'PASS rejects {case}: {reason}', flush=True)
         else:
             raise Failure(case+' unexpectedly passed')
-    target = 'Sekiban.Dcb.Orleans.AzureQueue'
-    via = 'Sekiban.Dcb.Orleans.Core'
+    target = 'Sekiban.Dcb.Orleans.WithoutResult'
+    via = 'Sekiban.Dcb.WithoutResult'
     assert target in f.resultboxes and via in f.resultboxes
     direct = b'<dependency id="ResultBoxes" version="0.4.0" />'
     path = feed/f'{target}.{f.version}.nupkg'

@@ -1,12 +1,12 @@
-using ResultBoxes;
 namespace Sekiban.Dcb.Orleans.Grains;
 
 /// <summary>
 ///     Stable, distinguishable failure returned by <see cref="ExternalStoreCoordinator.UpsertAsync" /> when a snapshot
-///     upsert is rejected because the projection is faulted. It is surfaced as a <c>ResultBox.Error</c> (NOT a
-///     success carrying <c>false</c>) so every caller that only inspects <c>IsSuccess</c> takes the not-persisted
-///     branch: no caller may report the snapshot as saved or advance persisted metadata after this rejection. Callers
-///     that want to log the rejection as a benign skip (rather than a store failure) can match on this type.
+///     upsert is rejected because the projection is faulted. It is surfaced as a failed
+///     <see cref="PersistAttempt" /> (NOT a success carrying <c>false</c>) so every caller that only inspects
+///     <c>IsSuccess</c> takes the not-persisted branch: no caller may report the snapshot as saved or advance persisted
+///     metadata after this rejection. Callers that want to log the rejection as a benign skip (rather than a store
+///     failure) can match on this type.
 /// </summary>
 public sealed class ExternalPersistenceBlockedByFaultException : Exception
 {
@@ -14,6 +14,21 @@ public sealed class ExternalPersistenceBlockedByFaultException : Exception
         "External derived-snapshot persistence is blocked because the projection is faulted (a live or committed fault exists).")
     {
     }
+}
+
+/// <summary>
+///     The outcome of a persist step (an external derived-snapshot write, or a whole persist attempt): completed with a
+///     value (<c>true</c>, or <c>false</c> when deliberately not written), or failed (<see cref="Failure" />). The persist
+///     path logs such a failure and continues from it, so it is a value here; the public grain member that reports it
+///     faults its task with the same exception.
+/// </summary>
+internal readonly record struct PersistAttempt(bool Value, Exception? Failure)
+{
+    public bool IsSuccess => Failure is null;
+
+    public static PersistAttempt Completed(bool value) => new(value, null);
+
+    public static PersistAttempt Failed(Exception failure) => new(false, failure);
 }
 
 /// <summary>
@@ -37,11 +52,11 @@ internal sealed class ExternalStoreCoordinator
 
     /// <summary>
     ///     Runs <paramref name="upsert" /> under the coordinator, but only when no fault blocks it. When faulted it
-    ///     returns a <c>ResultBox.Error</c> carrying <see cref="ExternalPersistenceBlockedByFaultException" /> WITHOUT
-    ///     invoking <paramref name="upsert" /> — an explicit failure, never a success carrying <c>false</c>, so a caller
+    ///     returns a failed outcome carrying <see cref="ExternalPersistenceBlockedByFaultException" /> WITHOUT invoking
+    ///     <paramref name="upsert" /> — an explicit failure, never a success carrying <c>false</c>, so a caller
     ///     inspecting only <c>IsSuccess</c> cannot mistake the rejection for a completed save.
     /// </summary>
-    public async Task<ResultBox<bool>> UpsertAsync(Func<Task<ResultBox<bool>>> upsert)
+    public async Task<PersistAttempt> UpsertAsync(Func<Task<PersistAttempt>> upsert)
     {
         ArgumentNullException.ThrowIfNull(upsert);
         await _gate.WaitAsync();
@@ -49,7 +64,7 @@ internal sealed class ExternalStoreCoordinator
         {
             if (_faultBlocksUpsert())
             {
-                return ResultBox.Error<bool>(new ExternalPersistenceBlockedByFaultException());
+                return PersistAttempt.Failed(new ExternalPersistenceBlockedByFaultException());
             }
 
             return await upsert();

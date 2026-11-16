@@ -1,4 +1,3 @@
-using ResultBoxes;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.MultiProjections;
 using Sekiban.Dcb.Actors;
@@ -21,15 +20,15 @@ public interface IProjectionActorHost
         bool finishedCatchUp = true);
 
     /// <summary>
-    ///     Get primitive metadata about the projection state.
+    ///     Get primitive metadata about the projection state. An unreadable safe state faults the returned task.
     /// </summary>
-    Task<ResultBox<ProjectionStateMetadata>> GetStateMetadataAsync(bool includeUnsafe = true);
+    Task<ProjectionStateMetadata> GetStateMetadataAsync(bool includeUnsafe = true);
 
     /// <summary>
     ///     Get the full projection state (including domain payload).
-    ///     The Grain passes this through opaquely to callers.
+    ///     The Grain passes this through opaquely to callers. A state that cannot be served faults the returned task.
     /// </summary>
-    Task<ResultBox<MultiProjectionState>> GetStateAsync(bool canGetUnsafeState = true);
+    Task<MultiProjectionState> GetStateAsync(bool canGetUnsafeState = true);
 
     /// <summary>
     ///     Get projection head information without materializing projector payloads.
@@ -37,33 +36,35 @@ public interface IProjectionActorHost
     Task<ProjectionHeadStatus> GetProjectionHeadStatusAsync();
 
     /// <summary>
-     ///     Write the snapshot directly to the provided stream, avoiding byte[] allocation.
-     /// </summary>
-    Task<ResultBox<bool>> WriteSnapshotToStreamAsync(
+    ///     Write the snapshot directly to the provided stream, avoiding byte[] allocation. Returns false when the host
+    ///     wrote no durable snapshot; a failed write faults the returned task.
+    /// </summary>
+    Task<bool> WriteSnapshotToStreamAsync(
         Stream target,
         bool canGetUnsafeState,
         CancellationToken cancellationToken);
 
     /// <summary>
     ///     Write a persistence-oriented snapshot to the provided stream, allowing the
-    ///     heavy payload to be offloaded before the envelope JSON is written.
+    ///     heavy payload to be offloaded before the envelope JSON is written. Returns false when the host wrote no
+    ///     durable snapshot; a failed write faults the returned task.
     /// </summary>
-    Task<ResultBox<bool>> WriteSnapshotForPersistenceToStreamAsync(
+    Task<bool> WriteSnapshotForPersistenceToStreamAsync(
         Stream target,
         bool canGetUnsafeState,
         int offloadThresholdBytes,
         CancellationToken cancellationToken);
 
     /// <summary>
-    ///     Restore projection state from snapshot stream.
-     /// </summary>
-    Task<ResultBox<bool>> RestoreSnapshotFromStreamAsync(Stream source, CancellationToken cancellationToken);
+    ///     Restore projection state from snapshot stream. A failed restore faults the returned task.
+    /// </summary>
+    Task<bool> RestoreSnapshotFromStreamAsync(Stream source, CancellationToken cancellationToken);
 
     /// <summary>
     ///     Execute a single-result query. The host deserializes the query and
-    ///     serializes the result internally.
+    ///     serializes the result internally. A failed query faults the returned task.
     /// </summary>
-    Task<ResultBox<SerializableQueryResult>> ExecuteQueryAsync(
+    Task<SerializableQueryResult> ExecuteQueryAsync(
         SerializableQueryParameter query,
         int? safeVersion,
         string? safeThreshold,
@@ -72,9 +73,9 @@ public interface IProjectionActorHost
 
     /// <summary>
     ///     Execute a list query. The host deserializes the query and
-    ///     serializes the result internally.
+    ///     serializes the result internally. A failed query faults the returned task.
     /// </summary>
-    Task<ResultBox<SerializableListQueryResult>> ExecuteListQueryAsync(
+    Task<SerializableListQueryResult> ExecuteListQueryAsync(
         SerializableQueryParameter query,
         int? safeVersion,
         string? safeThreshold,
@@ -122,9 +123,10 @@ public interface IProjectionActorHost
     string GetProjectorVersion();
 
     /// <summary>
-    ///     Rewrite projector version in a serialized snapshot stream and write to target stream.
+    ///     Rewrite projector version in a serialized snapshot stream and write to target stream. A failed rewrite faults
+    ///     the returned task.
     /// </summary>
-    Task<ResultBox<bool>> RewriteSnapshotVersionAsync(
+    Task<bool> RewriteSnapshotVersionAsync(
         Stream source,
         Stream target,
         string newVersion,

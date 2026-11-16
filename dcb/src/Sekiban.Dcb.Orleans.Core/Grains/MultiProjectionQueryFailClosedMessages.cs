@@ -2,7 +2,7 @@ namespace Sekiban.Dcb.Orleans.Grains;
 
 /// <summary>
 ///     Stable prefixes at the start of grain-generated query errors for host retry/HTTP mappings.
-///     Transport or ResultBox wrappers may prepend text; hosts must match with
+///     Transport or facade wrappers may prepend text; hosts must match with
 ///     <c>message.Contains(prefix, StringComparison.Ordinal)</c>.
 /// </summary>
 public static class MultiProjectionQueryFailClosedMessages

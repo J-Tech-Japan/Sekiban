@@ -97,14 +97,14 @@ public class DurableRebuildMarkerPersistTests : IAsyncLifetime
         var pause = Env.Counting.PauseNextContinuation();
         try
         {
-            var query = grain.GetStateAsync(canGetUnsafeState: false, waitForCatchUp: false);
+            var query = grain.GetStateAsync(canGetUnsafeState: false, waitForCatchUp: false).AsResultBoxAsync();
             await pause.Entered.Task.WaitAsync(TimeSpan.FromSeconds(20));
             await FirstQueryBoundedWaitClusterTests.PollUntilAsync(async () => (await SlotAsync()).IsActive);
             var intermediate = await SlotAsync();
             Assert.InRange(intermediate.Record!.EventsProcessed, 1, 9_999);
             Assert.True((await grain.GetStatusAsync()).IsCatchUpActive);
             Assert.True((await grain.GetStatusAsync()).FirstQueryCatchUpPending);
-            var guarded = grain.GetStateAsync(canGetUnsafeState: false, waitForCatchUp: false);
+            var guarded = grain.GetStateAsync(canGetUnsafeState: false, waitForCatchUp: false).AsResultBoxAsync();
             await Task.WhenAny(guarded, Task.Delay(100));
             if (guarded.IsCompleted) Assert.False((await guarded).IsSuccess);
             pause.Release.TrySetResult();
@@ -129,7 +129,7 @@ public class DurableRebuildMarkerPersistTests : IAsyncLifetime
         var grain = await SeedAsync(t0);
         await AddEarlierAsync(grain, t0);
         await AssertCountAndIdleAsync(grain, 2); // Fail-closed queries drive the full rebuild.
-        Assert.True((await grain.PersistStateAsync()).IsSuccess);
+        Assert.True((await grain.PersistStateAsync().AsResultBoxAsync()).IsSuccess);
         AssertMarkerCleared();
         Assert.True((await SlotAsync()).IsActive);
         await AssertUnchangedPersistDoesNotWriteAsync(grain);
@@ -153,7 +153,7 @@ public class DurableRebuildMarkerPersistTests : IAsyncLifetime
         MarkerGrainStorage.RetainMarkerOnCheckpointWrites = false;
         var externalBefore = Env.StateStore.WriteCount;
         var metadataBefore = MarkerGrainStorage.WriteCount;
-        Assert.True((await grain.PersistStateAsync()).IsSuccess);
+        Assert.True((await grain.PersistStateAsync().AsResultBoxAsync()).IsSuccess);
         Assert.Equal(externalBefore + 1, Env.StateStore.WriteCount);
         Assert.Equal(metadataBefore + 1, MarkerGrainStorage.WriteCount);
         AssertMarkerCleared();
@@ -188,7 +188,7 @@ public class DurableRebuildMarkerPersistTests : IAsyncLifetime
         MarkerGrainStorage.FailResetWrites = true;
         await AddEarlierAsync(grain, t0);
         // The reset failure leaves the old host alive; status reads alone cannot advance its rebuild.
-        Assert.False((await grain.GetStateAsync(canGetUnsafeState: false, waitForCatchUp: false)).IsSuccess);
+        Assert.False((await grain.GetStateAsync(canGetUnsafeState: false, waitForCatchUp: false).AsResultBoxAsync()).IsSuccess);
         Assert.True(MarkerGrainStorage.ResetFailures > 0);
         Assert.True(Env.StateStore.InvalidateCount > 0);
         Assert.True((await SlotAsync()).IsTombstoned);
@@ -198,7 +198,7 @@ public class DurableRebuildMarkerPersistTests : IAsyncLifetime
         Assert.NotNull(marker.RebuildOffendingPosition);
         var writes = Env.StateStore.WriteCount;
         var failuresBeforePersist = MarkerGrainStorage.ResetFailures;
-        var persist = await grain.PersistStateAsync();
+        var persist = await grain.PersistStateAsync().AsResultBoxAsync();
         Assert.True(persist.IsSuccess);
         Assert.False(persist.GetValue());
         Assert.True(MarkerGrainStorage.ResetFailures > failuresBeforePersist);
@@ -255,7 +255,7 @@ public class DurableRebuildMarkerPersistTests : IAsyncLifetime
             // The Interleave=true persist timer has captured A's snapshot, but has not acquired the mutation gate.
             await saveGate.Entered.Task.WaitAsync(TimeSpan.FromSeconds(20));
             await AddEarlierAsync(grain, t0);
-            await grain.GetStateAsync(canGetUnsafeState: false, waitForCatchUp: false);
+            await grain.GetStateAsync(canGetUnsafeState: false, waitForCatchUp: false).AsResultBoxAsync();
             await recreated.Task.WaitAsync(TimeSpan.FromSeconds(20));
             var marker = MarkerGrainStorage.Read();
             Assert.True(marker.RebuildRequired);
@@ -314,7 +314,7 @@ public class DurableRebuildMarkerPersistTests : IAsyncLifetime
         Env.StateStore.FailCommitRebuilt = true;
         await AddEarlierAsync(grain, t0);
         await AssertCountAndIdleAsync(grain, 2);
-        Assert.True((await grain.PersistStateAsync()).IsSuccess); // Return contract is unchanged.
+        Assert.True((await grain.PersistStateAsync().AsResultBoxAsync()).IsSuccess); // Return contract is unchanged.
         Assert.True(MarkerGrainStorage.Read().RebuildRequired);
         Assert.True((await SlotAsync()).IsTombstoned);
         Assert.NotNull((await grain.GetStatusAsync()).LastError);
@@ -344,14 +344,14 @@ public class DurableRebuildMarkerPersistTests : IAsyncLifetime
         Env.StateStore.FailCommitRebuilt = true;
         await AddEarlierAsync(grain, t0);
         await AssertCountAndIdleAsync(grain, 2);
-        Assert.True((await grain.PersistStateAsync()).IsSuccess);
+        Assert.True((await grain.PersistStateAsync().AsResultBoxAsync()).IsSuccess);
         var status = await grain.GetStatusAsync();
         Assert.NotNull(status.LastError);
         Assert.True(status.HasError);
         Assert.True((await grain.GetHealthStatusAsync()).IsHealthy);
         Assert.Contains(Env.Log.Entries, e => e == (LogLevel.Warning, 1030));
         Env.StateStore.FailCommitRebuilt = false;
-        Assert.True((await grain.PersistStateAsync()).IsSuccess);
+        Assert.True((await grain.PersistStateAsync().AsResultBoxAsync()).IsSuccess);
         Assert.Null((await grain.GetStatusAsync()).LastError);
         Assert.True((await SlotAsync()).IsActive);
         AssertMarkerCleared();
@@ -415,11 +415,11 @@ public class DurableRebuildMarkerPersistTests : IAsyncLifetime
         var grain = await SeedAsync(t0);
         MarkerGrainStorage.FailResetWrites = true;
         await AddEarlierAsync(grain, t0);
-        Assert.False((await grain.GetStateAsync(canGetUnsafeState: false, waitForCatchUp: false)).IsSuccess);
+        Assert.False((await grain.GetStateAsync(canGetUnsafeState: false, waitForCatchUp: false).AsResultBoxAsync()).IsSuccess);
         Assert.True(MarkerGrainStorage.ResetFailures > 0);
         Assert.True((await SlotAsync()).IsTombstoned);
         var writes = Env.StateStore.WriteCount;
-        Assert.True((await grain.PersistStateAsync()).IsSuccess);
+        Assert.True((await grain.PersistStateAsync().AsResultBoxAsync()).IsSuccess);
         Assert.Equal(writes, Env.StateStore.WriteCount);
         Assert.True((await SlotAsync()).IsTombstoned);
         Assert.DoesNotContain(Env.Log.Entries, e => e.Item2 == 1030);
@@ -446,7 +446,7 @@ public class DurableRebuildMarkerPersistTests : IAsyncLifetime
         await Env.EventStore.WriteSerializableEventsAsync(events).AsResultBoxAsync();
         var grain = Client.GetGrain<IMultiProjectionGrain>(CountProjector.MultiProjectorName);
         await AssertCountAndIdleAsync(grain, 8);
-        Assert.True((await grain.PersistStateAsync()).IsSuccess);
+        Assert.True((await grain.PersistStateAsync().AsResultBoxAsync()).IsSuccess);
         await grain.RequestDeactivationAsync();
         await Task.Delay(1000);
         var active = await SlotAsync();
@@ -468,7 +468,7 @@ public class DurableRebuildMarkerPersistTests : IAsyncLifetime
             grain = Client.GetGrain<IMultiProjectionGrain>(CountProjector.MultiProjectorName);
             // Marker queries can wait for the first-query gate; keep that request in flight while
             // the interleaving timer persists the partially rebuilt host.
-            var query = grain.GetStateAsync(canGetUnsafeState: false, waitForCatchUp: false);
+            var query = grain.GetStateAsync(canGetUnsafeState: false, waitForCatchUp: false).AsResultBoxAsync();
             await pause.Entered.Task.WaitAsync(TimeSpan.FromSeconds(20));
             Assert.True((await grain.GetStatusAsync()).IsCatchUpActive);
             Assert.Equal(!marker, (await grain.GetStatusAsync()).TombstoneFailClosedPending);
@@ -493,7 +493,7 @@ public class DurableRebuildMarkerPersistTests : IAsyncLifetime
                 Assert.DoesNotContain(Env.Log.Entries, e => e.Item2 == 1030);
             }
             Env.StateStore.AheadRecord = null;
-            Assert.True((await grain.PersistStateAsync()).IsSuccess);
+            Assert.True((await grain.PersistStateAsync().AsResultBoxAsync()).IsSuccess);
             Assert.Null((await grain.GetStatusAsync()).LastError);
             Assert.True((await SlotAsync()).IsActive);
             AssertMarkerCleared();
@@ -549,7 +549,7 @@ public class DurableRebuildMarkerPersistTests : IAsyncLifetime
             });
         try
         {
-            var query = grain.GetStateAsync(canGetUnsafeState: false, waitForCatchUp: false);
+            var query = grain.GetStateAsync(canGetUnsafeState: false, waitForCatchUp: false).AsResultBoxAsync();
             await entered.Task.WaitAsync(TimeSpan.FromSeconds(20));
             Assert.NotNull(start);
             Assert.Null(start!.StartPosition);
@@ -582,7 +582,7 @@ public class DurableRebuildMarkerPersistTests : IAsyncLifetime
         await AssertCountAndIdleAsync(grain, 1);
         await grain.RefreshAsync();
         await WaitForIdleAsync(grain);
-        Assert.True((await grain.PersistStateAsync()).IsSuccess);
+        Assert.True((await grain.PersistStateAsync().AsResultBoxAsync()).IsSuccess);
         return grain;
     }
 
@@ -601,11 +601,11 @@ public class DurableRebuildMarkerPersistTests : IAsyncLifetime
     {
         await FirstQueryBoundedWaitClusterTests.PollUntilAsync(async () =>
         {
-            var result = await grain.GetStateAsync(canGetUnsafeState: false, waitForCatchUp: false);
+            var result = await grain.GetStateAsync(canGetUnsafeState: false, waitForCatchUp: false).AsResultBoxAsync();
             return result.IsSuccess && ((CountProjector)result.GetValue().Payload).Count == count;
         });
         await WaitForIdleAsync(grain);
-        var state = await grain.GetStateAsync(canGetUnsafeState: false, waitForCatchUp: false);
+        var state = await grain.GetStateAsync(canGetUnsafeState: false, waitForCatchUp: false).AsResultBoxAsync();
         Assert.True(state.IsSuccess);
         Assert.Equal(count, ((CountProjector)state.GetValue().Payload).Count);
         await WaitForIdleAsync(grain);
@@ -624,7 +624,7 @@ public class DurableRebuildMarkerPersistTests : IAsyncLifetime
         await WaitForIdleAsync(grain);
         var external = Env.StateStore.WriteCount;
         var metadata = MarkerGrainStorage.WriteCount;
-        Assert.True((await grain.PersistStateAsync()).IsSuccess);
+        Assert.True((await grain.PersistStateAsync().AsResultBoxAsync()).IsSuccess);
         Assert.Equal(external, Env.StateStore.WriteCount);
         Assert.Equal(metadata, MarkerGrainStorage.WriteCount);
     }
@@ -638,7 +638,7 @@ public class DurableRebuildMarkerPersistTests : IAsyncLifetime
         grain = Client.GetGrain<IMultiProjectionGrain>(CountProjector.MultiProjectorName);
         if (assertNoTombstoneGate)
         {
-            var first = await grain.GetStateAsync(canGetUnsafeState: false, waitForCatchUp: false);
+            var first = await grain.GetStateAsync(canGetUnsafeState: false, waitForCatchUp: false).AsResultBoxAsync();
             Assert.True(first.IsSuccess);
             Assert.False((await grain.GetStatusAsync()).TombstoneFailClosedPending);
         }

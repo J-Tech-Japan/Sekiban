@@ -84,9 +84,9 @@ public class TwoClusterRetrogradeRecontaminationTests : IAsyncLifetime
         var later = CreateEvent(new CreatedWithId("team-1", "later"), DateTime.UtcNow.AddSeconds(-30));
         await SharedStores.EventStore.WriteSerializableEventsAsync(new[] { ToSerializable(later) }).AsResultBoxAsync();
         await grainA.RefreshAsync();
-        Assert.True((await grainA.PersistStateAsync()).IsSuccess);
+        Assert.True((await grainA.PersistStateAsync().AsResultBoxAsync()).IsSuccess);
         await grainB.RefreshAsync();
-        _ = await grainB.PersistStateAsync();   // CAS-contends with A's create; whoever loses adopts the winner's token
+        _ = await grainB.PersistStateAsync().AsResultBoxAsync();   // CAS-contends with A's create; whoever loses adopts the winner's token
         var slot0 = (await SharedStores.StateStore.ReadCheckpointSlotAsync(FirstWinsProjector.MultiProjectorName, "1.0.0").AsResultBoxAsync()).GetValue();
         Assert.True(slot0.IsActive);
         Assert.Equal(0, slot0.Generation);
@@ -104,8 +104,8 @@ public class TwoClusterRetrogradeRecontaminationTests : IAsyncLifetime
         // Both clusters rebuild to the globally-earliest winner (fail-closed until rebuilt).
         Assert.Equal("earlier", await PollWinnerAsync(grainA, "earlier"));
         Assert.Equal("earlier", await PollWinnerAsync(grainB, "earlier"));
-        _ = await grainA.PersistStateAsync();
-        _ = await grainB.PersistStateAsync();
+        _ = await grainA.PersistStateAsync().AsResultBoxAsync();
+        _ = await grainB.PersistStateAsync().AsResultBoxAsync();
 
         // The shared row is Active at the bumped generation with the rebuilt 2-event checkpoint — NEVER dropped back to a
         // stale 1-event state, and the generation advanced EXACTLY ONCE (one retrograde epoch, one winner), never twice.
@@ -134,8 +134,8 @@ public class TwoClusterRetrogradeRecontaminationTests : IAsyncLifetime
         // EARLIEST ("earlier", first-event-wins). Both clusters agree on the same position and winner.
         Assert.Equal(later.SortableUniqueIdValue, safeA.LastSortableUniqueId);
 
-        Assert.True((await grainA2.GetStateAsync()).GetValue().IsSafeState);
-        Assert.True((await grainB2.GetStateAsync()).GetValue().IsSafeState);
+        Assert.True((await grainA2.GetStateAsync().AsResultBoxAsync()).GetValue().IsSafeState);
+        Assert.True((await grainB2.GetStateAsync().AsResultBoxAsync()).GetValue().IsSafeState);
         await AssertScalarAndListAsync(new OrleansDcbExecutor(_clusterA.Client, SharedStores.EventStore, SharedStores.Domain), "earlier");
         await AssertScalarAndListAsync(new OrleansDcbExecutor(_clusterB.Client, SharedStores.EventStore, SharedStores.Domain), "earlier");
     }
@@ -166,9 +166,9 @@ public class TwoClusterRetrogradeRecontaminationTests : IAsyncLifetime
             var later = CreateEvent(new CreatedWithId("team-1", "later"), DateTime.UtcNow.AddSeconds(-30));
             await SharedStores.EventStore.WriteSerializableEventsAsync(new[] { ToSerializable(later) }).AsResultBoxAsync();
             await grainA.RefreshAsync();
-            Assert.True((await grainA.PersistStateAsync()).IsSuccess);
+            Assert.True((await grainA.PersistStateAsync().AsResultBoxAsync()).IsSuccess);
             await grainB.RefreshAsync();
-            _ = await grainB.PersistStateAsync();   // whoever loses the create adopts the gen0 token
+            _ = await grainB.PersistStateAsync().AsResultBoxAsync();   // whoever loses the create adopts the gen0 token
             var slot0 = await ReadSlotAsync();
             Assert.True(slot0.IsActive);
             Assert.Equal(0, slot0.Generation);
@@ -181,7 +181,7 @@ public class TwoClusterRetrogradeRecontaminationTests : IAsyncLifetime
 
             // (3) Arm B's upsert gate and launch B's REAL grain persist; it parks at the store boundary holding the gen0 token.
             gateB.UpsertGate = bUpsert;
-            var bPersist = grainB.PersistStateAsync();
+            var bPersist = grainB.PersistStateAsync().AsResultBoxAsync();
             await bUpsert.Arrived.Task.WaitAsync(TimeSpan.FromSeconds(20));
 
             // (4) Arm A's rebuilt-commit gate, then deliver the globally-earlier retrograde event to A and drive its rebuild
@@ -197,7 +197,7 @@ public class TwoClusterRetrogradeRecontaminationTests : IAsyncLifetime
             var earlier = CreateEvent(new CreatedWithId("team-1", "earlier"), DateTime.UtcNow.AddSeconds(-31));
             await SharedStores.EventStore.WriteSerializableEventsAsync(new[] { ToSerializable(earlier) }).AsResultBoxAsync();
             await grainA.AddEventsAsync(new[] { ToSerializable(earlier) });
-            var aDrive = grainA.GetStateAsync(canGetUnsafeState: true, waitForCatchUp: false);   // drives invalidate -> parks at commit
+            var aDrive = grainA.GetStateAsync(canGetUnsafeState: true, waitForCatchUp: false).AsResultBoxAsync();   // drives invalidate -> parks at commit
             try
             {
                 await aCommit.Arrived.Task.WaitAsync(TimeSpan.FromSeconds(20));
@@ -229,7 +229,7 @@ public class TwoClusterRetrogradeRecontaminationTests : IAsyncLifetime
                 // not gain the fresh-host ordering bypass while A's tombstone remains open.
                 for (var attempt = 0; attempt < 3; attempt++)
                 {
-                    _ = await grainB.PersistStateAsync();
+                    _ = await grainB.PersistStateAsync().AsResultBoxAsync();
                     Assert.Equal(tomb, await ReadSlotAsync());
                 }
             }
@@ -294,9 +294,9 @@ public class TwoClusterRetrogradeRecontaminationTests : IAsyncLifetime
         var later = CreateEvent(new CreatedWithId("team-1", "later"), DateTime.UtcNow.AddSeconds(-30));
         await SharedStores.EventStore.WriteSerializableEventsAsync(new[] { ToSerializable(later) }).AsResultBoxAsync();
         await a.RefreshAsync();
-        _ = await a.PersistStateAsync();
+        _ = await a.PersistStateAsync().AsResultBoxAsync();
         await b.RefreshAsync();
-        _ = await b.PersistStateAsync();
+        _ = await b.PersistStateAsync().AsResultBoxAsync();
         // Equal safe counts after A's two-event rebuild: the count guard cannot hide stale writes.
         await b.AddEventsAsync(new[] { ToSerializable(CreateEvent(new CreatedWithId("local", "stale"), DateTime.UtcNow.AddSeconds(-20))) });
         await PollUnsafeContainsAsync(b, "local");
@@ -304,7 +304,7 @@ public class TwoClusterRetrogradeRecontaminationTests : IAsyncLifetime
         var rebuilt = new GatingCheckpointStore.Gate { Release = new(TaskCreationOptions.RunContinuationsAsynchronously) };
         SharedStores.GatesByCluster["B"].UpsertGate = parked;
         SharedStores.GatesByCluster["A"].CommitRebuiltGate = rebuilt;
-        var persist = b.PersistStateAsync();
+        var persist = b.PersistStateAsync().AsResultBoxAsync();
         Task<ResultBox<MultiProjectionState>>? drive = null;
         try
         {
@@ -312,7 +312,7 @@ public class TwoClusterRetrogradeRecontaminationTests : IAsyncLifetime
             var earlier = CreateEvent(new CreatedWithId("team-1", "earlier"), DateTime.UtcNow.AddSeconds(-31));
             await SharedStores.EventStore.WriteSerializableEventsAsync(new[] { ToSerializable(earlier) }).AsResultBoxAsync();
             await a.AddEventsAsync(new[] { ToSerializable(earlier) });
-            drive = a.GetStateAsync(canGetUnsafeState: true, waitForCatchUp: false);
+            drive = a.GetStateAsync(canGetUnsafeState: true, waitForCatchUp: false).AsResultBoxAsync();
             await rebuilt.Arrived.Task.WaitAsync(TimeSpan.FromMinutes(2));
             if (peerCommitsFirst)
             {
@@ -325,7 +325,7 @@ public class TwoClusterRetrogradeRecontaminationTests : IAsyncLifetime
             Assert.Equal(peerCommitsFirst, adopted.IsActive);
             for (var i = 0; i < 3; i++)
             {
-                _ = await b.PersistStateAsync();
+                _ = await b.PersistStateAsync().AsResultBoxAsync();
                 Assert.Equal(adopted, await ReadSlotAsync());
             }
             rebuilt.Release!.TrySetResult();
@@ -335,7 +335,7 @@ public class TwoClusterRetrogradeRecontaminationTests : IAsyncLifetime
             Assert.Equal(2, active.Record!.EventsProcessed);
             for (var i = 0; i < 3; i++)
             {
-                _ = await b.PersistStateAsync();
+                _ = await b.PersistStateAsync().AsResultBoxAsync();
                 Assert.Equal(active, await ReadSlotAsync());
             }
             // No retrograde delivery to B: only query entry can discard its host and replay from zero.
@@ -343,7 +343,7 @@ public class TwoClusterRetrogradeRecontaminationTests : IAsyncLifetime
             Assert.NotNull(replayed);
             Assert.Equal("earlier", WinnerOf(replayed));
             Assert.DoesNotContain("local", ((FirstWinsProjector)replayed.Payload).Winners.Keys);
-            _ = await b.PersistStateAsync();
+            _ = await b.PersistStateAsync().AsResultBoxAsync();
             var saved = await ReadSlotAsync();
             Assert.True(saved.IsActive);
             Assert.Equal(active.Generation, saved.Generation);
@@ -378,7 +378,7 @@ public class TwoClusterRetrogradeRecontaminationTests : IAsyncLifetime
     {
         for (var i = 0; i < 100; i++)
         {
-            var rb = await grain.GetStateAsync(canGetUnsafeState: true, waitForCatchUp: false);
+            var rb = await grain.GetStateAsync(canGetUnsafeState: true, waitForCatchUp: false).AsResultBoxAsync();
             if (rb.IsSuccess && ((FirstWinsProjector)rb.GetValue().Payload).Winners.ContainsKey(id))
             {
                 return;

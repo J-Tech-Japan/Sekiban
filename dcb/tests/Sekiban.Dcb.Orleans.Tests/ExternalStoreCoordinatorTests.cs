@@ -1,4 +1,3 @@
-using ResultBoxes;
 using Sekiban.Dcb.Orleans.Grains;
 using Xunit;
 namespace Sekiban.Dcb.Orleans.Tests;
@@ -26,7 +25,7 @@ public class ExternalStoreCoordinatorTests
             upsertEntered.TrySetResult();
             await release.Task;
             lock (order) order.Add("upsert-commit");
-            return ResultBox.FromValue(true);
+            return PersistAttempt.Completed(true);
         });
         await upsertEntered.Task;
 
@@ -69,7 +68,7 @@ public class ExternalStoreCoordinatorTests
         var upsertTask = coordinator.UpsertAsync(() =>
         {
             lock (order) order.Add("upsert");
-            return Task.FromResult(ResultBox.FromValue(true));
+            return Task.FromResult(PersistAttempt.Completed(true));
         });
         Assert.False(upsertTask.IsCompleted);
         lock (order) Assert.DoesNotContain("upsert", order);
@@ -89,23 +88,23 @@ public class ExternalStoreCoordinatorTests
         var blocked = await coordinator.UpsertAsync(() =>
         {
             invoked = true;
-            return Task.FromResult(ResultBox.FromValue(true));
+            return Task.FromResult(PersistAttempt.Completed(true));
         });
         Assert.False(invoked);              // the store delegate was never called
         // A rejection is an explicit error carrying the stable fault-blocked exception — NOT a success carrying
         // false. This is what makes every caller inspecting only IsSuccess take the not-saved branch.
         Assert.False(blocked.IsSuccess);
-        Assert.IsType<ExternalPersistenceBlockedByFaultException>(blocked.GetException());
+        Assert.IsType<ExternalPersistenceBlockedByFaultException>(blocked.Failure);
 
         // Once the fault clears, the same upsert proceeds and succeeds.
         faulted = false;
         var allowed = await coordinator.UpsertAsync(() =>
         {
             invoked = true;
-            return Task.FromResult(ResultBox.FromValue(true));
+            return Task.FromResult(PersistAttempt.Completed(true));
         });
         Assert.True(invoked);
         Assert.True(allowed.IsSuccess);
-        Assert.True(allowed.GetValue());
+        Assert.True(allowed.Value);
     }
 }

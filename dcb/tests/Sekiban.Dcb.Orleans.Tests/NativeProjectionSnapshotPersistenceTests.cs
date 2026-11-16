@@ -15,6 +15,7 @@ using Sekiban.Dcb.Snapshots;
 using Sekiban.Dcb.Tags;
 using Xunit;
 
+using Sekiban.Dcb.TestSupport;
 namespace Sekiban.Dcb.Orleans.Tests;
 
 public class NativeProjectionSnapshotPersistenceTests
@@ -60,7 +61,7 @@ public class NativeProjectionSnapshotPersistenceTests
                 snapshotStream,
                 canGetUnsafeState: false,
                 offloadThresholdBytes: 16,
-                CancellationToken.None);
+                CancellationToken.None).AsResultBoxAsync();
 
             Assert.True(writeResult.IsSuccess);
             snapshotStream.Position = 0;
@@ -81,10 +82,10 @@ public class NativeProjectionSnapshotPersistenceTests
                 LargePayloadProjector.MultiProjectorName,
                 new GeneralMultiProjectionActorOptions { SafeWindowMs = 1000 },
                 NullLogger.Instance);
-            var restoreResult = await restoredHost.RestoreSnapshotFromStreamAsync(snapshotStream, CancellationToken.None);
+            var restoreResult = await restoredHost.RestoreSnapshotFromStreamAsync(snapshotStream, CancellationToken.None).AsResultBoxAsync();
             Assert.True(restoreResult.IsSuccess);
 
-            var stateResult = await restoredHost.GetStateAsync(canGetUnsafeState: true);
+            var stateResult = await restoredHost.GetStateAsync(canGetUnsafeState: true).AsResultBoxAsync();
             Assert.True(stateResult.IsSuccess);
             var payload = Assert.IsType<LargePayloadProjector>(stateResult.GetValue().Payload);
             Assert.Equal(6, payload.Items.Count);
@@ -127,7 +128,7 @@ public class NativeProjectionSnapshotPersistenceTests
             snapshotStream,
             canGetUnsafeState: false,
             offloadThresholdBytes: 16,
-            CancellationToken.None);
+            CancellationToken.None).AsResultBoxAsync();
 
         Assert.True(writeResult.IsSuccess);
         snapshotStream.Position = 0;
@@ -146,10 +147,10 @@ public class NativeProjectionSnapshotPersistenceTests
             LargePayloadProjector.MultiProjectorName,
             new GeneralMultiProjectionActorOptions { SafeWindowMs = 1000 },
             NullLogger.Instance);
-        var restoreResult = await restoredHost.RestoreSnapshotFromStreamAsync(snapshotStream, CancellationToken.None);
+        var restoreResult = await restoredHost.RestoreSnapshotFromStreamAsync(snapshotStream, CancellationToken.None).AsResultBoxAsync();
         Assert.True(restoreResult.IsSuccess);
 
-        var stateResult = await restoredHost.GetStateAsync(canGetUnsafeState: true);
+        var stateResult = await restoredHost.GetStateAsync(canGetUnsafeState: true).AsResultBoxAsync();
         Assert.True(stateResult.IsSuccess);
         var payload = Assert.IsType<LargePayloadProjector>(stateResult.GetValue().Payload);
         Assert.Equal(6, payload.Items.Count);

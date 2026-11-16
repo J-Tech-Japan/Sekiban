@@ -2,9 +2,9 @@ using Sekiban.Dcb.Actors;
 namespace Sekiban.Dcb.Orleans.Serialization;
 
 /// <summary>
-///     Lets a <see cref="SekibanProjectionFaultException" /> cross an Orleans grain boundary as a ResultBox field.
-///     The exception is a Core type (no Orleans dependency), and it carries a <see cref="ProjectionFaultDescriptor" />,
-///     so Orleans has no field codec for it. This surrogate flattens the descriptor into serializable fields and
+///     Lets a <see cref="SekibanProjectionFaultException" /> cross an Orleans grain boundary when a grain call fails
+///     with it. The exception is a Core type (no Orleans dependency), and it carries a
+///     <see cref="ProjectionFaultDescriptor" />, so Orleans has no field codec for it. This surrogate flattens the descriptor into serializable fields and
 ///     rebuilds the exception on the far side — so a faulted query result keeps its type and its fault context across
 ///     the boundary, exactly as the packet asks (no reference-identity promise).
 /// </summary>

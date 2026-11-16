@@ -1083,12 +1083,18 @@ if (TemplateEnvironment.IsDevelopment(app.Environment.EnvironmentName))
                 {
                     var start = DateTime.UtcNow;
                     var grain = client.GetGrain<IMultiProjectionGrain>(ServiceIdGrainKey.Build(serviceId, name));
-                    var rb = await grain.PersistStateAsync();
-                    var end = DateTime.UtcNow;
-                    if (rb.IsSuccess)
-                        return Results.Ok(new { success = rb.GetValue(), elapsedMs = (end - start).TotalMilliseconds });
-                    var err = rb.GetException()?.Message;
-                    return ProjectionErrors.Map(rb.GetException(), Results.BadRequest(new { error = err, elapsedMs = (end - start).TotalMilliseconds }));
+                    try
+                    {
+                        var saved = await grain.PersistStateAsync();
+                        var end = DateTime.UtcNow;
+                        return Results.Ok(new { success = saved, elapsedMs = (end - start).TotalMilliseconds });
+                    }
+                    catch (Exception persistFailure)
+                    {
+                        var end = DateTime.UtcNow;
+                        var err = persistFailure.Message;
+                        return ProjectionErrors.Map(persistFailure, Results.BadRequest(new { error = err, elapsedMs = (end - start).TotalMilliseconds }));
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -1147,9 +1153,16 @@ if (TemplateEnvironment.IsDevelopment(app.Environment.EnvironmentName))
                 try
                 {
                     var grain = client.GetGrain<IMultiProjectionGrain>(ServiceIdGrainKey.Build(serviceId, name));
-                    var rb = await grain.GetSnapshotJsonAsync(unsafeState ?? true);
-                    if (!rb.IsSuccess) return ProjectionErrors.Map(rb.GetException(), Results.BadRequest(new { error = rb.GetException()?.Message }));
-                    return Results.Text(rb.GetValue(), "application/json");
+                    string snapshotJson;
+                    try
+                    {
+                        snapshotJson = await grain.GetSnapshotJsonAsync(unsafeState ?? true);
+                    }
+                    catch (Exception snapshotFailure)
+                    {
+                        return ProjectionErrors.Map(snapshotFailure, Results.BadRequest(new { error = snapshotFailure.Message }));
+                    }
+                    return Results.Text(snapshotJson, "application/json");
                 }
                 catch (Exception ex)
                 {

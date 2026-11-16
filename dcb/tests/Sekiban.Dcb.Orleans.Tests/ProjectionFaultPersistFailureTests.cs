@@ -17,6 +17,7 @@ using Sekiban.Dcb.Testing;
 using System.Collections.Generic;
 using Xunit;
 using DomainTypes = Sekiban.Dcb.Orleans.Tests.ProjectionFaultOrleansTests;
+using Sekiban.Dcb.TestSupport;
 namespace Sekiban.Dcb.Orleans.Tests;
 
 /// <summary>
@@ -74,7 +75,7 @@ public class ProjectionFaultPersistFailureTests : IAsyncLifetime
         Assert.True(FaultWriteInjectingStorage.RejectedWrites >= 1, "the first fault-descriptor write was not rejected");
 
         // On the pinned activation, every query still fails.
-        Assert.False((await grain.GetSnapshotJsonAsync()).IsSuccess);
+        Assert.False((await grain.GetSnapshotJsonAsync().AsResultBoxAsync()).IsSuccess);
         Assert.False((await _executor.QueryAsync(new DomainTypes.FaultCountQuery())).IsSuccess);
         Assert.False((await _executor.QueryAsync(new DomainTypes.FaultRowListQuery())).IsSuccess);
 
@@ -93,7 +94,7 @@ public class ProjectionFaultPersistFailureTests : IAsyncLifetime
         await Task.Delay(1000);
 
         var reactivated = Client.GetGrain<IMultiProjectionGrain>(DomainTypes.FaultTestProjector.MultiProjectorName);
-        Assert.False((await reactivated.GetSnapshotJsonAsync()).IsSuccess);
+        Assert.False((await reactivated.GetSnapshotJsonAsync().AsResultBoxAsync()).IsSuccess);
         Assert.False((await _executor.QueryAsync(new DomainTypes.FaultCountQuery())).IsSuccess);
         Assert.False((await _executor.QueryAsync(new DomainTypes.FaultRowListQuery())).IsSuccess);
     }
@@ -111,9 +112,9 @@ public class ProjectionFaultPersistFailureTests : IAsyncLifetime
         await grain.RefreshAsync();
         await FaultWriteInjectingStorage.WaitForRejectedWriteAsync();
         Assert.True(FaultWriteInjectingStorage.RejectedWrites >= 1);
-        Assert.False((await grain.GetSnapshotJsonAsync()).IsSuccess);
+        Assert.False((await grain.GetSnapshotJsonAsync().AsResultBoxAsync()).IsSuccess);
 
-        var read = await grain.TryGetProjectionFaultAsync();
+        var read = await grain.TryGetProjectionFaultAsync().AsResultBoxAsync();
 
         Assert.True(read.IsSuccess);
         Assert.False(read.GetValue().HasFault); // empty means no COMMITTED descriptor, not a healthy live projection

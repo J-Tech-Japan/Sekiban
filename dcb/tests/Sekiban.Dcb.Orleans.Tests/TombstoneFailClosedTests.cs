@@ -59,14 +59,14 @@ public class TombstoneFailClosedTests : IAsyncLifetime
     {
         Env.WaitMs = waitMs;
         var grain = await PrepareFreshActivationWithOpenTombstoneAsync();
-        await AssertFailClosedFastAsync(() => grain.GetStateAsync(canGetUnsafeState: false, waitForCatchUp: false));
+        await AssertFailClosedFastAsync(() => grain.GetStateAsync(canGetUnsafeState: false, waitForCatchUp: false).AsResultBoxAsync());
     }
 
     [Fact]
     public async Task TombstoneActivation_GetSnapshotJson_FailClosedFast_WithStableMessage()
     {
         var grain = await PrepareFreshActivationWithOpenTombstoneAsync();
-        await AssertFailClosedFastAsync(() => grain.GetSnapshotJsonAsync(canGetUnsafeState: false));
+        await AssertFailClosedFastAsync(() => grain.GetSnapshotJsonAsync(canGetUnsafeState: false).AsResultBoxAsync());
     }
 
     [Fact]
@@ -103,7 +103,7 @@ public class TombstoneFailClosedTests : IAsyncLifetime
         var grain = await PrepareFreshActivationWithOpenTombstoneAsync();
 
         // Pre-tombstone snapshot carried count == 1 ("later" only). Fail-closed must not serve it.
-        var state = await grain.GetStateAsync(canGetUnsafeState: false, waitForCatchUp: false);
+        var state = await grain.GetStateAsync(canGetUnsafeState: false, waitForCatchUp: false).AsResultBoxAsync();
         Assert.False(state.IsSuccess);
         AssertTombstoneFailClosed(state.GetException());
 
@@ -122,7 +122,7 @@ public class TombstoneFailClosedTests : IAsyncLifetime
             timeoutMs: 60_000,
             label: "tombstone fail-closed cleared");
 
-        var recovered = await grain.GetStateAsync(canGetUnsafeState: false, waitForCatchUp: false);
+        var recovered = await grain.GetStateAsync(canGetUnsafeState: false, waitForCatchUp: false).AsResultBoxAsync();
         Assert.True(recovered.IsSuccess, recovered.IsSuccess ? "" : recovered.GetException().ToString());
         Assert.Equal(50, ((CountProjector)recovered.GetValue().Payload).Count);
     }
@@ -132,7 +132,7 @@ public class TombstoneFailClosedTests : IAsyncLifetime
     {
         var grain = await PrepareFreshActivationWithOpenTombstoneAsync();
         var activateAndStatus = grain.GetStatusAsync();
-        var failClosedProbe = grain.GetStateAsync(canGetUnsafeState: false, waitForCatchUp: false);
+        var failClosedProbe = grain.GetStateAsync(canGetUnsafeState: false, waitForCatchUp: false).AsResultBoxAsync();
         await Task.WhenAll(activateAndStatus, failClosedProbe);
         var status = await activateAndStatus;
         Assert.True(status.TombstoneFailClosedPending);
@@ -169,7 +169,7 @@ public class TombstoneFailClosedTests : IAsyncLifetime
             label: "catch-up started or finished");
 
         var polls = Enumerable.Range(0, 8)
-            .Select(_ => grain.GetStateAsync(canGetUnsafeState: false, waitForCatchUp: false))
+            .Select(_ => grain.GetStateAsync(canGetUnsafeState: false, waitForCatchUp: false).AsResultBoxAsync())
             .ToArray();
         var results = await Task.WhenAll(polls);
         foreach (var rb in results)
@@ -185,7 +185,7 @@ public class TombstoneFailClosedTests : IAsyncLifetime
             timeoutMs: 30_000,
             label: "tombstone fail-closed cleared after shared ensure");
 
-        var final = await grain.GetStateAsync();
+        var final = await grain.GetStateAsync().AsResultBoxAsync();
         Assert.True(final.IsSuccess);
         Assert.Equal(50, ((CountProjector)final.GetValue().Payload).Count);
     }
@@ -202,8 +202,8 @@ public class TombstoneFailClosedTests : IAsyncLifetime
             .ToArray();
         await Env.EventStore.WriteSerializableEventsAsync(baseline).AsResultBoxAsync();
         await grain.RefreshAsync();
-        Assert.True((await grain.PersistStateAsync()).IsSuccess);
-        Assert.Equal(persistedEvents, ((CountProjector)(await grain.GetStateAsync()).GetValue().Payload).Count);
+        Assert.True((await grain.PersistStateAsync().AsResultBoxAsync()).IsSuccess);
+        Assert.Equal(persistedEvents, ((CountProjector)(await grain.GetStateAsync().AsResultBoxAsync()).GetValue().Payload).Count);
 
         var active = await ReadSlotAsync();
         Assert.True(active.IsActive);

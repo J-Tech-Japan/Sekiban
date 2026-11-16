@@ -1,6 +1,5 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
-using ResultBoxes;
 using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Capabilities;
 using Sekiban.Dcb.Orleans.Grains;
@@ -109,8 +108,8 @@ public class OrleansActorObjectAccessor : IActorObjectAccessor, IExecutorRuntime
         }
 
         // A failed existence check answers "does not exist", as it always did.
-        var result = await _eventStore.TagExistsAsync(tag).ToResultBoxAsync();
-        return result.IsSuccess && result.GetValue();
+        var (exists, failure) = await TaskFailureCapture.CaptureAsync(_eventStore.TagExistsAsync(tag));
+        return failure is null && exists;
     }
 
     private ITag? ParseTagFromActorId(string actorId)
@@ -135,8 +134,8 @@ public class OrleansActorObjectAccessor : IActorObjectAccessor, IExecutorRuntime
     }
 
     /// <summary>
-    ///     Wrapper for TagConsistentGrain to implement ITagConsistentActorCommon. A failed result from the grain is
-    ///     thrown as the exception it carries.
+    ///     Wrapper for TagConsistentGrain to implement ITagConsistentActorCommon. A failure the grain reports arrives as
+    ///     the exception it threw.
     /// </summary>
     private class TagConsistentGrainWrapper : ITagConsistentActorCommon, IGrainBackedTagConsistentActor
     {
@@ -146,13 +145,12 @@ public class OrleansActorObjectAccessor : IActorObjectAccessor, IExecutorRuntime
 
         public Task<string> GetTagActorIdAsync() => _grain.GetTagActorIdAsync();
 
-        public Task<string> GetLatestSortableUniqueIdAsync() =>
-            _grain.GetLatestSortableUniqueIdAsync().GetValueOrRethrowAsync();
+        public Task<string> GetLatestSortableUniqueIdAsync() => _grain.GetLatestSortableUniqueIdAsync();
 
-        public Task<ResultBox<string>> GetLatestSortableUniqueIdResultAsync() => _grain.GetLatestSortableUniqueIdAsync();
+        public Task<string?> TryGetLatestSortableUniqueIdAsync() => _grain.TryGetLatestSortableUniqueIdAsync();
 
         public Task<TagWriteReservation> MakeReservationAsync(string? lastSortableUniqueId) =>
-            _grain.MakeReservationAsync(lastSortableUniqueId).GetValueOrRethrowAsync();
+            _grain.MakeReservationAsync(lastSortableUniqueId);
 
         public Task<bool> ConfirmReservationAsync(TagWriteReservation reservation) =>
             _grain.ConfirmReservationAsync(reservation);

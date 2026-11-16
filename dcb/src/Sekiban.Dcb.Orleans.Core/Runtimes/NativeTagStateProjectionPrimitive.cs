@@ -1,4 +1,3 @@
-using ResultBoxes;
 using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.Tags;
@@ -26,15 +25,33 @@ public sealed class NativeTagStateProjectionPrimitive : ITagStateProjectionPrimi
 
     public ITagStateProjectionAccumulator CreateAccumulator(TagStateId tagStateId)
     {
-        var projectorFuncResult = ResultBox.WrapTry(() => _tagProjectorTypes.GetProjectorFunction(tagStateId.TagProjectorName));
-        var projectorVersionResult = ResultBox.WrapTry(() => _tagProjectorTypes.GetProjectorVersion(tagStateId.TagProjectorName));
+        // An unknown projector leaves the accumulator without a projector and with an empty version.
+        Func<ITagStatePayload, Event, ITagStatePayload>? projector;
+        try
+        {
+            projector = _tagProjectorTypes.GetProjectorFunction(tagStateId.TagProjectorName);
+        }
+        catch (Exception)
+        {
+            projector = null;
+        }
+
+        string projectorVersion;
+        try
+        {
+            projectorVersion = _tagProjectorTypes.GetProjectorVersion(tagStateId.TagProjectorName) ?? string.Empty;
+        }
+        catch (Exception)
+        {
+            projectorVersion = string.Empty;
+        }
 
         return new NativeTagStateProjectionAccumulator(
             tagStateId,
             _eventTypes,
             _tagStatePayloadTypes,
-            projectorFuncResult.IsSuccess ? projectorFuncResult.GetValue() : null,
-            projectorVersionResult.IsSuccess ? projectorVersionResult.GetValue() : string.Empty);
+            projector,
+            projectorVersion);
     }
 
     private sealed class NativeTagStateProjectionAccumulator : ITagStateProjectionAccumulator
@@ -102,13 +119,22 @@ public sealed class NativeTagStateProjectionPrimitive : ITagStateProjectionPrimi
                 return true;
             }
 
-            var deserializeResult = ResultBox.WrapTry(() => _tagStatePayloadTypes.DeserializePayload(_cachedState.ResolvedPayloadName, _cachedState.Payload));
-            if (!deserializeResult.IsSuccess)
+            ITagStatePayload? payload;
+            try
+            {
+                payload = _tagStatePayloadTypes.DeserializePayload(_cachedState.ResolvedPayloadName, _cachedState.Payload);
+            }
+            catch (Exception)
+            {
+                payload = null;
+            }
+
+            if (payload is null)
             {
                 return false;
             }
 
-            _currentPayload = deserializeResult.GetValue();
+            _currentPayload = payload;
             _version = _cachedState.Version;
             _lastSortableUniqueId = _cachedState.LastSortedUniqueId;
             return true;
@@ -207,45 +233,38 @@ public sealed class NativeTagStateProjectionPrimitive : ITagStateProjectionPrimi
                 return _cachedState;
             }
 
-            var serializationResult = SerializePayload(_currentPayload);
-            if (!serializationResult.IsSuccess)
+            (byte[] Bytes, string PayloadName) serialized;
+            try
+            {
+                serialized = SerializePayload(_currentPayload);
+            }
+            catch (Exception ex)
             {
                 throw new InvalidOperationException(
-                    $"Failed to serialize tag state for {_tagStateId.GetTagStateId()}: {serializationResult.GetException().Message}",
-                    serializationResult.GetException());
+                    $"Failed to serialize tag state for {_tagStateId.GetTagStateId()}: {ex.Message}",
+                    ex);
             }
 
             return new SerializableTagState(
-                serializationResult.GetValue().Bytes,
+                serialized.Bytes,
                 _version,
                 _lastSortableUniqueId,
                 _tagGroup,
                 _tagContent,
                 _tagProjector,
-                serializationResult.GetValue().PayloadName,
+                serialized.PayloadName,
                 _projectorVersion,
-                serializationResult.GetValue().PayloadName);
+                serialized.PayloadName);
         }
 
         public void Dispose()
         {
         }
 
-        private ResultBox<(byte[] Bytes, string PayloadName)> SerializePayload(ITagStatePayload payload)
-        {
-            if (payload is EmptyTagStatePayload)
-            {
-                return ResultBox.FromValue((Array.Empty<byte>(), nameof(EmptyTagStatePayload)));
-            }
-
-            var serializeResult = ResultBox.WrapTry(() => _tagStatePayloadTypes.SerializePayload(payload));
-            if (!serializeResult.IsSuccess)
-            {
-                return ResultBox.Error<(byte[] Bytes, string PayloadName)>(serializeResult.GetException());
-            }
-
-            return ResultBox.FromValue((serializeResult.GetValue(), payload.GetType().Name));
-        }
+        private (byte[] Bytes, string PayloadName) SerializePayload(ITagStatePayload payload) =>
+            payload is EmptyTagStatePayload
+                ? (Array.Empty<byte>(), nameof(EmptyTagStatePayload))
+                : (_tagStatePayloadTypes.SerializePayload(payload), payload.GetType().Name);
     }
 
     private static SerializableTagState SerializableTagStateForEmpty(TagStateId tagStateId, string projectorVersion) =>

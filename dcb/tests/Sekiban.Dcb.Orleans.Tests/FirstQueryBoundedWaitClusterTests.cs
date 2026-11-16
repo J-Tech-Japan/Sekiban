@@ -95,8 +95,8 @@ public class FirstQueryBoundedWaitClusterTests : IAsyncLifetime
             var executor = new OrleansDcbExecutor(_client, Env.EventStore, Env.Domain);
             var sw = Stopwatch.StartNew();
             Exception error;
-            if (surface == "state") error = (await grain.GetStateAsync()).GetException();
-            else if (surface == "snapshot") error = (await grain.GetSnapshotJsonAsync()).GetException();
+            if (surface == "state") error = (await grain.GetStateAsync().AsResultBoxAsync()).GetException();
+            else if (surface == "snapshot") error = (await grain.GetSnapshotJsonAsync().AsResultBoxAsync()).GetException();
             else
             {
                 try
@@ -116,12 +116,12 @@ public class FirstQueryBoundedWaitClusterTests : IAsyncLifetime
             var status = await grain.GetStatusAsync();
             Assert.True(status.FirstQueryCatchUpPending);
             Assert.Null(status.LastError);
-            var polls = await Task.WhenAll(Enumerable.Range(0, 4).Select(_ => grain.GetStateAsync()));
+            var polls = await Task.WhenAll(Enumerable.Range(0, 4).Select(_ => grain.GetStateAsync().AsResultBoxAsync()));
             Assert.All(polls, result => Assert.False(result.IsSuccess));
             lock (leases) Assert.Single(leases);
             release.TrySetResult();
             await PollUntilAsync(async () => !(await grain.GetStatusAsync()).FirstQueryCatchUpPending);
-            Assert.Equal(3, ((CountProjector)(await grain.GetStateAsync()).GetValue().Payload).Count);
+            Assert.Equal(3, ((CountProjector)(await grain.GetStateAsync().AsResultBoxAsync()).GetValue().Payload).Count);
         }
         finally { release.TrySetResult(); }
     }
@@ -148,11 +148,11 @@ public class FirstQueryBoundedWaitClusterTests : IAsyncLifetime
         try
         {
             var grain = await FreshAsync();
-            _ = await grain.GetStateAsync();
+            _ = await grain.GetStateAsync().AsResultBoxAsync();
             // The timer has completed; Ensure now owns the execution gate and active progress, with no timer.
             await parked.Task.WaitAsync(TimeSpan.FromSeconds(15));
             Assert.Equal(1, Volatile.Read(ref starts));
-            var polls = await Task.WhenAll(Enumerable.Range(0, 5).Select(_ => grain.GetStateAsync()));
+            var polls = await Task.WhenAll(Enumerable.Range(0, 5).Select(_ => grain.GetStateAsync().AsResultBoxAsync()));
             Assert.All(polls, result =>
             {
                 Assert.False(result.IsSuccess);
@@ -169,7 +169,7 @@ public class FirstQueryBoundedWaitClusterTests : IAsyncLifetime
                 if (pending) Assert.Equal(1, Volatile.Read(ref starts));
                 return !pending;
             });
-            var result = await grain.GetStateAsync();
+            var result = await grain.GetStateAsync().AsResultBoxAsync();
             Assert.True(result.IsSuccess);
             Assert.Equal(3, ((CountProjector)result.GetValue().Payload).Count);
         }
@@ -210,7 +210,7 @@ public class FirstQueryBoundedWaitClusterTests : IAsyncLifetime
                 return Task.CompletedTask;
             });
         var sw = Stopwatch.StartNew();
-        var result = await grain.GetStateAsync().WaitAsync(TimeSpan.FromSeconds(5));
+        var result = await grain.GetStateAsync().AsResultBoxAsync().WaitAsync(TimeSpan.FromSeconds(5));
         Assert.True(result.IsSuccess, result.IsSuccess ? "" : result.GetException().ToString());
         Assert.True(sw.Elapsed < TimeSpan.FromMilliseconds(Env.WaitMs), sw.Elapsed.ToString());
         Assert.Equal(3, ((CountProjector)result.GetValue().Payload).Count);
@@ -227,7 +227,7 @@ public class FirstQueryBoundedWaitClusterTests : IAsyncLifetime
     {
         Env.WaitMs = 20_000;
         var grain = await FreshAsync();
-        var result = await grain.GetStateAsync();
+        var result = await grain.GetStateAsync().AsResultBoxAsync();
         Assert.True(result.IsSuccess, result.IsSuccess ? "" : result.GetException().ToString());
         Assert.Equal(3, ((CountProjector)result.GetValue().Payload).Count);
         Assert.False((await grain.GetStatusAsync()).FirstQueryCatchUpPending);
@@ -251,7 +251,7 @@ public class FirstQueryBoundedWaitClusterTests : IAsyncLifetime
         try
         {
             var grain = await FreshAsync();
-            var result = await grain.GetStateAsync().WaitAsync(TimeSpan.FromSeconds(10));
+            var result = await grain.GetStateAsync().AsResultBoxAsync().WaitAsync(TimeSpan.FromSeconds(10));
             Assert.True(result.IsSuccess);
             Assert.True(entered.Task.IsCompleted);
         }
@@ -276,7 +276,7 @@ public class FirstQueryBoundedWaitClusterTests : IAsyncLifetime
             ToSerializable(CreateEvent(new Counted("poison"), t0.AddSeconds(-50)))]).AsResultBoxAsync();
         await PollUntilAsync(async () =>
         {
-            var result = await grain.GetStateAsync();
+            var result = await grain.GetStateAsync().AsResultBoxAsync();
             return !result.IsSuccess && !result.GetException().Message.Contains(
                 MultiProjectionQueryFailClosedMessages.CatchUpInProgressPrefix, StringComparison.Ordinal);
         });
@@ -284,7 +284,7 @@ public class FirstQueryBoundedWaitClusterTests : IAsyncLifetime
         lock (leases) runs = leases.Count;
         for (var i = 0; i < 3; i++)
         {
-            var result = await grain.GetStateAsync();
+            var result = await grain.GetStateAsync().AsResultBoxAsync();
             Assert.False(result.IsSuccess);
             Assert.DoesNotContain(MultiProjectionQueryFailClosedMessages.CatchUpInProgressPrefix, result.GetException().Message);
             Assert.Contains("tail poison", result.GetException().Message);
@@ -303,8 +303,8 @@ public class FirstQueryBoundedWaitClusterTests : IAsyncLifetime
         var grain = await FreshAsync(t0);
         if (restoredSnapshot)
         {
-            Assert.True((await grain.GetStateAsync()).IsSuccess);
-            Assert.True((await grain.PersistStateAsync()).IsSuccess);
+            Assert.True((await grain.GetStateAsync().AsResultBoxAsync()).IsSuccess);
+            Assert.True((await grain.PersistStateAsync().AsResultBoxAsync()).IsSuccess);
             await grain.RequestDeactivationAsync();
             await Task.Delay(1000);
             await Env.EventStore.WriteSerializableEventsAsync([
@@ -338,11 +338,11 @@ public class FirstQueryBoundedWaitClusterTests : IAsyncLifetime
             });
         try
         {
-            _ = await grain.GetStateAsync();
+            _ = await grain.GetStateAsync().AsResultBoxAsync();
             await failed.Task.WaitAsync(TimeSpan.FromSeconds(15));
             await PollUntilAsync(async () => !(await grain.GetStatusAsync()).IsCatchUpActive);
             Assert.NotNull((await grain.GetStatusAsync()).CatchUpTargetPosition);
-            var result = await grain.GetStateAsync();
+            var result = await grain.GetStateAsync().AsResultBoxAsync();
             Assert.False(result.IsSuccess);
             Assert.Contains("one failed background attempt", result.GetException().Message);
             var status = await grain.GetStatusAsync();
@@ -355,7 +355,7 @@ public class FirstQueryBoundedWaitClusterTests : IAsyncLifetime
             release.TrySetResult();
             await PollUntilAsync(async () => !(await grain.GetStatusAsync()).FirstQueryCatchUpPending);
             Assert.Equal(restoredSnapshot ? 4 : 3,
-                ((CountProjector)(await grain.GetStateAsync()).GetValue().Payload).Count);
+                ((CountProjector)(await grain.GetStateAsync().AsResultBoxAsync()).GetValue().Payload).Count);
         }
         finally { release.TrySetResult(); }
     }
@@ -366,8 +366,8 @@ public class FirstQueryBoundedWaitClusterTests : IAsyncLifetime
         var t0 = DateTime.UtcNow;
         Env.WaitMs = 20_000;
         var grain = await FreshAsync(t0);
-        Assert.Equal(3, ((CountProjector)(await grain.GetStateAsync()).GetValue().Payload).Count);
-        Assert.True((await grain.PersistStateAsync()).IsSuccess);
+        Assert.Equal(3, ((CountProjector)(await grain.GetStateAsync().AsResultBoxAsync()).GetValue().Payload).Count);
+        Assert.True((await grain.PersistStateAsync().AsResultBoxAsync()).IsSuccess);
         await grain.RequestDeactivationAsync();
         await Task.Delay(1000);
         await Env.EventStore.WriteSerializableEventsAsync([
@@ -393,11 +393,11 @@ public class FirstQueryBoundedWaitClusterTests : IAsyncLifetime
             });
         try
         {
-            _ = await grain.GetStateAsync();
+            _ = await grain.GetStateAsync().AsResultBoxAsync();
             await PollUntilAsync(async () =>
                 (await grain.GetStatusAsync()).LastBackgroundCatchUpError?.Contains(
                     "transient background Ensure failure", StringComparison.Ordinal) == true);
-            var result = await grain.GetStateAsync();
+            var result = await grain.GetStateAsync().AsResultBoxAsync();
             Assert.False(result.IsSuccess);
             Assert.Contains("transient background Ensure failure", result.GetException().Message);
             await retryEntered.Task.WaitAsync(TimeSpan.FromSeconds(15));
@@ -411,7 +411,7 @@ public class FirstQueryBoundedWaitClusterTests : IAsyncLifetime
                 if (pending) Assert.Equal(1, Volatile.Read(ref starts));
                 return !pending;
             });
-            result = await grain.GetStateAsync();
+            result = await grain.GetStateAsync().AsResultBoxAsync();
             Assert.True(result.IsSuccess, result.IsSuccess ? "" : result.GetException().ToString());
             Assert.Equal(4, ((CountProjector)result.GetValue().Payload).Count);
         }

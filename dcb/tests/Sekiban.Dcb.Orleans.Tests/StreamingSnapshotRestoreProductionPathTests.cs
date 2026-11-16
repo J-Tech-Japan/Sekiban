@@ -15,6 +15,7 @@ using Sekiban.Dcb.Snapshots;
 using Sekiban.Dcb.Tags;
 using Xunit;
 
+using Sekiban.Dcb.TestSupport;
 namespace Sekiban.Dcb.Orleans.Tests;
 
 /// <summary>
@@ -51,12 +52,12 @@ public sealed partial class StreamingSnapshotRestoreProductionPathTests
 
         // This call is the real activation-side OOM entry point. The blob stream forbids Length/Seek and releases only
         // when the test says so, which exposes any query/apply/persistence attempt that would otherwise race a restore.
-        var restoreTask = host.RestoreSnapshotFromStreamAsync(envelopeStream, CancellationToken.None);
+        var restoreTask = host.RestoreSnapshotFromStreamAsync(envelopeStream, CancellationToken.None).AsResultBoxAsync();
         var payloadStream = await blob.Opened.Task.WaitAsync(TimeSpan.FromSeconds(5));
         await payloadStream.FirstReadStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
 
         Assert.False(restoreTask.IsCompleted);
-        var queryDuringRestore = await host.GetStateAsync(canGetUnsafeState: true);
+        var queryDuringRestore = await host.GetStateAsync(canGetUnsafeState: true).AsResultBoxAsync();
         Assert.False(queryDuringRestore.IsSuccess);
         Assert.Contains("restore is still in progress", queryDuringRestore.GetException().Message, StringComparison.OrdinalIgnoreCase);
         await Assert.ThrowsAsync<InvalidOperationException>(
@@ -67,7 +68,7 @@ public sealed partial class StreamingSnapshotRestoreProductionPathTests
             persistenceTarget,
             canGetUnsafeState: false,
             offloadThresholdBytes: 1,
-            CancellationToken.None);
+            CancellationToken.None).AsResultBoxAsync();
         Assert.False(persistDuringRestore.IsSuccess);
         await Assert.ThrowsAsync<InvalidOperationException>(() => host.GetProjectionHeadStatusAsync());
 
@@ -87,7 +88,7 @@ public sealed partial class StreamingSnapshotRestoreProductionPathTests
         Assert.Equal(0, targetTypes.BufferedDeserializeCalls);
         Assert.True(payloadStream.ReadCalls > 1);
         Assert.True(payloadStream.IsDisposed);
-        var state = await host.GetStateAsync(canGetUnsafeState: true);
+        var state = await host.GetStateAsync(canGetUnsafeState: true).AsResultBoxAsync();
         Assert.True(state.IsSuccess);
         Assert.Equal("restored-through-native-host", Assert.IsType<StreamingRestoreProjector>(state.GetValue().Payload).Value);
     }

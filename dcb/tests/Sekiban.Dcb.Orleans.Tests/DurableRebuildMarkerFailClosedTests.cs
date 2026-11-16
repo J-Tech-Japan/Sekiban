@@ -81,9 +81,9 @@ public class DurableRebuildMarkerFailClosedTests : IAsyncLifetime
         var later = ToSerializable(CreateEvent(new Counted("later"), t0.AddSeconds(-30)));
         await Env.EventStore.WriteSerializableEventsAsync(new[] { later }).AsResultBoxAsync();
         await grain.RefreshAsync();
-        Assert.True((await grain.PersistStateAsync()).IsSuccess);
+        Assert.True((await grain.PersistStateAsync().AsResultBoxAsync()).IsSuccess);
         var externalWritesBefore = Env.StateStore.WriteCount;
-        Assert.Equal(1, ((CountProjector)(await grain.GetStateAsync()).GetValue().Payload).Count);
+        Assert.Equal(1, ((CountProjector)(await grain.GetStateAsync().AsResultBoxAsync()).GetValue().Payload).Count);
         // The setup query can start background catch-up; deliver the retrograde event only after it is idle.
         await FirstQueryBoundedWaitClusterTests.PollUntilAsync(async () => !(await grain.GetStatusAsync()).IsCatchUpActive);
 
@@ -96,7 +96,7 @@ public class DurableRebuildMarkerFailClosedTests : IAsyncLifetime
         await grain.AddEventsAsync(new[] { earlier });
 
         // With the durable marker not committed, all three query surfaces MUST fail closed (never a stale success).
-        Assert.False((await grain.GetStateAsync()).IsSuccess);
+        Assert.False((await grain.GetStateAsync().AsResultBoxAsync()).IsSuccess);
         Assert.False((await executor.QueryAsync(new CountQuery())).IsSuccess);
         Assert.False((await executor.QueryAsync(new CountListQuery())).IsSuccess);
 
@@ -126,7 +126,7 @@ public class DurableRebuildMarkerFailClosedTests : IAsyncLifetime
         var later = ToSerializable(CreateEvent(new Counted("later"), t0.AddSeconds(-30)));
         await Env.EventStore.WriteSerializableEventsAsync(new[] { later }).AsResultBoxAsync();
         await grain.RefreshAsync();
-        Assert.True((await grain.PersistStateAsync()).IsSuccess);
+        Assert.True((await grain.PersistStateAsync().AsResultBoxAsync()).IsSuccess);
         Assert.True((await Env.StateStore.GetLatestForVersionAsync(CountProjector.MultiProjectorName, "1.0.0").AsOptionalResultBoxAsync()).GetValue().HasValue);
         await FirstQueryBoundedWaitClusterTests.PollUntilAsync(async () => !(await grain.GetStatusAsync()).IsCatchUpActive);
 
@@ -143,7 +143,7 @@ public class DurableRebuildMarkerFailClosedTests : IAsyncLifetime
         // still signals RebuildRequired every query fails closed (never the stale pre-rebuild payload).
         Assert.True(Env.StateStore.InvalidateCount >= 1);
         Assert.True((await Env.StateStore.GetLatestForVersionAsync(CountProjector.MultiProjectorName, "1.0.0").AsOptionalResultBoxAsync()).GetValue().HasValue);
-        Assert.False((await grain.GetStateAsync()).IsSuccess);
+        Assert.False((await grain.GetStateAsync().AsResultBoxAsync()).IsSuccess);
         Assert.False((await executor.QueryAsync(new CountQuery())).IsSuccess);
         Assert.False((await executor.QueryAsync(new CountListQuery())).IsSuccess);
 
@@ -166,7 +166,7 @@ public class DurableRebuildMarkerFailClosedTests : IAsyncLifetime
         ResultBox<Sekiban.Dcb.MultiProjections.MultiProjectionState> last = default!;
         for (var i = 0; i < 40; i++)
         {
-            last = await grain.GetStateAsync();
+            last = await grain.GetStateAsync().AsResultBoxAsync();
             if (last.IsSuccess && ((CountProjector)last.GetValue().Payload).Count == 2)
             {
                 return last;

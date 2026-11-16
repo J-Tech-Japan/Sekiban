@@ -13,6 +13,7 @@ using Sekiban.Dcb.Queries;
 using Sekiban.Dcb.Snapshots;
 using Sekiban.Dcb.Tags;
 using Xunit;
+using Sekiban.Dcb.TestSupport;
 namespace Sekiban.Dcb.Orleans.Tests;
 
 // SEK-G20 shared domain + helpers for the two-cluster PRODUCT proofs. The InMemory-reference test and the
@@ -144,7 +145,7 @@ public static class G20Shared
 
     public static async Task<string> WinnerAsync(IMultiProjectionGrain grain)
     {
-        var rb = await grain.GetStateAsync();
+        var rb = await grain.GetStateAsync().AsResultBoxAsync();
         return rb.IsSuccess ? (((FirstWinsProjector)rb.GetValue().Payload).Winners.TryGetValue("team-1", out var v) ? v : "") : "(fail)";
     }
 
@@ -154,7 +155,7 @@ public static class G20Shared
     {
         for (var i = 0; i < 200; i++)
         {
-            var rb = await grain.GetStateAsync(canGetUnsafeState: true, waitForCatchUp: false);
+            var rb = await grain.GetStateAsync(canGetUnsafeState: true, waitForCatchUp: false).AsResultBoxAsync();
             if (rb.IsSuccess && ((FirstWinsProjector)rb.GetValue().Payload).Winners.TryGetValue("team-1", out var v) && v == expected)
             {
                 return v;
@@ -173,7 +174,7 @@ public static class G20Shared
         MultiProjectionState last = null!;
         for (var i = 0; i < 80; i++)
         {
-            var rb = await grain.GetStateAsync(canGetUnsafeState: false, waitForCatchUp: false);
+            var rb = await grain.GetStateAsync(canGetUnsafeState: false, waitForCatchUp: false).AsResultBoxAsync();
             if (rb.IsSuccess)
             {
                 last = rb.GetValue();
@@ -191,7 +192,7 @@ public static class G20Shared
     {
         for (var i = 0; i < 100; i++)
         {
-            var rb = await grain.GetStateAsync(canGetUnsafeState: true, waitForCatchUp: false);
+            var rb = await grain.GetStateAsync(canGetUnsafeState: true, waitForCatchUp: false).AsResultBoxAsync();
             if (rb.IsSuccess && ((FirstWinsProjector)rb.GetValue().Payload).Winners.ContainsKey(id))
             {
                 return;

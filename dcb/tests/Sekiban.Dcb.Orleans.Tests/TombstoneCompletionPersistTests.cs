@@ -59,14 +59,14 @@ public class TombstoneCompletionPersistTests : IAsyncLifetime
         await PollUntilAsync(async () =>
         {
             if (!(await grain.GetStatusAsync()).TombstoneFailClosedPending) return true;
-            _ = await grain.GetStateAsync(canGetUnsafeState: false, waitForCatchUp: false);
+            _ = await grain.GetStateAsync(canGetUnsafeState: false, waitForCatchUp: false).AsResultBoxAsync();
             return false;
         }, 20_000, "tombstone gate clearing");
 
         // No deactivation or explicit persist after gate settlement: completion itself must commit within seconds.
         await PollUntilAsync(async () => (await ReadSlotAsync()).IsActive,
             3_000, "rebuilt checkpoint becoming Active after gate settlement");
-        var state = await grain.GetStateAsync(canGetUnsafeState: false, waitForCatchUp: false);
+        var state = await grain.GetStateAsync(canGetUnsafeState: false, waitForCatchUp: false).AsResultBoxAsync();
         Assert.True(state.IsSuccess, state.IsSuccess ? "" : state.GetException().ToString());
         Assert.Equal(50, ((CountProjector)state.GetValue().Payload).Count);
         Assert.Equal(injectFailure ? 1 : 0, Env.Wrapped.Thrown);
@@ -105,8 +105,8 @@ public class TombstoneCompletionPersistTests : IAsyncLifetime
             .ToArray();
         await Env.EventStore.WriteSerializableEventsAsync(baseline).AsResultBoxAsync();
         await grain.RefreshAsync();
-        Assert.True((await grain.PersistStateAsync()).IsSuccess);
-        Assert.Equal(persistedEvents, ((CountProjector)(await grain.GetStateAsync()).GetValue().Payload).Count);
+        Assert.True((await grain.PersistStateAsync().AsResultBoxAsync()).IsSuccess);
+        Assert.Equal(persistedEvents, ((CountProjector)(await grain.GetStateAsync().AsResultBoxAsync()).GetValue().Payload).Count);
 
         var active = await ReadSlotAsync();
         Assert.True(active.IsActive);
