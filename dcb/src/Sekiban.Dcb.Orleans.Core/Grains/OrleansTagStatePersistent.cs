@@ -1,4 +1,3 @@
-using ResultBoxes;
 using Sekiban.Dcb.Tags;
 using Sekiban.Dcb.Domains;
 namespace Sekiban.Dcb.Orleans.Grains;
@@ -26,18 +25,20 @@ public class OrleansTagStatePersistent : ITagStatePersistent, ISerializableTagSt
         if (serializable != null)
         {
             // Deserialize payload from SerializableTagState
-            var deserializeResult = ResultBox.WrapTry(() => _tagStatePayloadTypes.DeserializePayload(
-                serializable.ResolvedPayloadName,
-                serializable.Payload));
-
-            if (!deserializeResult.IsSuccess)
+            ITagStatePayload payload;
+            try
             {
-                throw new InvalidOperationException(
-                    $"Failed to deserialize payload: {deserializeResult.GetException().Message}");
+                payload = _tagStatePayloadTypes.DeserializePayload(
+                    serializable.ResolvedPayloadName,
+                    serializable.Payload);
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException($"Failed to deserialize payload: {ex.Message}");
             }
 
             var tagState = new TagState(
-                deserializeResult.GetValue(),
+                payload,
                 serializable.Version,
                 serializable.LastSortedUniqueId,
                 serializable.TagGroup,
@@ -53,15 +54,18 @@ public class OrleansTagStatePersistent : ITagStatePersistent, ISerializableTagSt
     public async Task SaveStateAsync(TagState state)
     {
         // Convert TagState to SerializableTagState
-        var serializeResult = ResultBox.WrapTry(() => _tagStatePayloadTypes.SerializePayload(state.Payload));
-        if (!serializeResult.IsSuccess)
+        byte[] payloadBytes;
+        try
         {
-            throw new InvalidOperationException(
-                $"Failed to serialize payload: {serializeResult.GetException().Message}");
+            payloadBytes = _tagStatePayloadTypes.SerializePayload(state.Payload);
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException($"Failed to serialize payload: {ex.Message}");
         }
 
         var serializable = new SerializableTagState(
-            serializeResult.GetValue(),
+            payloadBytes,
             state.Version,
             state.LastSortedUniqueId,
             state.TagGroup,

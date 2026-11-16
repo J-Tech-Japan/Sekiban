@@ -290,26 +290,18 @@ public class OrleansDcbExecutor : ISekibanExecutor, IConditionalCommandExecutor,
         SerializableQueryResult result)
         where TResult : notnull
     {
-        var generalBox = await result.ToQueryResultAsync(_construction.DomainTypes);
-        if (!generalBox.IsSuccess)
-        {
-            return ResultBox.Error<TResult>(generalBox.GetException());
-        }
-
-        return ResultBox.WrapTry(() => generalBox.GetValue().ToTypedResult<TResult>());
+        // A result that does not deserialize fails the query with that exception, through the caller's catch.
+        var general = await result.ToQueryResultAsync(_construction.DomainTypes);
+        return ResultBox.WrapTry(() => general.ToTypedResult<TResult>());
     }
 
     private async Task<ResultBox<ListQueryResult<TResult>>> DeserializeListQueryResultAsync<TResult>(
         SerializableListQueryResult result)
         where TResult : notnull
     {
-        var listGeneralBox = await result.ToListQueryResultAsync(_construction.DomainTypes);
-        if (!listGeneralBox.IsSuccess)
-        {
-            return ResultBox.Error<ListQueryResult<TResult>>(listGeneralBox.GetException());
-        }
-
-        return ResultBox.WrapTry(() => listGeneralBox.GetValue().ToTypedResult<TResult>());
+        // A result that does not deserialize fails the query with that exception, through the caller's catch.
+        var listGeneral = await result.ToListQueryResultAsync(_construction.DomainTypes);
+        return ResultBox.WrapTry(() => listGeneral.ToTypedResult<TResult>());
     }
 
     public Task<ResultBox<string>> GetLatestSortableUniqueIdAsync() =>

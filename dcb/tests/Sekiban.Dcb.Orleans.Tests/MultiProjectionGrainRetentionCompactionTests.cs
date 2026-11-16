@@ -171,36 +171,36 @@ public class MultiProjectionGrainRetentionCompactionTests
         public Task AddSerializableEventsAsync(IReadOnlyList<SerializableEvent> events, bool finishedCatchUp = true) =>
             throw new NotSupportedException();
 
-        public Task<ResultBox<ProjectionStateMetadata>> GetStateMetadataAsync(bool includeUnsafe = true) =>
+        public Task<ProjectionStateMetadata> GetStateMetadataAsync(bool includeUnsafe = true) =>
             throw new NotSupportedException();
 
         public Task<ProjectionHeadStatus> GetProjectionHeadStatusAsync() =>
             throw new NotSupportedException();
 
-        public Task<ResultBox<MultiProjectionState>> GetStateAsync(bool canGetUnsafeState = true) =>
+        public Task<MultiProjectionState> GetStateAsync(bool canGetUnsafeState = true) =>
             throw new NotSupportedException();
 
-        public Task<ResultBox<bool>> WriteSnapshotToStreamAsync(Stream target, bool canGetUnsafeState, CancellationToken cancellationToken) =>
+        public Task<bool> WriteSnapshotToStreamAsync(Stream target, bool canGetUnsafeState, CancellationToken cancellationToken) =>
             throw new NotSupportedException();
 
-        public Task<ResultBox<bool>> WriteSnapshotForPersistenceToStreamAsync(
+        public Task<bool> WriteSnapshotForPersistenceToStreamAsync(
             Stream target,
             bool canGetUnsafeState,
             int offloadThresholdBytes,
             CancellationToken cancellationToken) =>
             throw new NotSupportedException();
 
-        public Task<ResultBox<bool>> RestoreSnapshotFromStreamAsync(Stream source, CancellationToken cancellationToken) =>
+        public Task<bool> RestoreSnapshotFromStreamAsync(Stream source, CancellationToken cancellationToken) =>
             throw new NotSupportedException();
 
-        public Task<ResultBox<SerializableQueryResult>> ExecuteQueryAsync(
+        public Task<SerializableQueryResult> ExecuteQueryAsync(
             SerializableQueryParameter query,
             int? safeVersion,
             string? safeThreshold,
             DateTime? safeThresholdTime,
             int? unsafeVersion) => throw new NotSupportedException();
 
-        public Task<ResultBox<SerializableListQueryResult>> ExecuteListQueryAsync(
+        public Task<SerializableListQueryResult> ExecuteListQueryAsync(
             SerializableQueryParameter query,
             int? safeVersion,
             string? safeThreshold,
@@ -216,7 +216,7 @@ public class MultiProjectionGrainRetentionCompactionTests
         public string PeekCurrentSafeWindowThreshold() => throw new NotSupportedException();
         public string GetProjectorVersion() => throw new NotSupportedException();
 
-        public Task<ResultBox<bool>> RewriteSnapshotVersionAsync(
+        public Task<bool> RewriteSnapshotVersionAsync(
             Stream source,
             Stream target,
             string newVersion,

@@ -304,7 +304,7 @@ public class TwoClusterPostgresProductTests : IAsyncLifetime
         // the one OrleansActorObjectAccessor uses for command reservations; no timing window or sleep is involved.
         var reservationA = _clusterA.Client.GetGrain<ITagConsistentGrain>(
             ServiceIdGrainKey.Build(serviceId, tag.GetTag()));
-        Assert.Equal(string.Empty, (await reservationA.GetLatestSortableUniqueIdAsync()).GetValue());
+        Assert.Equal(string.Empty, await reservationA.GetLatestSortableUniqueIdAsync());
 
         var b = await execB.ExecuteAsync(new G22UpsertCommand(id, "B"));
         Assert.True(b.IsSuccess, b.IsSuccess ? string.Empty : b.GetException().ToString());
@@ -356,9 +356,9 @@ public class TwoClusterPostgresProductTests : IAsyncLifetime
             //     the snapshot to a content-addressed blob. Shared row => Active(gen0), winner "later", IsOffloaded.
             await WriteEventAsync("team-1", "later", 30);
             await grainA.RefreshAsync();
-            Assert.True((await grainA.PersistStateAsync()).IsSuccess);
+            Assert.True((await grainA.PersistStateAsync().AsResultBoxAsync()).IsSuccess);
             await grainB.RefreshAsync();
-            _ = await grainB.PersistStateAsync();
+            _ = await grainB.PersistStateAsync().AsResultBoxAsync();
             var gen0 = await ReadRowAsync();
             Assert.True(gen0.IsActive);
             Assert.Equal(0, gen0.Generation);
@@ -369,7 +369,7 @@ public class TwoClusterPostgresProductTests : IAsyncLifetime
             // Arm before the B-only event: the first upsert, background or explicit, must park on gen0.
             gateB.UpsertGate = bUpsert;
             await grainB.AddEventsAsync(new[] { ToSerializable(CreateEvent(new CreatedWithId("team-2", "B-stale"), DateTime.UtcNow.AddSeconds(-20))) });
-            var bPersist = grainB.PersistStateAsync();
+            var bPersist = grainB.PersistStateAsync().AsResultBoxAsync();
             await bUpsert.Arrived.Task.WaitAsync(TimeSpan.FromMinutes(2));
 
             // (4) Arm A's rebuilt-commit gate; deliver the retrograde "earlier" to A and drive its rebuild FIRE-AND-FORGET. A
@@ -377,7 +377,7 @@ public class TwoClusterPostgresProductTests : IAsyncLifetime
             gateA.CommitRebuiltGate = aCommit;
             await WriteEventAsync("team-1", "earlier", 31);
             await grainA.AddEventsAsync(new[] { ToSerializable(CreateEvent(new CreatedWithId("team-1", "earlier"), DateTime.UtcNow.AddSeconds(-31))) });
-            var aDrive = grainA.GetStateAsync(canGetUnsafeState: true, waitForCatchUp: false);
+            var aDrive = grainA.GetStateAsync(canGetUnsafeState: true, waitForCatchUp: false).AsResultBoxAsync();
             await aCommit.Arrived.Task.WaitAsync(TimeSpan.FromMinutes(2));
             var tomb = await PollUntilTombstoneAsync();
             Assert.True(tomb.IsTombstoned);
@@ -399,7 +399,7 @@ public class TwoClusterPostgresProductTests : IAsyncLifetime
             var retainedBlob = Blob.TryGet(gen0Key)!.ToArray();
             for (var attempt = 0; attempt < 3; attempt++)
             {
-                _ = await grainB.PersistStateAsync();
+                _ = await grainB.PersistStateAsync().AsResultBoxAsync();
                 var blocked = await ReadRowAsync();
                 Assert.True(blocked.IsTombstoned);
                 Assert.Equal(tomb.Generation, blocked.Generation);
@@ -416,7 +416,7 @@ public class TwoClusterPostgresProductTests : IAsyncLifetime
             await grainB.AddEventsAsync(new[] { ToSerializable(CreateEvent(new CreatedWithId("team-1", "earlier"), DateTime.UtcNow.AddSeconds(-31))) });
             gateB.CommitRebuiltGate = bCommit;
             var execB = new OrleansDcbExecutor(_clusterB.Client, eventStore, G20Shared.BuildDomain());
-            var bState = grainB.GetStateAsync(canGetUnsafeState: false, waitForCatchUp: false);
+            var bState = grainB.GetStateAsync(canGetUnsafeState: false, waitForCatchUp: false).AsResultBoxAsync();
             var bScalar = execB.QueryAsync(new WinnerQuery("team-1"));
             var bList = execB.QueryAsync(new WinnerListQuery());
             await bCommit.Arrived.Task.WaitAsync(TimeSpan.FromMinutes(2));   // deterministic barrier-entry: B's rebuild reached its rebuilt-commit boundary (parked)

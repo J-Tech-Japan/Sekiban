@@ -1,4 +1,3 @@
-using ResultBoxes;
 using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Orleans.ServiceId;
@@ -38,25 +37,36 @@ public class TagConsistentGrain : Grain, ITagConsistentGrain
         return _actor.GetTagActorIdAsync();
     }
 
-    public Task<ResultBox<string>> GetLatestSortableUniqueIdAsync()
+    public Task<string> GetLatestSortableUniqueIdAsync()
     {
         if (_actor == null)
         {
-            return Task.FromResult(ResultBox.Error<string>(new InvalidOperationException("Actor not initialized")));
+            return Task.FromException<string>(new InvalidOperationException("Actor not initialized"));
         }
 
-        return _actor.GetLatestSortableUniqueIdAsync().ToResultBoxAsync();
+        return GrainFailureTransport.PrepareAsync(_actor.GetLatestSortableUniqueIdAsync(), () => ServiceProvider);
     }
 
-    public Task<ResultBox<TagWriteReservation>> MakeReservationAsync(string? lastSortableUniqueId)
+    public async Task<string?> TryGetLatestSortableUniqueIdAsync()
     {
         if (_actor == null)
         {
-            return Task.FromResult(
-                ResultBox.Error<TagWriteReservation>(new InvalidOperationException("Actor not initialized")));
+            return null;
         }
 
-        return _actor.MakeReservationAsync(lastSortableUniqueId).ToResultBoxAsync();
+        // A failure the actor reports means the latest position is unknown; it is not sent over the wire.
+        var (latest, failure) = await TaskFailureCapture.CaptureAsync(_actor.GetLatestSortableUniqueIdAsync());
+        return failure is null ? latest : null;
+    }
+
+    public Task<TagWriteReservation> MakeReservationAsync(string? lastSortableUniqueId)
+    {
+        if (_actor == null)
+        {
+            return Task.FromException<TagWriteReservation>(new InvalidOperationException("Actor not initialized"));
+        }
+
+        return GrainFailureTransport.PrepareAsync(_actor.MakeReservationAsync(lastSortableUniqueId), () => ServiceProvider);
     }
 
     public Task<bool> ConfirmReservationAsync(TagWriteReservation reservation)

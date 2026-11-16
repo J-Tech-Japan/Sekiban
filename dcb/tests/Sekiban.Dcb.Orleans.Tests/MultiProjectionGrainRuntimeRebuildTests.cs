@@ -15,6 +15,7 @@ using Sekiban.Dcb.Storage.Checkpoints;
 using Sekiban.Dcb.Testing;
 using Xunit;
 
+using Sekiban.Dcb.TestSupport;
 namespace Sekiban.Dcb.Orleans.Tests;
 
 public sealed partial class MultiProjectionGrainCatchUpProductionPathTests
@@ -58,7 +59,7 @@ public sealed partial class MultiProjectionGrainCatchUpProductionPathTests
             // persist must observe that signal and recreate the host before it captures any snapshot.
             await host.AddSerializableEventsAsync([events[0]]);
             Assert.True(Assert.IsAssignableFrom<IRebuildSignalingHost>(host).RebuildRequired);
-            await grain.PersistStateAsync();
+            await grain.PersistStateAsync().AsResultBoxAsync();
             var replacement = GetPrivateField<IProjectionActorHost>(grain, "_host");
             Assert.NotSame(host, replacement);
             var progress = GetPrivateField<object>(grain, "_catchUpProgress");
@@ -76,11 +77,11 @@ public sealed partial class MultiProjectionGrainCatchUpProductionPathTests
             Assert.Empty(GetPrivateField<HashSet<Guid>>(grain, "_processedEventIds"));
             Assert.Equal(saves, checkpoints.SnapshotSaveCalls);
             Assert.Equal(0, Assert.IsType<ForceFullResumeClusterTests.CountProjector>(
-                (await replacement.GetStateAsync(false)).GetValue().Payload).Count);
+                (await replacement.GetStateAsync(false).AsResultBoxAsync()).GetValue().Payload).Count);
 
             await InvokePrivateTaskAsync(grain, "RefreshWithAuthoritativeCursorAsync", [true]);
             Assert.Equal(3, Assert.IsType<ForceFullResumeClusterTests.CountProjector>(
-                (await replacement.GetStateAsync(false)).GetValue().Payload).Count);
+                (await replacement.GetStateAsync(false).AsResultBoxAsync()).GetValue().Payload).Count);
             Assert.Equal(3L, GetPrivateField<long>(grain, "_eventsProcessed"));
         }
         finally { store.ReleaseRead.TrySetResult(); }
@@ -122,7 +123,7 @@ public sealed partial class MultiProjectionGrainCatchUpProductionPathTests
             await store.ReadStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
             await host.AddSerializableEventsAsync([events[0]]);
             Assert.True(Assert.IsAssignableFrom<IRebuildSignalingHost>(host).RebuildRequired);
-            await grain.PersistStateAsync();
+            await grain.PersistStateAsync().AsResultBoxAsync();
             var replacement = GetPrivateField<IProjectionActorHost>(grain, "_host");
             Assert.NotSame(host, replacement);
 
@@ -155,7 +156,7 @@ public sealed partial class MultiProjectionGrainCatchUpProductionPathTests
                 Assert.Equal(events[i].SortableUniqueIdValue, GetCatchUpCurrentPosition(grain));
                 Assert.Equal(i + 1L, GetPrivateField<long>(grain, "_eventsProcessed"));
                 Assert.Equal(i + 1, Assert.IsType<ForceFullResumeClusterTests.CountProjector>(
-                    (await replacement.GetStateAsync(false)).GetValue().Payload).Count);
+                    (await replacement.GetStateAsync(false).AsResultBoxAsync()).GetValue().Payload).Count);
             }
             for (var i = 0; i < 10 && !timer.IsDisposed; i++)
                 await timer.TickAsync().WaitAsync(TimeSpan.FromSeconds(5));
@@ -163,7 +164,7 @@ public sealed partial class MultiProjectionGrainCatchUpProductionPathTests
             Assert.True(timer.IsDisposed);
             Assert.Null(GetPrivateFieldValue(grain, "_catchUpTimer"));
             Assert.Equal(events.Length, Assert.IsType<ForceFullResumeClusterTests.CountProjector>(
-                (await replacement.GetStateAsync(false)).GetValue().Payload).Count);
+                (await replacement.GetStateAsync(false).AsResultBoxAsync()).GetValue().Payload).Count);
             Assert.Equal(0, GetPrivateField<int>(grain, "_catchUpConsecutiveFailureCount"));
             Assert.Null(GetPrivateFieldValue(grain, "_lastBackgroundCatchUpError"));
         }
@@ -305,7 +306,7 @@ public sealed partial class MultiProjectionGrainCatchUpProductionPathTests
             release.TrySetResult();
             await (background ?? query).WaitAsync(TimeSpan.FromSeconds(5));
             Assert.False(gate.IsPending);
-            var result = (await replacement.GetStateAsync(false)).GetValue();
+            var result = (await replacement.GetStateAsync(false).AsResultBoxAsync()).GetValue();
             Assert.Equal(2, Assert.IsType<ForceFullResumeClusterTests.CountProjector>(result.Payload).Count);
             Assert.Single(log.Rebuilds);
         }
@@ -363,7 +364,7 @@ public sealed partial class MultiProjectionGrainCatchUpProductionPathTests
         SetPrivateField(next, "_restoreRetirementFailed", false);
         SetPrivateField(next, "_subscriptionResolver", new InProcessSubscriptionResolver());
         Assert.Equal(events[0].Id, GetPrivateField<ProjectionFaultDescriptor>(next, "_projectionFault").EventId);
-        var answer = await next.GetStateAsync();
+        var answer = await next.GetStateAsync().AsResultBoxAsync();
         Assert.False(answer.IsSuccess);
         Assert.Contains("SEK-G20", answer.GetException().Message);
         Assert.Empty((await checkpoints.ListAllAsync()));
@@ -421,7 +422,7 @@ public sealed partial class MultiProjectionGrainCatchUpProductionPathTests
         AttachDeactivationRuntime(grain);
         if (path == "timer") await InvokePrivateTaskAsync(grain, "FlushEventBufferAsync", [false, false]);
         else if (path == "completion") await grain.RefreshAsync();
-        else await grain.PersistStateAsync();
+        else await grain.PersistStateAsync().AsResultBoxAsync();
 
         Assert.Equal(0, host.SnapshotWriteCalls);
         Assert.DoesNotContain(host.AddCalls, call => call.FinishedCatchUp);
@@ -530,7 +531,7 @@ public sealed partial class MultiProjectionGrainCatchUpProductionPathTests
         Assert.Equal(4096L, GetPrivateField<long>(grain, "_eventsProcessed"));
         Assert.Equal(4096L, GetPrivateField<long>(grain, "_eventsProcessedSinceLastCatchUpPersist"));
         Assert.True((bool)progress.GetType().GetProperty("HadNewEvents")!.GetValue(progress)!);
-        Assert.True((await grain.PersistStateAsync()).IsSuccess);
+        Assert.True((await grain.PersistStateAsync().AsResultBoxAsync()).IsSuccess);
         var snapshotsBeforeCompletion = host.SnapshotWriteCalls;
         if (restartInvocation)
         {
@@ -568,17 +569,17 @@ public sealed partial class MultiProjectionGrainCatchUpProductionPathTests
         var grain = CreateGrain(store, host, processedEvents: [], logger: log);
         SetPrivateField(grain, "_eventsProcessed", 0L);
         await grain.ProcessEventBatch([events[0]]);
-        Assert.True((await grain.PersistStateAsync()).IsSuccess);
+        Assert.True((await grain.PersistStateAsync().AsResultBoxAsync()).IsSuccess);
         await grain.ProcessEventBatch([events[1]]);
         // Advance the safe threshold deterministically, as if catch-up ran after the window expired.
         options.SafeWindowMs = 0;
         await grain.RefreshAsync();
-        Assert.True((await grain.PersistStateAsync()).IsSuccess);
+        Assert.True((await grain.PersistStateAsync().AsResultBoxAsync()).IsSuccess);
         SetPrivateField(grain, "_subscriptionResolver", new InProcessSubscriptionResolver());
         // The completed replay is the subject; park the query's optional next background poll.
         SetActiveCatchUp(grain, new CatchUpStartPositionLease(null, CatchUpStartPositionSource.InferredCheckpoint));
         SetPrivateField(grain, "_catchUpTimer", new NoOpDisposable());
-        var state = (await grain.GetStateAsync(canGetUnsafeState: false)).GetValue();
+        var state = (await grain.GetStateAsync(canGetUnsafeState: false).AsResultBoxAsync()).GetValue();
         Assert.Equal(3, ((ForceFullResumeClusterTests.CountProjector)state.Payload).Count);
         Assert.Equal(3L, GetPrivateField<long>(grain, "_eventsProcessed"));
         Assert.Empty(log.Rebuilds);

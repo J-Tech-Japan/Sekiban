@@ -20,9 +20,6 @@ internal static class PackageArtifactValidator
     // Sekiban.Dcb.WithResult.Testing. Kept in ordinal order.
     internal static readonly string[] ResultBoxesAllowedPackageIds =
     [
-        "Sekiban.Dcb.MaterializedView.Orleans",
-        "Sekiban.Dcb.Orleans.AzureQueue",
-        "Sekiban.Dcb.Orleans.Core",
         "Sekiban.Dcb.Orleans.WithResult",
         "Sekiban.Dcb.Orleans.WithoutResult",
         "Sekiban.Dcb.WithResult",

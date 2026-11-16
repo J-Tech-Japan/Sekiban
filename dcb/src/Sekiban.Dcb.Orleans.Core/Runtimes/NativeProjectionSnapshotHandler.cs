@@ -1,7 +1,6 @@
 using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
-using ResultBoxes;
 using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.MultiProjections;
 using Sekiban.Dcb.Orleans.Serialization;
@@ -35,102 +34,80 @@ internal class NativeProjectionSnapshotHandler
         _logger = logger;
     }
 
-    public async Task<ResultBox<bool>> RestoreSnapshotFromStreamAsync(
+    public async Task<bool> RestoreSnapshotFromStreamAsync(
         Stream source,
         CancellationToken cancellationToken)
     {
-        try
+        var envelope = await DeserializeEnvelopeAsync(source, cancellationToken);
+        if (envelope is null)
         {
-            var envelope = await DeserializeEnvelopeAsync(source, cancellationToken);
-            if (envelope is null)
-            {
-                return ResultBox.Error<bool>(
-                    new InvalidOperationException("Snapshot stream deserialized to null envelope."));
-            }
-
-            await using var resolvedSnapshot = await SnapshotEnvelopeResolver.ResolveForRestoreAsync(
-                    envelope,
-                    _blobAccessor,
-                    cancellationToken)
-                .ConfigureAwait(false);
-
-            // The resolver-owned stream stays open through the actor and optional per-projector streaming registry.
-            // Do not publish anything from the host until this await succeeds.
-            await _actor.SetResolvedSnapshotAsync(resolvedSnapshot, cancellationToken).ConfigureAwait(false);
-            return ResultBox.FromValue(true);
+            throw new InvalidOperationException("Snapshot stream deserialized to null envelope.");
         }
-        catch (Exception ex)
-        {
-            return ResultBox.Error<bool>(ex);
-        }
+
+        await using var resolvedSnapshot = await SnapshotEnvelopeResolver.ResolveForRestoreAsync(
+                envelope,
+                _blobAccessor,
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        // The resolver-owned stream stays open through the actor and optional per-projector streaming registry.
+        // Do not publish anything from the host until this await succeeds.
+        await _actor.SetResolvedSnapshotAsync(resolvedSnapshot, cancellationToken).ConfigureAwait(false);
+        return true;
     }
 
-    public async Task<ResultBox<bool>> WriteSnapshotToStreamAsync(
+    public async Task<bool> WriteSnapshotToStreamAsync(
         Stream target,
         bool canGetUnsafeState,
         CancellationToken cancellationToken)
     {
-        try
-        {
-            var envelope = await _actor.GetSnapshotAsync(canGetUnsafeState, cancellationToken);
-            await JsonSerializer.SerializeAsync(target, envelope, _jsonOptions, cancellationToken);
-            return ResultBox.FromValue(true);
-        }
-        catch (Exception ex)
-        {
-            return ResultBox.Error<bool>(ex);
-        }
+        var envelope = await _actor.GetSnapshotAsync(canGetUnsafeState, cancellationToken);
+        await JsonSerializer.SerializeAsync(target, envelope, _jsonOptions, cancellationToken);
+        return true;
     }
 
-    public async Task<ResultBox<bool>> WriteSnapshotForPersistenceToStreamAsync(
+    public async Task<bool> WriteSnapshotForPersistenceToStreamAsync(
         Stream target,
         bool canGetUnsafeState,
         int offloadThresholdBytes,
         CancellationToken cancellationToken)
     {
-        try
+        if (!canGetUnsafeState)
         {
-            if (!canGetUnsafeState)
+            try
             {
-                try
-                {
-                    _actor.ForcePromoteBufferedEvents();
-                }
-                catch
-                {
-                    // Best effort to align persistence snapshots with the current safe checkpoint.
-                }
+                _actor.ForcePromoteBufferedEvents();
             }
-
-            // Prefer the stream-first persistence path only when offload is actually possible:
-            // both a blob accessor and a positive offload threshold must be configured, and a
-            // spillable payload buffer provider must be registered. For inline-only
-            // configurations (no blob accessor) the legacy byte[] path is still the fastest
-            // because it avoids the buffer allocation + rehydrate copy that stream-first does
-            // for sub-threshold payloads.
-            var canStreamFirst = _payloadBufferProvider is not null
-                && _blobAccessor is not null
-                && offloadThresholdBytes > 0;
-
-            var envelope = canStreamFirst
-                ? await _actor.BuildSnapshotEnvelopeStreamFirstAsync(
-                    _payloadBufferProvider,
-                    canGetUnsafeState,
-                    _blobAccessor,
-                    offloadThresholdBytes,
-                    cancellationToken)
-                : await _actor.BuildSnapshotEnvelopeAsync(
-                    canGetUnsafeState,
-                    _blobAccessor,
-                    offloadThresholdBytes,
-                    cancellationToken);
-            await JsonSerializer.SerializeAsync(target, envelope, _jsonOptions, cancellationToken);
-            return ResultBox.FromValue(true);
+            catch
+            {
+                // Best effort to align persistence snapshots with the current safe checkpoint.
+            }
         }
-        catch (Exception ex)
-        {
-            return ResultBox.Error<bool>(ex);
-        }
+
+        // Prefer the stream-first persistence path only when offload is actually possible:
+        // both a blob accessor and a positive offload threshold must be configured, and a
+        // spillable payload buffer provider must be registered. For inline-only
+        // configurations (no blob accessor) the legacy byte[] path is still the fastest
+        // because it avoids the buffer allocation + rehydrate copy that stream-first does
+        // for sub-threshold payloads.
+        var canStreamFirst = _payloadBufferProvider is not null
+            && _blobAccessor is not null
+            && offloadThresholdBytes > 0;
+
+        var envelope = canStreamFirst
+            ? await _actor.BuildSnapshotEnvelopeStreamFirstAsync(
+                _payloadBufferProvider,
+                canGetUnsafeState,
+                _blobAccessor,
+                offloadThresholdBytes,
+                cancellationToken)
+            : await _actor.BuildSnapshotEnvelopeAsync(
+                canGetUnsafeState,
+                _blobAccessor,
+                offloadThresholdBytes,
+                cancellationToken);
+        await JsonSerializer.SerializeAsync(target, envelope, _jsonOptions, cancellationToken);
+        return true;
     }
 
     public long EstimateStateSizeBytes(bool includeUnsafeDetails)
@@ -172,57 +149,48 @@ internal class NativeProjectionSnapshotHandler
         }
     }
 
-    public async Task<ResultBox<bool>> RewriteSnapshotVersionAsync(
+    public async Task<bool> RewriteSnapshotVersionAsync(
         Stream source,
         Stream target,
         string newVersion,
         CancellationToken cancellationToken)
     {
-        try
+        var envelope = await DeserializeEnvelopeAsync(source, cancellationToken);
+        if (envelope is null)
         {
-            var envelope = await DeserializeEnvelopeAsync(source, cancellationToken);
-            if (envelope is null)
-            {
-                return ResultBox.Error<bool>(
-                    new InvalidOperationException("Snapshot stream deserialized to null envelope."));
-            }
-
-            SerializableMultiProjectionStateEnvelope modified;
-            if (!envelope.IsOffloaded && envelope.InlineState != null)
-            {
-                var s = envelope.InlineState;
-                modified = new SerializableMultiProjectionStateEnvelope(
-                    false,
-                    SerializableMultiProjectionState.FromBytes(
-                        s.GetPayloadBytes(), s.MultiProjectionPayloadType, s.ProjectorName, newVersion,
-                        s.LastSortableUniqueId, s.LastEventId, s.Version, s.IsCatchedUp, s.IsSafeState,
-                        s.OriginalSizeBytes, s.CompressedSizeBytes),
-                    null);
-            }
-            else if (envelope.OffloadedState != null)
-            {
-                var o = envelope.OffloadedState;
-                modified = new SerializableMultiProjectionStateEnvelope(
-                    true,
-                    null,
-                    new SerializableMultiProjectionStateOffloaded(
-                        o.OffloadKey, o.StorageProvider, o.MultiProjectionPayloadType, o.ProjectorName,
-                        newVersion, o.LastSortableUniqueId, o.LastEventId, o.Version, o.IsCatchedUp, o.IsSafeState,
-                        o.PayloadLength, o.OriginalSizeBytes, o.CompressedSizeBytes));
-            }
-            else
-            {
-                return ResultBox.Error<bool>(
-                    new InvalidOperationException("Cannot rewrite version: envelope has no inline or offloaded state"));
-            }
-
-            await JsonSerializer.SerializeAsync(target, modified, _jsonOptions, cancellationToken);
-            return ResultBox.FromValue(true);
+            throw new InvalidOperationException("Snapshot stream deserialized to null envelope.");
         }
-        catch (Exception ex)
+
+        SerializableMultiProjectionStateEnvelope modified;
+        if (!envelope.IsOffloaded && envelope.InlineState != null)
         {
-            return ResultBox.Error<bool>(ex);
+            var s = envelope.InlineState;
+            modified = new SerializableMultiProjectionStateEnvelope(
+                false,
+                SerializableMultiProjectionState.FromBytes(
+                    s.GetPayloadBytes(), s.MultiProjectionPayloadType, s.ProjectorName, newVersion,
+                    s.LastSortableUniqueId, s.LastEventId, s.Version, s.IsCatchedUp, s.IsSafeState,
+                    s.OriginalSizeBytes, s.CompressedSizeBytes),
+                null);
         }
+        else if (envelope.OffloadedState != null)
+        {
+            var o = envelope.OffloadedState;
+            modified = new SerializableMultiProjectionStateEnvelope(
+                true,
+                null,
+                new SerializableMultiProjectionStateOffloaded(
+                    o.OffloadKey, o.StorageProvider, o.MultiProjectionPayloadType, o.ProjectorName,
+                    newVersion, o.LastSortableUniqueId, o.LastEventId, o.Version, o.IsCatchedUp, o.IsSafeState,
+                    o.PayloadLength, o.OriginalSizeBytes, o.CompressedSizeBytes));
+        }
+        else
+        {
+            throw new InvalidOperationException("Cannot rewrite version: envelope has no inline or offloaded state");
+        }
+
+        await JsonSerializer.SerializeAsync(target, modified, _jsonOptions, cancellationToken);
+        return true;
     }
 
     private long EstimateSafeUnsafeProjectionStateSize(object stateObj, bool includeUnsafeDetails)

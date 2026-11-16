@@ -7,7 +7,6 @@ using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
 using Orleans.CodeGeneration;
-using ResultBoxes;
 using Sekiban.Dcb;
 using Sekiban.Dcb.Queries;
 
@@ -125,17 +124,12 @@ public sealed record SerializableListQueryResult
         };
     }
 
-    public static async Task<ResultBox<SerializableListQueryResult>> CreateFromResultBoxAsync(
-        ResultBox<IListQueryResult> resultBox,
+    /// <summary>Serializes a list query result together with the query that produced it.</summary>
+    public static async Task<SerializableListQueryResult> CreateFromResultBoxAsync(
+        IListQueryResult listQueryResult,
         IListQueryCommon originalQuery,
         JsonSerializerOptions options)
     {
-        if (!resultBox.IsSuccess)
-        {
-            return ResultBox<SerializableListQueryResult>.FromException(resultBox.GetException());
-        }
-
-        var listQueryResult = resultBox.GetValue();
         var resultType = listQueryResult.GetType();
 
         var itemsProperty = resultType.GetProperty("Items");
@@ -159,90 +153,95 @@ public sealed record SerializableListQueryResult
             originalQuery,
             listQueryResult.IsCatchUpInProgress);
 
-        var serializable = await CreateFromAsync(listResultGeneral, options);
-
-        return ResultBox<SerializableListQueryResult>.FromValue(serializable);
+        return await CreateFromAsync(listResultGeneral, options);
     }
 
-    public async Task<ResultBox<ListQueryResultGeneral>> ToListQueryResultAsync(DcbDomainTypes domainTypes)
+    /// <summary>
+    ///     Deserializes the list query result. An unknown query or record type and a query that does not deserialize
+    ///     fault the returned task with that failure; any other deserialization failure is reported as an
+    ///     <see cref="InvalidOperationException" /> wrapping it.
+    /// </summary>
+    public async Task<ListQueryResultGeneral> ToListQueryResultAsync(DcbDomainTypes domainTypes)
     {
+        (ListQueryResultGeneral? Result, Exception? Failure) outcome;
         try
         {
-            var queryTypeResult = SerializableQueryParameter.ResolveType(QueryTypeName, domainTypes);
-            if (!queryTypeResult.IsSuccess)
-            {
-                return ResultBox<ListQueryResultGeneral>.FromException(queryTypeResult.GetException());
-            }
-
-            var queryType = queryTypeResult.GetValue();
-
-            IListQueryCommon? query = null;
-            if (CompressedQueryJson.Length > 0)
-            {
-                var decompressedQueryJson = await DecompressAsync(CompressedQueryJson);
-                try
-                {
-                    query = JsonSerializer.Deserialize(
-                        decompressedQueryJson,
-                        queryType,
-                        domainTypes.JsonSerializerOptions) as IListQueryCommon;
-                }
-                catch (NotSupportedException)
-                {
-                    query = JsonSerializer.Deserialize(decompressedQueryJson, queryType) as IListQueryCommon;
-                }
-            }
-
-            if (query == null)
-            {
-                return ResultBox<ListQueryResultGeneral>.FromException(
-                    new InvalidOperationException($"Failed to deserialize query: {QueryTypeName}"));
-            }
-
-            IEnumerable<object> items = Array.Empty<object>();
-            if (CompressedItemsJson.Length > 0 && !string.IsNullOrWhiteSpace(RecordTypeName))
-            {
-                var recordTypeResult = SerializableQueryParameter.ResolveType(RecordTypeName, domainTypes);
-                if (!recordTypeResult.IsSuccess)
-                {
-                    return ResultBox<ListQueryResultGeneral>.FromException(recordTypeResult.GetException());
-                }
-
-                var recordType = recordTypeResult.GetValue();
-                var listType = typeof(List<>).MakeGenericType(recordType);
-                var decompressedItemsJson = await DecompressAsync(CompressedItemsJson);
-                try
-                {
-                    var deserialized = JsonSerializer.Deserialize(
-                        decompressedItemsJson,
-                        listType,
-                        domainTypes.JsonSerializerOptions) as IEnumerable;
-                    items = deserialized?.Cast<object>().ToList() ?? new List<object>();
-                }
-                catch (NotSupportedException)
-                {
-                    var deserialized = JsonSerializer.Deserialize(decompressedItemsJson, listType) as IEnumerable;
-                    items = deserialized?.Cast<object>().ToList() ?? new List<object>();
-                }
-            }
-
-            var listQueryResult = new ListQueryResultGeneral(
-                TotalCount,
-                TotalPages,
-                CurrentPage,
-                PageSize,
-                items,
-                RecordTypeName,
-                query,
-                IsCatchUpInProgress);
-
-            return ResultBox<ListQueryResultGeneral>.FromValue(listQueryResult);
+            outcome = await ReadListQueryResultAsync(domainTypes);
         }
         catch (Exception ex)
         {
-            return ResultBox<ListQueryResultGeneral>.FromException(
-                new InvalidOperationException($"Failed to deserialize list query result: {RecordTypeName}", ex));
+            throw new InvalidOperationException($"Failed to deserialize list query result: {RecordTypeName}", ex);
         }
+
+        return outcome.Failure is null ? outcome.Result! : throw outcome.Failure;
+    }
+
+    private async Task<(ListQueryResultGeneral? Result, Exception? Failure)> ReadListQueryResultAsync(
+        DcbDomainTypes domainTypes)
+    {
+        var queryType = SerializableQueryParameter.TryResolveType(QueryTypeName, domainTypes, out var queryTypeFailure);
+        if (queryType is null)
+        {
+            return (null, queryTypeFailure);
+        }
+
+        IListQueryCommon? query = null;
+        if (CompressedQueryJson.Length > 0)
+        {
+            var decompressedQueryJson = await DecompressAsync(CompressedQueryJson);
+            try
+            {
+                query = JsonSerializer.Deserialize(
+                    decompressedQueryJson,
+                    queryType,
+                    domainTypes.JsonSerializerOptions) as IListQueryCommon;
+            }
+            catch (NotSupportedException)
+            {
+                query = JsonSerializer.Deserialize(decompressedQueryJson, queryType) as IListQueryCommon;
+            }
+        }
+
+        if (query == null)
+        {
+            return (null, new InvalidOperationException($"Failed to deserialize query: {QueryTypeName}"));
+        }
+
+        IEnumerable<object> items = Array.Empty<object>();
+        if (CompressedItemsJson.Length > 0 && !string.IsNullOrWhiteSpace(RecordTypeName))
+        {
+            var recordType = SerializableQueryParameter.TryResolveType(RecordTypeName, domainTypes, out var recordTypeFailure);
+            if (recordType is null)
+            {
+                return (null, recordTypeFailure);
+            }
+
+            var listType = typeof(List<>).MakeGenericType(recordType);
+            var decompressedItemsJson = await DecompressAsync(CompressedItemsJson);
+            try
+            {
+                var deserialized = JsonSerializer.Deserialize(
+                    decompressedItemsJson,
+                    listType,
+                    domainTypes.JsonSerializerOptions) as IEnumerable;
+                items = deserialized?.Cast<object>().ToList() ?? new List<object>();
+            }
+            catch (NotSupportedException)
+            {
+                var deserialized = JsonSerializer.Deserialize(decompressedItemsJson, listType) as IEnumerable;
+                items = deserialized?.Cast<object>().ToList() ?? new List<object>();
+            }
+        }
+
+        return (new ListQueryResultGeneral(
+            TotalCount,
+            TotalPages,
+            CurrentPage,
+            PageSize,
+            items,
+            RecordTypeName,
+            query,
+            IsCatchUpInProgress), null);
     }
 
     private static async Task<byte[]> CompressAsync(byte[] data)

@@ -60,7 +60,7 @@ public class DurableRebuildMarkerAndRestartTests : IAsyncLifetime
         var evt = ToSerializable(CreateEvent(new Counted("a"), DateTime.UtcNow.AddSeconds(-30)));
         await Shared.EventStore.WriteSerializableEventsAsync(new[] { evt }).AsResultBoxAsync();
         await grain.RefreshAsync();
-        Assert.True((await grain.PersistStateAsync()).IsSuccess);
+        Assert.True((await grain.PersistStateAsync().AsResultBoxAsync()).IsSuccess);
 
         var afterFirst = await Shared.StateStore.GetLatestForVersionAsync(CountProjector.MultiProjectorName, "1.0.0").AsOptionalResultBoxAsync();
         Assert.True(afterFirst.GetValue().HasValue);
@@ -74,7 +74,7 @@ public class DurableRebuildMarkerAndRestartTests : IAsyncLifetime
 
         var grain2 = _client.GetGrain<IMultiProjectionGrain>(CountProjector.MultiProjectorName);
         await grain2.RefreshAsync();                 // restore + catch-up (nothing new)
-        _ = await grain2.PersistStateAsync();        // a persist attempt on the unchanged safe checkpoint
+        _ = await grain2.PersistStateAsync().AsResultBoxAsync();        // a persist attempt on the unchanged safe checkpoint
 
         // Zero external writes/upserts (the unchanged safe checkpoint is not re-persisted).
         Assert.Equal(0, Shared.StateStore.WriteCount);
@@ -101,7 +101,7 @@ public class DurableRebuildMarkerAndRestartTests : IAsyncLifetime
 
         // Persist (the persist path does NOT go through the first-query barrier). The external record must carry the SAFE
         // count (1), not the total processed (2), paired with the safe position. The pre-fix bug persisted the total.
-        Assert.True((await grain.PersistStateAsync()).IsSuccess);
+        Assert.True((await grain.PersistStateAsync().AsResultBoxAsync()).IsSuccess);
         var recordA = (await Shared.StateStore.GetLatestForVersionAsync(CountProjector.MultiProjectorName, "1.0.0").AsOptionalResultBoxAsync()).GetValue().GetValue();
         Assert.Equal(1, recordA.EventsProcessed);                             // SAFE count, not the total processed (2)
         Assert.Equal(safeEvt.SortableUniqueIdValue, recordA.LastSortableUniqueId);
@@ -113,11 +113,11 @@ public class DurableRebuildMarkerAndRestartTests : IAsyncLifetime
         await Task.Delay(4000);
         var grain2 = _client.GetGrain<IMultiProjectionGrain>(CountProjector.MultiProjectorName);
         await grain2.RefreshAsync();
-        var recovered = await grain2.GetStateAsync(canGetUnsafeState: true, waitForCatchUp: true);
+        var recovered = await grain2.GetStateAsync(canGetUnsafeState: true, waitForCatchUp: true).AsResultBoxAsync();
         Assert.True(recovered.IsSuccess, recovered.IsSuccess ? "" : recovered.GetException().Message);
         Assert.Equal(2, ((CountProjector)recovered.GetValue().Payload).Count);
 
-        _ = await grain2.PersistStateAsync();
+        _ = await grain2.PersistStateAsync().AsResultBoxAsync();
         var recordB = (await Shared.StateStore.GetLatestForVersionAsync(CountProjector.MultiProjectorName, "1.0.0").AsOptionalResultBoxAsync()).GetValue().GetValue();
         Assert.Equal(2, recordB.EventsProcessed);                            // both events now safe, re-folded ONCE (not 3)
         Assert.Equal(recentEvt.SortableUniqueIdValue, recordB.LastSortableUniqueId);

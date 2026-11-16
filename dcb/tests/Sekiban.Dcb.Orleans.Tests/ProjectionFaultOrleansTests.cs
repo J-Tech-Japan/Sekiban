@@ -98,7 +98,7 @@ public class ProjectionFaultOrleansTests : IAsyncLifetime
         await grain.SeedEventsAsync(new List<SerializableEvent> { Event(poison: true, tick: 1_000) });
         await grain.RefreshAsync();
 
-        var state = await grain.GetSnapshotJsonAsync();
+        var state = await grain.GetSnapshotJsonAsync().AsResultBoxAsync();
         Assert.False(state.IsSuccess); // NOT an empty success
         Assert.Contains(FaultTestProjector.MultiProjectorName, state.GetException().Message);
     }
@@ -126,7 +126,7 @@ public class ProjectionFaultOrleansTests : IAsyncLifetime
         });
         await grain.RefreshAsync();
 
-        Assert.True((await grain.GetSnapshotJsonAsync()).IsSuccess);
+        Assert.True((await grain.GetSnapshotJsonAsync().AsResultBoxAsync()).IsSuccess);
         Assert.True((await _executor.QueryAsync(new FaultCountQuery())).IsSuccess);
         Assert.True((await _executor.QueryAsync(new FaultRowListQuery())).IsSuccess);
     }
@@ -144,7 +144,7 @@ public class ProjectionFaultOrleansTests : IAsyncLifetime
         var grain = Client.GetGrain<IMultiProjectionGrain>(FaultTestProjector.MultiProjectorName);
 
         // No RefreshAsync, no seeding through the grain — the very first thing asked of the fresh activation.
-        Assert.False((await grain.GetSnapshotJsonAsync()).IsSuccess);
+        Assert.False((await grain.GetSnapshotJsonAsync().AsResultBoxAsync()).IsSuccess);
         Assert.False((await _executor.QueryAsync(new FaultCountQuery())).IsSuccess);
         Assert.False((await _executor.QueryAsync(new FaultRowListQuery())).IsSuccess);
     }
@@ -155,16 +155,16 @@ public class ProjectionFaultOrleansTests : IAsyncLifetime
         var grain = Client.GetGrain<IMultiProjectionGrain>(FaultTestProjector.MultiProjectorName);
         await grain.SeedEventsAsync(new List<SerializableEvent> { Event(poison: true, tick: 3_000) });
         await grain.RefreshAsync();
-        Assert.False((await grain.GetSnapshotJsonAsync()).IsSuccess);
+        Assert.False((await grain.GetSnapshotJsonAsync().AsResultBoxAsync()).IsSuccess);
 
-        // NO grain.PersistStateAsync() — fault handling persisted the descriptor on its own. Deactivate, reactivate,
+        // NO grain.PersistStateAsync().AsResultBoxAsync() — fault handling persisted the descriptor on its own. Deactivate, reactivate,
         // and the first query must still fail: no window where a fresh activation answers success before it re-reaches
         // the poison.
         await grain.RequestDeactivationAsync();
         await Task.Delay(1000);
 
         var reactivated = Client.GetGrain<IMultiProjectionGrain>(FaultTestProjector.MultiProjectorName);
-        Assert.False((await reactivated.GetSnapshotJsonAsync()).IsSuccess);
+        Assert.False((await reactivated.GetSnapshotJsonAsync().AsResultBoxAsync()).IsSuccess);
     }
 
     [Fact]
@@ -174,7 +174,7 @@ public class ProjectionFaultOrleansTests : IAsyncLifetime
         var grain = Client.GetGrain<IMultiProjectionGrain>(FaultTestProjector.MultiProjectorName);
         await grain.SeedEventsAsync(new List<SerializableEvent> { poison });
         await grain.RefreshAsync();
-        Assert.False((await grain.GetSnapshotJsonAsync()).IsSuccess);
+        Assert.False((await grain.GetSnapshotJsonAsync().AsResultBoxAsync()).IsSuccess);
         var laterWindowEvent = Event(poison: false, tick: 3_501);
         await grain.SeedEventsAsync(new List<SerializableEvent> { laterWindowEvent });
 
@@ -186,7 +186,7 @@ public class ProjectionFaultOrleansTests : IAsyncLifetime
         // Ask the real state surface while it initiates its background tail catch-up window. The durable descriptor
         // predates this request, so the reconstructed position must still be surfaced rather than being misdiagnosed
         // as a fault in this window.
-        var result = await reactivated.GetStateAsync(canGetUnsafeState: true, waitForCatchUp: false);
+        var result = await reactivated.GetStateAsync(canGetUnsafeState: true, waitForCatchUp: false).AsResultBoxAsync();
 
         Assert.False(result.IsSuccess);
         var ex = Assert.IsType<SekibanProjectionFaultException>(result.GetException());
@@ -232,7 +232,7 @@ public class ProjectionFaultOrleansTests : IAsyncLifetime
     {
         var grain = Client.GetGrain<IMultiProjectionGrain>(FaultTestProjector.MultiProjectorName);
 
-        var noFault = await grain.TryGetProjectionFaultAsync();
+        var noFault = await grain.TryGetProjectionFaultAsync().AsResultBoxAsync();
         Assert.True(noFault.IsSuccess);
         Assert.False(noFault.GetValue().HasFault);
         Assert.Null(noFault.GetValue().Fault);
@@ -240,9 +240,9 @@ public class ProjectionFaultOrleansTests : IAsyncLifetime
         var poison = Event(poison: true, tick: 3_600);
         await grain.SeedEventsAsync(new List<SerializableEvent> { poison });
         await grain.RefreshAsync();
-        Assert.False((await grain.GetSnapshotJsonAsync()).IsSuccess);
+        Assert.False((await grain.GetSnapshotJsonAsync().AsResultBoxAsync()).IsSuccess);
 
-        var fault = await grain.TryGetProjectionFaultAsync();
+        var fault = await grain.TryGetProjectionFaultAsync().AsResultBoxAsync();
         Assert.True(fault.IsSuccess); // a generated Orleans proxy reached MultiProjectionGrain, not the default body
         Assert.True(fault.GetValue().HasFault);
         var info = Assert.IsType<ProjectionFaultInfo>(fault.GetValue().Fault);
@@ -258,7 +258,7 @@ public class ProjectionFaultOrleansTests : IAsyncLifetime
     {
         IMultiProjectionGrain legacy = new LegacyProjectionGrainFake();
 
-        var result = await legacy.TryGetProjectionFaultAsync();
+        var result = await legacy.TryGetProjectionFaultAsync().AsResultBoxAsync();
 
         Assert.False(result.IsSuccess);
         Assert.IsType<NotSupportedException>(result.GetException());
@@ -303,11 +303,11 @@ public class ProjectionFaultOrleansTests : IAsyncLifetime
     private sealed class LegacyProjectionGrainFake : IMultiProjectionGrain
     {
         private static Exception Unsupported() => new NotSupportedException("legacy fake");
-        public Task<ResultBox<MultiProjectionState>> GetStateAsync(bool canGetUnsafeState = true, bool waitForCatchUp = false) => Task.FromException<ResultBox<MultiProjectionState>>(Unsupported());
-        public Task<ResultBox<string>> GetSnapshotJsonAsync(bool canGetUnsafeState = true) => Task.FromException<ResultBox<string>>(Unsupported());
+        public Task<MultiProjectionState> GetStateAsync(bool canGetUnsafeState = true, bool waitForCatchUp = false) => Task.FromException<MultiProjectionState>(Unsupported());
+        public Task<string> GetSnapshotJsonAsync(bool canGetUnsafeState = true) => Task.FromException<string>(Unsupported());
         public Task AddEventsAsync(IReadOnlyList<SerializableEvent> events, bool finishedCatchUp = true) => Task.FromException(Unsupported());
         public Task<MultiProjectionGrainStatus> GetStatusAsync() => Task.FromException<MultiProjectionGrainStatus>(Unsupported());
-        public Task<ResultBox<bool>> PersistStateAsync() => Task.FromException<ResultBox<bool>>(Unsupported());
+        public Task<bool> PersistStateAsync() => Task.FromException<bool>(Unsupported());
         public Task StopSubscriptionAsync() => Task.FromException(Unsupported());
         public Task StartSubscriptionAsync() => Task.FromException(Unsupported());
         public Task<SerializableQueryResult> ExecuteQueryAsync(SerializableQueryParameter query) => Task.FromException<SerializableQueryResult>(Unsupported());
@@ -324,7 +324,7 @@ public class ProjectionFaultOrleansTests : IAsyncLifetime
         public Task<MultiProjectionHeadStatusSnapshot> GetProjectionHeadStatusAsync() => Task.FromException<MultiProjectionHeadStatusSnapshot>(Unsupported());
         public Task<MultiProjectionHealthStatus> GetHealthStatusAsync() => Task.FromException<MultiProjectionHealthStatus>(Unsupported());
         public Task<bool> DeleteExternalStateAsync() => Task.FromException<bool>(Unsupported());
-        public Task<ResultBox<bool>> ResetProjectionFaultAsync(ResetProjectionFaultRequest request) => Task.FromException<ResultBox<bool>>(Unsupported());
+        public Task<bool> ResetProjectionFaultAsync(ResetProjectionFaultRequest request) => Task.FromException<bool>(Unsupported());
     }
 
     internal record FaultCountResult(int Count);

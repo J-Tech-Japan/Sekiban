@@ -2,7 +2,6 @@ using System;
 using System.Threading.Tasks;
 using System.IO;
 using Orleans.CodeGeneration;
-using ResultBoxes;
 using Sekiban.Dcb;
 using Sekiban.Dcb.Queries;
 using System.IO.Compression;
@@ -61,51 +60,35 @@ public sealed record SerializableQueryParameter
             queryAssemblyVersion);
     }
 
-    public async Task<ResultBox<object>> ToQueryAsync(DcbDomainTypes domainTypes)
+    /// <summary>
+    ///     Deserializes the query. An unknown query type, an empty payload or a payload that does not deserialize faults
+    ///     the returned task.
+    /// </summary>
+    public async Task<object> ToQueryAsync(DcbDomainTypes domainTypes)
     {
+        var queryType = TryResolveType(QueryTypeName, domainTypes, out var typeFailure) ?? throw typeFailure!;
+
+        if (CompressedQueryJson.Length == 0)
+        {
+            throw new InvalidOperationException("No query payload to deserialize.");
+        }
+
+        var decompressedJson = await DecompressAsync(CompressedQueryJson);
+
+        object? query;
         try
         {
-            var queryTypeResult = ResolveType(QueryTypeName, domainTypes);
-            if (!queryTypeResult.IsSuccess)
-            {
-                return ResultBox<object>.FromException(queryTypeResult.GetException());
-            }
-
-            var queryType = queryTypeResult.GetValue();
-
-            if (CompressedQueryJson.Length == 0)
-            {
-                return ResultBox<object>.FromException(
-                    new InvalidOperationException("No query payload to deserialize."));
-            }
-
-            var decompressedJson = await DecompressAsync(CompressedQueryJson);
-
-            object? query;
-            try
-            {
-                query = JsonSerializer.Deserialize(
-                    decompressedJson,
-                    queryType,
-                    domainTypes.JsonSerializerOptions);
-            }
-            catch (NotSupportedException)
-            {
-                query = JsonSerializer.Deserialize(decompressedJson, queryType);
-            }
-
-            if (query == null)
-            {
-                return ResultBox<object>.FromException(
-                    new InvalidOperationException($"Failed to deserialize query: {QueryTypeName}"));
-            }
-
-            return ResultBox<object>.FromValue(query);
+            query = JsonSerializer.Deserialize(
+                decompressedJson,
+                queryType,
+                domainTypes.JsonSerializerOptions);
         }
-        catch (Exception ex)
+        catch (NotSupportedException)
         {
-            return ResultBox<object>.FromException(ex);
+            query = JsonSerializer.Deserialize(decompressedJson, queryType);
         }
+
+        return query ?? throw new InvalidOperationException($"Failed to deserialize query: {QueryTypeName}");
     }
 
     private static async Task<byte[]> CompressAsync(byte[] data)
@@ -141,11 +124,17 @@ public sealed record SerializableQueryParameter
         return decompressedStream.ToArray();
     }
 
-    internal static ResultBox<Type> ResolveType(string typeName, DcbDomainTypes domainTypes)
+    /// <summary>
+    ///     Resolves a query, result or record type by name. A name that cannot be resolved returns <c>null</c> with the
+    ///     failure to report in <paramref name="failure" />, so the deserializers can report it unwrapped.
+    /// </summary>
+    internal static Type? TryResolveType(string typeName, DcbDomainTypes domainTypes, out Exception? failure)
     {
+        failure = null;
         if (string.IsNullOrWhiteSpace(typeName))
         {
-            return ResultBox<Type>.FromException(new InvalidOperationException("Query type name is empty."));
+            failure = new InvalidOperationException("Query type name is empty.");
+            return null;
         }
 
         try
@@ -153,19 +142,19 @@ public sealed record SerializableQueryParameter
             var type = domainTypes.QueryTypes.GetTypeByName(typeName);
             if (type != null)
             {
-                return ResultBox<Type>.FromValue(type);
+                return type;
             }
         }
         catch (Exception ex)
         {
-            return ResultBox<Type>.FromException(
-                new InvalidOperationException($"Failed to resolve query type from domain types: {typeName}", ex));
+            failure = new InvalidOperationException($"Failed to resolve query type from domain types: {typeName}", ex);
+            return null;
         }
 
         var resolved = Type.GetType(typeName, throwOnError: false);
         if (resolved != null)
         {
-            return ResultBox<Type>.FromValue(resolved);
+            return resolved;
         }
 
         foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
@@ -173,11 +162,11 @@ public sealed record SerializableQueryParameter
             var candidate = assembly.GetType(typeName);
             if (candidate != null)
             {
-                return ResultBox<Type>.FromValue(candidate);
+                return candidate;
             }
         }
 
-        return ResultBox<Type>.FromException(
-            new InvalidOperationException($"Query type not found: {typeName}"));
+        failure = new InvalidOperationException($"Query type not found: {typeName}");
+        return null;
     }
 }

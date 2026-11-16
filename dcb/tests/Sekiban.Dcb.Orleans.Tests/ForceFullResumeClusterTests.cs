@@ -55,8 +55,8 @@ public class ForceFullResumeClusterTests : IAsyncLifetime
         var t0 = DateTime.UtcNow.AddHours(-1);
         await Env.EventStore.WriteSerializableEventsAsync(Enumerable.Range(0, 30).Select(i => CountEvent($"base{i}", t0.AddMilliseconds(i)))).AsResultBoxAsync();
         await Grain.RefreshAsync();
-        Assert.True((await Grain.PersistStateAsync()).IsSuccess);
-        Assert.Equal(30, ((CountProjector)(await Grain.GetStateAsync()).GetValue().Payload).Count);
+        Assert.True((await Grain.PersistStateAsync().AsResultBoxAsync()).IsSuccess);
+        Assert.Equal(30, ((CountProjector)(await Grain.GetStateAsync().AsResultBoxAsync()).GetValue().Payload).Count);
         var slot = (await Env.GatingStore.ReadCheckpointSlotAsync(CountProjector.MultiProjectorName, "1.0.0").AsResultBoxAsync()).GetValue();
         var tombstone = await Env.GatingStore.InvalidateWithTombstoneAsync(CountProjector.MultiProjectorName, "1.0.0", CheckpointExpectation.FromSlot(slot));
         Assert.Equal(CheckpointCasStatus.Committed, tombstone.Status);
@@ -94,16 +94,16 @@ public class ForceFullResumeClusterTests : IAsyncLifetime
         MultiProjectionState? state = null;
         await PollUntilAsync(async () =>
         {
-            var result = await Grain.GetStateAsync(canGetUnsafeState: false, waitForCatchUp: false);
+            var result = await Grain.GetStateAsync(canGetUnsafeState: false, waitForCatchUp: false).AsResultBoxAsync();
             if (result.IsSuccess) state = result.GetValue();
             return state is not null;
         });
         Assert.Equal(failAt.Split(',').Length, Env.Store.Thrown);
         Assert.True(starts >= 2, "Injected read failure must abort and restart the timer run.");
         Assert.Equal(3030, ((CountProjector)state!.Payload).Count);
-        Assert.Equal(3030, ((CountProjector)(await Grain.GetStateAsync(canGetUnsafeState: true)).GetValue().Payload).Count);
+        Assert.Equal(3030, ((CountProjector)(await Grain.GetStateAsync(canGetUnsafeState: true).AsResultBoxAsync()).GetValue().Payload).Count);
         Assert.Equal(3030, (await Grain.GetStatusAsync()).EventsProcessed);
-        Assert.True((await Grain.PersistStateAsync()).IsSuccess);
+        Assert.True((await Grain.PersistStateAsync().AsResultBoxAsync()).IsSuccess);
         var record = (await Env.GatingStore.GetLatestForVersionAsync(CountProjector.MultiProjectorName, "1.0.0").AsOptionalResultBoxAsync()).GetValue();
         Assert.True(record.HasValue);
         Assert.Equal(3030, record.GetValue().EventsProcessed);
@@ -160,7 +160,7 @@ public class ForceFullResumeClusterTests : IAsyncLifetime
                 Assert.True(new SortableUniqueId(late.SortableUniqueIdValue).IsLaterThan(new SortableUniqueId(safe.SortableUniqueIdValue)));
                 await Env.EventStore.WriteSerializableEventsAsync(new[] { late }).AsResultBoxAsync();
             }
-            var query = Grain.GetStateAsync(canGetUnsafeState: true);
+            var query = Grain.GetStateAsync(canGetUnsafeState: true).AsResultBoxAsync();
             await invocationBefore.Task.WaitAsync(TimeSpan.FromSeconds(10));
             // Both paths share a gate: release timer BEFORE awaiting invocation gate entry.
             release.TrySetResult();
@@ -192,13 +192,13 @@ public class ForceFullResumeClusterTests : IAsyncLifetime
         {
             await Env.EventStore.WriteSerializableEventsAsync(new[] { safe }).AsResultBoxAsync();
             await Grain.RefreshAsync();
-            Assert.True((await Grain.PersistStateAsync()).IsSuccess);
+            Assert.True((await Grain.PersistStateAsync().AsResultBoxAsync()).IsSuccess);
             if (transition == "restore")
             {
                 await Grain.RequestDeactivationAsync();
                 await Task.Delay(1000);
                 // Wait for activation and its normal restored-checkpoint timer to complete before forced seam.
-                await Grain.GetStateAsync();
+                await Grain.GetStateAsync().AsResultBoxAsync();
                 Assert.Equal(StateRestoreSource.ExternalStore, (await Grain.GetHealthStatusAsync()).StateRestoreSource);
             }
         }

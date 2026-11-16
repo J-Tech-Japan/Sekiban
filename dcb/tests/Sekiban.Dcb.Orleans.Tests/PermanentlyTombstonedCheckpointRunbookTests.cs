@@ -61,7 +61,7 @@ public class PermanentlyTombstonedCheckpointRunbookTests : IAsyncLifetime
         var grain = _client.GetGrain<IMultiProjectionGrain>(CountProjector.MultiProjectorName);
         await grain.RefreshAsync();
         await AssertCountAndIdleAsync(grain);
-        Assert.True((await grain.PersistStateAsync()).IsSuccess);
+        Assert.True((await grain.PersistStateAsync().AsResultBoxAsync()).IsSuccess);
         var active = await ReadSlotAsync();
         Assert.True(active.IsActive);
         var record = (await Env.StateStore.GetLatestForVersionAsync(
@@ -128,7 +128,7 @@ public class PermanentlyTombstonedCheckpointRunbookTests : IAsyncLifetime
         // So query until the result is correct, then settle with status reads only (they never kick catch-up).
         await PollUntilAsync(async () =>
         {
-            var state = await grain.GetStateAsync(canGetUnsafeState: false, waitForCatchUp: false);
+            var state = await grain.GetStateAsync(canGetUnsafeState: false, waitForCatchUp: false).AsResultBoxAsync();
             if (!state.IsSuccess) return false;
             Assert.Equal(50, ((CountProjector)state.GetValue().Payload).Count);
             return true;

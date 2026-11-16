@@ -4,7 +4,6 @@ using System.IO.Compression;
 using System.Text.Json;
 using System.Threading.Tasks;
 using Orleans.CodeGeneration;
-using ResultBoxes;
 using Sekiban.Dcb;
 using Sekiban.Dcb.Queries;
 
@@ -100,109 +99,106 @@ public sealed record SerializableQueryResult
             resultAssemblyVersion);
     }
 
-    public static async Task<ResultBox<SerializableQueryResult>> CreateFromResultBoxAsync(
-        ResultBox<object> resultBox,
+    /// <summary>Serializes a query result value together with the query that produced it.</summary>
+    public static async Task<SerializableQueryResult> CreateFromResultBoxAsync(
+        object result,
         IQueryCommon originalQuery,
         JsonSerializerOptions options)
     {
-        if (!resultBox.IsSuccess)
-        {
-            return ResultBox<SerializableQueryResult>.FromException(resultBox.GetException());
-        }
-
-        var value = resultBox.GetValue();
-        var resultTypeName = value?.GetType().FullName ?? string.Empty;
-        var queryResultGeneral = new QueryResultGeneral(value!, resultTypeName, originalQuery);
-        var serializable = await CreateFromAsync(queryResultGeneral, options);
-
-        return ResultBox<SerializableQueryResult>.FromValue(serializable);
+        var resultTypeName = result?.GetType().FullName ?? string.Empty;
+        var queryResultGeneral = new QueryResultGeneral(result!, resultTypeName, originalQuery);
+        return await CreateFromAsync(queryResultGeneral, options);
     }
 
-    public async Task<ResultBox<QueryResultGeneral>> ToQueryResultAsync(DcbDomainTypes domainTypes)
+    /// <summary>
+    ///     Deserializes the query result. An unknown query or result type and a query that does not deserialize fault the
+    ///     returned task with that failure; any other deserialization failure is reported as an
+    ///     <see cref="InvalidOperationException" /> wrapping it.
+    /// </summary>
+    public async Task<QueryResultGeneral> ToQueryResultAsync(DcbDomainTypes domainTypes)
     {
+        (QueryResultGeneral? Result, Exception? Failure) outcome;
         try
         {
-            var queryTypeResult = SerializableQueryParameter.ResolveType(QueryTypeName, domainTypes);
-            if (!queryTypeResult.IsSuccess)
-            {
-                return ResultBox<QueryResultGeneral>.FromException(queryTypeResult.GetException());
-            }
-
-            var queryType = queryTypeResult.GetValue();
-
-            IQueryCommon? query = null;
-            if (CompressedQueryJson.Length > 0)
-            {
-                var decompressedQueryJson = await DecompressAsync(CompressedQueryJson);
-                try
-                {
-                    query = JsonSerializer.Deserialize(
-                        decompressedQueryJson,
-                        queryType,
-                        domainTypes.JsonSerializerOptions) as IQueryCommon;
-                }
-                catch (NotSupportedException)
-                {
-                    query = JsonSerializer.Deserialize(decompressedQueryJson, queryType) as IQueryCommon;
-                }
-            }
-
-            if (query == null)
-            {
-                return ResultBox<QueryResultGeneral>.FromException(
-                    new InvalidOperationException($"Failed to deserialize query: {QueryTypeName}"));
-            }
-
-            object? resultValue = null;
-            Type? resultType = null;
-            if (!string.IsNullOrWhiteSpace(ResultTypeName))
-            {
-                var resultTypeResult = SerializableQueryParameter.ResolveType(ResultTypeName, domainTypes);
-                if (!resultTypeResult.IsSuccess)
-                {
-                    return ResultBox<QueryResultGeneral>.FromException(resultTypeResult.GetException());
-                }
-                resultType = resultTypeResult.GetValue();
-            }
-
-            if (CompressedResultJson.Length > 0)
-            {
-                if (resultType == null)
-                {
-                    return ResultBox<QueryResultGeneral>.FromException(
-                        new InvalidOperationException(
-                            $"Result type not specified for non-empty payload: {ResultTypeName}"));
-                }
-
-                var decompressedResultJson = await DecompressAsync(CompressedResultJson);
-                try
-                {
-                    resultValue = JsonSerializer.Deserialize(
-                        decompressedResultJson,
-                        resultType,
-                        domainTypes.JsonSerializerOptions);
-                }
-                catch (NotSupportedException)
-                {
-                    resultValue = JsonSerializer.Deserialize(decompressedResultJson, resultType);
-                }
-            }
-
-            var queryResultGeneral = new QueryResultGeneral(resultValue ?? null!, ResultTypeName, query);
-            return ResultBox<QueryResultGeneral>.FromValue(queryResultGeneral);
+            outcome = await ReadQueryResultAsync(domainTypes);
         }
         catch (Exception ex)
         {
-            return ResultBox<QueryResultGeneral>.FromException(
-                new InvalidOperationException($"Failed to deserialize query result: {ResultTypeName}", ex));
+            throw new InvalidOperationException($"Failed to deserialize query result: {ResultTypeName}", ex);
         }
+
+        return outcome.Failure is null ? outcome.Result! : throw outcome.Failure;
     }
 
-    public async Task<ResultBox<object>> ToResultBoxAsync(DcbDomainTypes domainTypes)
+    private async Task<(QueryResultGeneral? Result, Exception? Failure)> ReadQueryResultAsync(DcbDomainTypes domainTypes)
     {
-        var queryResultBox = await ToQueryResultAsync(domainTypes);
-        return queryResultBox.Conveyor(qr => ResultBox<object>.FromValue(qr.Value));
+        var queryType = SerializableQueryParameter.TryResolveType(QueryTypeName, domainTypes, out var queryTypeFailure);
+        if (queryType is null)
+        {
+            return (null, queryTypeFailure);
+        }
+
+        IQueryCommon? query = null;
+        if (CompressedQueryJson.Length > 0)
+        {
+            var decompressedQueryJson = await DecompressAsync(CompressedQueryJson);
+            try
+            {
+                query = JsonSerializer.Deserialize(
+                    decompressedQueryJson,
+                    queryType,
+                    domainTypes.JsonSerializerOptions) as IQueryCommon;
+            }
+            catch (NotSupportedException)
+            {
+                query = JsonSerializer.Deserialize(decompressedQueryJson, queryType) as IQueryCommon;
+            }
+        }
+
+        if (query == null)
+        {
+            return (null, new InvalidOperationException($"Failed to deserialize query: {QueryTypeName}"));
+        }
+
+        object? resultValue = null;
+        Type? resultType = null;
+        if (!string.IsNullOrWhiteSpace(ResultTypeName))
+        {
+            resultType = SerializableQueryParameter.TryResolveType(ResultTypeName, domainTypes, out var resultTypeFailure);
+            if (resultType is null)
+            {
+                return (null, resultTypeFailure);
+            }
+        }
+
+        if (CompressedResultJson.Length > 0)
+        {
+            if (resultType == null)
+            {
+                return (null, new InvalidOperationException(
+                    $"Result type not specified for non-empty payload: {ResultTypeName}"));
+            }
+
+            var decompressedResultJson = await DecompressAsync(CompressedResultJson);
+            try
+            {
+                resultValue = JsonSerializer.Deserialize(
+                    decompressedResultJson,
+                    resultType,
+                    domainTypes.JsonSerializerOptions);
+            }
+            catch (NotSupportedException)
+            {
+                resultValue = JsonSerializer.Deserialize(decompressedResultJson, resultType);
+            }
+        }
+
+        return (new QueryResultGeneral(resultValue ?? null!, ResultTypeName, query), null);
     }
+
+    /// <summary>Deserializes the query result and returns its value.</summary>
+    public async Task<object> ToResultBoxAsync(DcbDomainTypes domainTypes) =>
+        (await ToQueryResultAsync(domainTypes)).Value;
 
     private static async Task<byte[]> CompressAsync(byte[] data)
     {

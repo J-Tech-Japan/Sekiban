@@ -1,15 +1,15 @@
-using ResultBoxes;
 using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Common;
 namespace Sekiban.Dcb.Orleans;
 
 /// <summary>
-///     Implemented by the Orleans tag-consistent actor wrapper: exposes the grain's own result, so a failure the grain
-///     reports stays distinguishable from a failure of the grain call itself (an Orleans timeout or transport fault).
+///     Implemented by the Orleans tag-consistent actor wrapper: exposes the grain's own outcome, so a failure the grain
+///     reports (<c>null</c>, the latest position is unknown) stays distinguishable from a failure of the grain call itself
+///     (an Orleans timeout or transport fault, which faults the task).
 /// </summary>
 internal interface IGrainBackedTagConsistentActor
 {
-    Task<ResultBox<string>> GetLatestSortableUniqueIdResultAsync();
+    Task<string?> TryGetLatestSortableUniqueIdAsync();
 }
 
 /// <summary>
@@ -21,9 +21,12 @@ internal static class TagConsistentLatestPositionReader
 {
     internal static async Task<string?> TryReadAsync(ITagConsistentActorCommon actor)
     {
-        var result = actor is IGrainBackedTagConsistentActor grainBacked
-            ? await grainBacked.GetLatestSortableUniqueIdResultAsync()
-            : await actor.GetLatestSortableUniqueIdAsync().ToResultBoxAsync();
-        return result.IsSuccess ? result.GetValue() : null;
+        if (actor is IGrainBackedTagConsistentActor grainBacked)
+        {
+            return await grainBacked.TryGetLatestSortableUniqueIdAsync();
+        }
+
+        var (latest, failure) = await TaskFailureCapture.CaptureAsync(actor.GetLatestSortableUniqueIdAsync());
+        return failure is null ? latest : null;
     }
 }

@@ -180,7 +180,7 @@ public class ProjectionFaultResetOrleansTests : IAsyncLifetime
         var grain = Client.GetGrain<IMultiProjectionGrain>(ResettableProjector.MultiProjectorName);
         await grain.SeedEventsAsync(new List<SerializableEvent> { ev });
         await grain.RefreshAsync();
-        Assert.False((await grain.GetSnapshotJsonAsync()).IsSuccess); // faulted
+        Assert.False((await grain.GetSnapshotJsonAsync().AsResultBoxAsync()).IsSuccess); // faulted
         var token = new ResetProjectionFaultRequest(ResettableProjector.MultiProjectorName, id.ToString(), ev.SortableUniqueIdValue);
         return (grain, token, ev);
     }
@@ -229,11 +229,11 @@ public class ProjectionFaultResetOrleansTests : IAsyncLifetime
         var (grain, token, _) = await FaultAndTokenAsync(1_000);
         var writesBefore = TogglableGrainStorage.WriteCount;
 
-        var result = await grain.ResetProjectionFaultAsync(token with { ProjectorName = "some-other-projector" });
+        var result = await grain.ResetProjectionFaultAsync(token with { ProjectorName = "some-other-projector" }).AsResultBoxAsync();
 
         Assert.False(result.IsSuccess);
         Assert.Equal(writesBefore, TogglableGrainStorage.WriteCount);
-        Assert.False((await grain.GetSnapshotJsonAsync()).IsSuccess);
+        Assert.False((await grain.GetSnapshotJsonAsync().AsResultBoxAsync()).IsSuccess);
     }
 
     [Fact]
@@ -242,11 +242,11 @@ public class ProjectionFaultResetOrleansTests : IAsyncLifetime
         var (grain, token, _) = await FaultAndTokenAsync(1_100);
         var writesBefore = TogglableGrainStorage.WriteCount;
 
-        var result = await grain.ResetProjectionFaultAsync(token with { FaultEventId = Guid.NewGuid().ToString() });
+        var result = await grain.ResetProjectionFaultAsync(token with { FaultEventId = Guid.NewGuid().ToString() }).AsResultBoxAsync();
 
         Assert.False(result.IsSuccess);
         Assert.Equal(writesBefore, TogglableGrainStorage.WriteCount);
-        Assert.False((await grain.GetSnapshotJsonAsync()).IsSuccess);
+        Assert.False((await grain.GetSnapshotJsonAsync().AsResultBoxAsync()).IsSuccess);
     }
 
     [Fact]
@@ -255,11 +255,11 @@ public class ProjectionFaultResetOrleansTests : IAsyncLifetime
         var (grain, token, _) = await FaultAndTokenAsync(1_200);
         var writesBefore = TogglableGrainStorage.WriteCount;
 
-        var result = await grain.ResetProjectionFaultAsync(token with { FaultPosition = "a-different-position" });
+        var result = await grain.ResetProjectionFaultAsync(token with { FaultPosition = "a-different-position" }).AsResultBoxAsync();
 
         Assert.False(result.IsSuccess);
         Assert.Equal(writesBefore, TogglableGrainStorage.WriteCount);
-        Assert.False((await grain.GetSnapshotJsonAsync()).IsSuccess);
+        Assert.False((await grain.GetSnapshotJsonAsync().AsResultBoxAsync()).IsSuccess);
     }
 
     [Fact]
@@ -268,8 +268,8 @@ public class ProjectionFaultResetOrleansTests : IAsyncLifetime
         var (grain, token, _) = await FaultAndTokenAsync(1_300);
         PoisonActive = false;
 
-        var a = grain.ResetProjectionFaultAsync(token);
-        var b = grain.ResetProjectionFaultAsync(token);
+        var a = grain.ResetProjectionFaultAsync(token).AsResultBoxAsync();
+        var b = grain.ResetProjectionFaultAsync(token).AsResultBoxAsync();
         var results = await Task.WhenAll(a, b);
 
         Assert.Equal(1, results.Count(r => r.IsSuccess));
@@ -282,7 +282,7 @@ public class ProjectionFaultResetOrleansTests : IAsyncLifetime
     {
         var (grain, _, _) = await FaultAndTokenAsync(1_500);
 
-        var read = await grain.TryGetProjectionFaultAsync();
+        var read = await grain.TryGetProjectionFaultAsync().AsResultBoxAsync();
         Assert.True(read.IsSuccess);
         Assert.True(read.GetValue().HasFault);
         var info = Assert.IsType<ProjectionFaultInfo>(read.GetValue().Fault);
@@ -291,14 +291,14 @@ public class ProjectionFaultResetOrleansTests : IAsyncLifetime
         // The operator can use the admin-read identity verbatim. Once the underlying poison is fixed, it clears and
         // rebuilds successfully.
         PoisonActive = false;
-        Assert.True((await grain.ResetProjectionFaultAsync(canonicalToken)).IsSuccess);
-        Assert.True((await grain.GetSnapshotJsonAsync()).IsSuccess); // fold A before enabling the distinct B poison
+        Assert.True((await grain.ResetProjectionFaultAsync(canonicalToken).AsResultBoxAsync()).IsSuccess);
+        Assert.True((await grain.GetSnapshotJsonAsync().AsResultBoxAsync()).IsSuccess); // fold A before enabling the distinct B poison
 
         // Keep the simpler read-clear-resubmit case separate from the A-to-B race below: the old token is now stale and
         // must not turn a healthy state into a second reset/write.
         var writesBeforeResubmit = TogglableGrainStorage.WriteCount;
         var deletesBeforeResubmit = StateStore.DeleteCount;
-        Assert.False((await grain.ResetProjectionFaultAsync(canonicalToken)).IsSuccess);
+        Assert.False((await grain.ResetProjectionFaultAsync(canonicalToken).AsResultBoxAsync()).IsSuccess);
         Assert.Equal(writesBeforeResubmit, TogglableGrainStorage.WriteCount);
         Assert.Equal(deletesBeforeResubmit, StateStore.DeleteCount);
 
@@ -308,7 +308,7 @@ public class ProjectionFaultResetOrleansTests : IAsyncLifetime
         var next = Event(poison: true, tick: 1_501, Guid.CreateVersion7());
         await grain.SeedEventsAsync(new List<SerializableEvent> { next });
         await Assert.ThrowsAnyAsync<Exception>(() => grain.RefreshAsync());
-        var reRaised = (await grain.GetSnapshotJsonAsync()).GetException();
+        var reRaised = (await grain.GetSnapshotJsonAsync().AsResultBoxAsync()).GetException();
         var legacyOperation = Assert.IsType<string>(reRaised.Data[ProjectionFaultDescriptor.OperationDataKey]);
         var legacyEventId = Assert.IsType<string>(reRaised.Data[ProjectionFaultDescriptor.EventIdDataKey]);
         var legacyPosition = Assert.IsType<string>(reRaised.Data[ProjectionFaultDescriptor.PositionDataKey]);
@@ -319,29 +319,29 @@ public class ProjectionFaultResetOrleansTests : IAsyncLifetime
             legacyPosition);
 
         PoisonActive = false;
-        Assert.True((await grain.ResetProjectionFaultAsync(legacyToken)).IsSuccess);
+        Assert.True((await grain.ResetProjectionFaultAsync(legacyToken).AsResultBoxAsync()).IsSuccess);
     }
 
     [Fact]
     public async Task AdminReadTokenA_DoesNotClearDurablyPersistedFaultB_ThenTokenBResets()
     {
         var (grain, _, _) = await FaultAndTokenAsync(1_600);
-        var readA = await grain.TryGetProjectionFaultAsync();
+        var readA = await grain.TryGetProjectionFaultAsync().AsResultBoxAsync();
         Assert.True(readA.IsSuccess);
         var tokenA = TokenFrom(Assert.IsType<ProjectionFaultInfo>(readA.GetValue().Fault));
 
         // Step 2: reset A after the projector is fixed.
         PoisonActive = false;
-        Assert.True((await grain.ResetProjectionFaultAsync(tokenA)).IsSuccess);
-        Assert.True((await grain.GetSnapshotJsonAsync()).IsSuccess); // A is durably rebuilt before B is introduced
+        Assert.True((await grain.ResetProjectionFaultAsync(tokenA).AsResultBoxAsync()).IsSuccess);
+        Assert.True((await grain.GetSnapshotJsonAsync().AsResultBoxAsync()).IsSuccess); // A is durably rebuilt before B is introduced
 
         // Step 3: establish and durably persist B under the same projection.
         PoisonActive = true;
         var eventB = Event(poison: true, tick: 1_601, Guid.CreateVersion7());
         await grain.SeedEventsAsync(new List<SerializableEvent> { eventB });
         await Assert.ThrowsAnyAsync<Exception>(() => grain.RefreshAsync());
-        Assert.False((await grain.GetSnapshotJsonAsync()).IsSuccess);
-        var readB = await grain.TryGetProjectionFaultAsync();
+        Assert.False((await grain.GetSnapshotJsonAsync().AsResultBoxAsync()).IsSuccess);
+        var readB = await grain.TryGetProjectionFaultAsync().AsResultBoxAsync();
         Assert.True(readB.IsSuccess);
         var infoB = Assert.IsType<ProjectionFaultInfo>(readB.GetValue().Fault);
         Assert.Equal(eventB.Id, infoB.FaultEventId);
@@ -350,17 +350,17 @@ public class ProjectionFaultResetOrleansTests : IAsyncLifetime
         // the committed descriptor an operator would read now.
         var writesBeforeStaleA = TogglableGrainStorage.WriteCount;
         var deletesBeforeStaleA = StateStore.DeleteCount;
-        Assert.False((await grain.ResetProjectionFaultAsync(tokenA)).IsSuccess);
+        Assert.False((await grain.ResetProjectionFaultAsync(tokenA).AsResultBoxAsync()).IsSuccess);
         Assert.Equal(writesBeforeStaleA, TogglableGrainStorage.WriteCount);
         Assert.Equal(deletesBeforeStaleA, StateStore.DeleteCount);
-        var afterStaleA = await grain.TryGetProjectionFaultAsync();
+        var afterStaleA = await grain.TryGetProjectionFaultAsync().AsResultBoxAsync();
         Assert.True(afterStaleA.IsSuccess);
         var retainedB = Assert.IsType<ProjectionFaultInfo>(afterStaleA.GetValue().Fault);
         Assert.Equal(infoB, retainedB);
 
         // Step 6: the fresh B token is the only one accepted.
         PoisonActive = false;
-        Assert.True((await grain.ResetProjectionFaultAsync(TokenFrom(retainedB))).IsSuccess);
+        Assert.True((await grain.ResetProjectionFaultAsync(TokenFrom(retainedB)).AsResultBoxAsync()).IsSuccess);
     }
 
     [Fact]
@@ -372,12 +372,13 @@ public class ProjectionFaultResetOrleansTests : IAsyncLifetime
             state => state.FaultedAtUtcTicks = long.MaxValue,
             poisonActiveOnRestore: false);
 
-        var read = await reactivated.TryGetProjectionFaultAsync();
+        var read = await reactivated.TryGetProjectionFaultAsync().AsResultBoxAsync();
 
         Assert.False(read.IsSuccess);
         Assert.NotNull(read.GetException());
         Assert.IsNotType<NotSupportedException>(read.GetException());
-        Assert.Contains("ArgumentOutOfRangeException", read.GetException().Message, StringComparison.Ordinal);
+        // The read failure crosses the silo with its own type (it once arrived as "[ArgumentOutOfRangeException] ...").
+        Assert.IsType<ArgumentOutOfRangeException>(read.GetException());
     }
 
     // ---- SEK-G39 version scoping: a stale-version descriptor is one durable clear before any replacement work ----
@@ -396,7 +397,7 @@ public class ProjectionFaultResetOrleansTests : IAsyncLifetime
 
         // Activating through the admin RPC is intentional: it proves the committed no-fault result is not observable
         // until the mismatch clear has committed. Orleans turn scheduling keeps catch-up behind this request.
-        var admin = await transition.Replacement.TryGetProjectionFaultAsync();
+        var admin = await transition.Replacement.TryGetProjectionFaultAsync().AsResultBoxAsync();
         Assert.True(admin.IsSuccess);
         Assert.False(admin.GetValue().HasFault);
         Assert.Null(admin.GetValue().Fault);
@@ -416,7 +417,7 @@ public class ProjectionFaultResetOrleansTests : IAsyncLifetime
         // B can now fold the formerly poisoned event. The observation runs inside the REAL projector and reads the
         // test provider's committed record: at B's first apply, precisely the one transition write had landed and the
         // same durable collection held the five cleared fields.
-        Assert.True((await transition.Replacement.GetSnapshotJsonAsync()).IsSuccess);
+        Assert.True((await transition.Replacement.GetSnapshotJsonAsync().AsResultBoxAsync()).IsSuccess);
         await PollUntilAsync(() => Task.FromResult(ResettableProjector.FirstApplicationObserved));
         Assert.Equal(transition.WritesBeforeActivation + 1, ResettableProjector.WriteCountAtFirstApplication);
         Assert.True(ResettableProjector.FirstApplicationSawFaultFieldsCleared);
@@ -427,7 +428,7 @@ public class ProjectionFaultResetOrleansTests : IAsyncLifetime
         var readsBeforeSecondB = TogglableGrainStorage.ReadCount;
         await transition.Replacement.RequestDeactivationAsync();
         var secondB = Client.GetGrain<IMultiProjectionGrain>(ResettableProjector.MultiProjectorName);
-        var secondReadTask = secondB.TryGetProjectionFaultAsync();
+        var secondReadTask = secondB.TryGetProjectionFaultAsync().AsResultBoxAsync();
         await TogglableGrainStorage.WaitForReadAfterAsync(readsBeforeSecondB);
         Assert.True(TogglableGrainStorage.ReadCount > readsBeforeSecondB);
         var secondRead = await secondReadTask;
@@ -446,14 +447,14 @@ public class ProjectionFaultResetOrleansTests : IAsyncLifetime
             ResettableProjector.MultiProjectorVersion,
             poisonActiveOnReplacement: true);
 
-        var admin = await transition.Replacement.TryGetProjectionFaultAsync();
+        var admin = await transition.Replacement.TryGetProjectionFaultAsync().AsResultBoxAsync();
 
         Assert.True(admin.IsSuccess);
         Assert.True(admin.GetValue().HasFault);
         Assert.Equal(transition.PersistedFault.FaultEventId, Assert.IsType<ProjectionFaultInfo>(admin.GetValue().Fault).FaultEventId.ToString());
         Assert.Equal(transition.WritesBeforeActivation, TogglableGrainStorage.WriteCount);
         Assert.DoesNotContain(FaultLogs.Entries, entry => entry.EventId.Name == "ProjectionFaultVersionCleared");
-        Assert.False((await transition.Replacement.GetSnapshotJsonAsync()).IsSuccess);
+        Assert.False((await transition.Replacement.GetSnapshotJsonAsync().AsResultBoxAsync()).IsSuccess);
     }
 
     [Fact]
@@ -488,7 +489,7 @@ public class ProjectionFaultResetOrleansTests : IAsyncLifetime
         var (grain, token, poison) = await FaultAndTokenAsync(2_000);
         PoisonActive = false; // the event now folds cleanly
 
-        Assert.True((await grain.ResetProjectionFaultAsync(token)).IsSuccess);
+        Assert.True((await grain.ResetProjectionFaultAsync(token).AsResultBoxAsync()).IsSuccess);
 
         // No manual deactivation: the very next query on the SAME grain rebuilds via the barrier before answering.
         var count = await _executor.QueryAsync(new ResetCountQuery());
@@ -500,7 +501,7 @@ public class ProjectionFaultResetOrleansTests : IAsyncLifetime
         Assert.Single(list.GetValue().Items);                                      // exact list count
 
         // The state snapshot serialized successfully (recovered, no fault) and reflects the recovered position.
-        var snapshot = await grain.GetSnapshotJsonAsync();
+        var snapshot = await grain.GetSnapshotJsonAsync().AsResultBoxAsync();
         Assert.True(snapshot.IsSuccess);
         Assert.Contains(poison.SortableUniqueIdValue, snapshot.GetValue());
     }
@@ -510,16 +511,16 @@ public class ProjectionFaultResetOrleansTests : IAsyncLifetime
     {
         var (grain, token, _) = await FaultAndTokenAsync(3_000);
 
-        Assert.True((await grain.ResetProjectionFaultAsync(token)).IsSuccess);
+        Assert.True((await grain.ResetProjectionFaultAsync(token).AsResultBoxAsync()).IsSuccess);
 
         // Poison is still poison: the immediate rebuild re-encounters it and re-faults, on the SAME grain.
-        Assert.False((await grain.GetSnapshotJsonAsync()).IsSuccess);
+        Assert.False((await grain.GetSnapshotJsonAsync().AsResultBoxAsync()).IsSuccess);
         Assert.False((await _executor.QueryAsync(new ResetCountQuery())).IsSuccess);
         Assert.False((await _executor.QueryAsync(new ResetRowListQuery())).IsSuccess);
 
         // The re-fault is persisted: a genuine fresh activation restores it and fails closed.
-        var reactivated = await ReactivateAsync(grain, async g => !(await g.GetSnapshotJsonAsync()).IsSuccess);
-        Assert.False((await reactivated.GetSnapshotJsonAsync()).IsSuccess);
+        var reactivated = await ReactivateAsync(grain, async g => !(await g.GetSnapshotJsonAsync().AsResultBoxAsync()).IsSuccess);
+        Assert.False((await reactivated.GetSnapshotJsonAsync().AsResultBoxAsync()).IsSuccess);
     }
 
     [Fact]
@@ -529,15 +530,15 @@ public class ProjectionFaultResetOrleansTests : IAsyncLifetime
         PoisonActive = false;
 
         TogglableGrainStorage.FailNextWrite = true;
-        Assert.False((await grain.ResetProjectionFaultAsync(token)).IsSuccess);
+        Assert.False((await grain.ResetProjectionFaultAsync(token).AsResultBoxAsync()).IsSuccess);
 
         // Before storage recovery: descriptor + live fault retained, every surface rejected.
-        Assert.False((await grain.GetSnapshotJsonAsync()).IsSuccess);
+        Assert.False((await grain.GetSnapshotJsonAsync().AsResultBoxAsync()).IsSuccess);
         Assert.False((await _executor.QueryAsync(new ResetCountQuery())).IsSuccess);
         Assert.False((await _executor.QueryAsync(new ResetRowListQuery())).IsSuccess);
 
         // Retry the SAME correct token through the real method: reset commits and rebuilds immediately.
-        Assert.True((await grain.ResetProjectionFaultAsync(token)).IsSuccess);
+        Assert.True((await grain.ResetProjectionFaultAsync(token).AsResultBoxAsync()).IsSuccess);
         var count = await _executor.QueryAsync(new ResetCountQuery());
         Assert.True(count.IsSuccess);
         Assert.Equal(1, count.GetValue().Count);
@@ -565,12 +566,12 @@ public class ProjectionFaultResetOrleansTests : IAsyncLifetime
             field == 1 ? missing : token.FaultEventId,
             field == 2 ? missing : token.FaultPosition);
 
-        var result = await grain.ResetProjectionFaultAsync(request);
+        var result = await grain.ResetProjectionFaultAsync(request).AsResultBoxAsync();
 
         Assert.False(result.IsSuccess);                                   // rejected
         Assert.Equal(writesBefore, TogglableGrainStorage.WriteCount);     // zero provider write
         Assert.Equal(snapshotBefore, (await SharedStateStore.GetLatestForVersionAsync(ResettableProjector.MultiProjectorName, ResettableProjector.MultiProjectorVersion).AsOptionalResultBoxAsync()).GetValue().HasValue); // zero external delete
-        Assert.False((await grain.GetSnapshotJsonAsync()).IsSuccess);     // fault retained
+        Assert.False((await grain.GetSnapshotJsonAsync().AsResultBoxAsync()).IsSuccess);     // fault retained
     }
 
     // ---- Blocker 3/4: descriptor persists on the production RefreshAsync path (no timing assistance); a GENUINE
@@ -586,26 +587,26 @@ public class ProjectionFaultResetOrleansTests : IAsyncLifetime
         await grain.RefreshAsync();
 
         // A GENUINE derived snapshot is persisted by the product (not synthetic bytes).
-        Assert.True((await grain.PersistStateAsync()).IsSuccess);
+        Assert.True((await grain.PersistStateAsync().AsResultBoxAsync()).IsSuccess);
         var snap = (await SharedStateStore.GetLatestForVersionAsync(ResettableProjector.MultiProjectorName, ResettableProjector.MultiProjectorVersion).AsOptionalResultBoxAsync()).GetValue();
         Assert.True(snap.HasValue);
         Assert.Equal(healthy.SortableUniqueIdValue, snap.GetValue().LastSortableUniqueId); // pre-poison position
 
         // It genuinely restores healthy before the poison: a fresh activation comes up healthy at Count 1.
-        var restored = await ReactivateAsync(grain, async g => (await g.GetSnapshotJsonAsync()).IsSuccess);
+        var restored = await ReactivateAsync(grain, async g => (await g.GetSnapshotJsonAsync().AsResultBoxAsync()).IsSuccess);
         Assert.Equal(1, (await _executor.QueryAsync(new ResetCountQuery())).GetValue().Count);
 
         // Now the poison arrives. A fresh activation restores the pre-poison snapshot, and its FIRST query
         // synchronously catches up through the poison via the barrier, folds it, faults, and persists the descriptor
         // in RefreshAsync's finally — the first query fails without any timing assistance.
         await restored.SeedEventsAsync(new List<SerializableEvent> { poison });
-        var faulted = await ReactivateAsync(restored, async g => !(await g.GetSnapshotJsonAsync()).IsSuccess);
-        Assert.False((await faulted.GetSnapshotJsonAsync()).IsSuccess); // faulted, descriptor persisted on the production path
+        var faulted = await ReactivateAsync(restored, async g => !(await g.GetSnapshotJsonAsync().AsResultBoxAsync()).IsSuccess);
+        Assert.False((await faulted.GetSnapshotJsonAsync().AsResultBoxAsync()).IsSuccess); // faulted, descriptor persisted on the production path
 
         // The fix now lets the projector fold the previously-poison event; reset with the correct token.
         PoisonActive = false;
         var token = new ResetProjectionFaultRequest(ResettableProjector.MultiProjectorName, poison.Id.ToString(), poison.SortableUniqueIdValue);
-        Assert.True((await faulted.ResetProjectionFaultAsync(token)).IsSuccess); // token validated against the PERSISTED descriptor
+        Assert.True((await faulted.ResetProjectionFaultAsync(token).AsResultBoxAsync()).IsSuccess); // token validated against the PERSISTED descriptor
 
         // The genuine pre-poison snapshot is invalidated — a stale restore is now impossible.
         Assert.False((await SharedStateStore.GetLatestForVersionAsync(ResettableProjector.MultiProjectorName, ResettableProjector.MultiProjectorVersion).AsOptionalResultBoxAsync()).GetValue().HasValue);
@@ -617,7 +618,7 @@ public class ProjectionFaultResetOrleansTests : IAsyncLifetime
         var list = await _executor.QueryAsync(new ResetRowListQuery());
         Assert.True(list.IsSuccess);
         Assert.Equal(2, list.GetValue().Items.Count());
-        var rebuilt = await faulted.GetSnapshotJsonAsync();
+        var rebuilt = await faulted.GetSnapshotJsonAsync().AsResultBoxAsync();
         Assert.True(rebuilt.IsSuccess);
         Assert.Contains(poison.SortableUniqueIdValue, rebuilt.GetValue());
     }
@@ -635,14 +636,14 @@ public class ProjectionFaultResetOrleansTests : IAsyncLifetime
         // The external invalidation runs first, under the gate, before the grain write. If it fails, the grain write is
         // skipped: descriptor, live fault and the external snapshot are all retained.
         StateStore.FailNextDelete = true;
-        Assert.False((await grain.ResetProjectionFaultAsync(token)).IsSuccess);
+        Assert.False((await grain.ResetProjectionFaultAsync(token).AsResultBoxAsync()).IsSuccess);
         Assert.Equal(writesBefore, TogglableGrainStorage.WriteCount);                 // zero grain write
         Assert.Equal(snapshotBefore, (await SharedStateStore.GetLatestForVersionAsync(ResettableProjector.MultiProjectorName, ResettableProjector.MultiProjectorVersion).AsOptionalResultBoxAsync()).GetValue().HasValue); // snapshot retained
-        Assert.False((await grain.GetSnapshotJsonAsync()).IsSuccess);                 // still faulted
+        Assert.False((await grain.GetSnapshotJsonAsync().AsResultBoxAsync()).IsSuccess);                 // still faulted
 
         // Storage recovers: the same token retries and completes (poison fixed so the rebuild recovers).
         PoisonActive = false;
-        Assert.True((await grain.ResetProjectionFaultAsync(token)).IsSuccess);
+        Assert.True((await grain.ResetProjectionFaultAsync(token).AsResultBoxAsync()).IsSuccess);
         Assert.False((await SharedStateStore.GetLatestForVersionAsync(ResettableProjector.MultiProjectorName, ResettableProjector.MultiProjectorVersion).AsOptionalResultBoxAsync()).GetValue().HasValue);
     }
 
@@ -657,13 +658,13 @@ public class ProjectionFaultResetOrleansTests : IAsyncLifetime
         // and live fault retained, queries stay faulted), but the external snapshot is already gone. Coherent — a
         // rebuild would regenerate the snapshot; the retained descriptor keeps the projection fail-closed until retry.
         TogglableGrainStorage.FailNextWrite = true;
-        Assert.False((await grain.ResetProjectionFaultAsync(token)).IsSuccess);
+        Assert.False((await grain.ResetProjectionFaultAsync(token).AsResultBoxAsync()).IsSuccess);
         Assert.False((await SharedStateStore.GetLatestForVersionAsync(ResettableProjector.MultiProjectorName, ResettableProjector.MultiProjectorVersion).AsOptionalResultBoxAsync()).GetValue().HasValue); // snapshot deleted
-        Assert.False((await grain.GetSnapshotJsonAsync()).IsSuccess);                 // descriptor retained -> still faulted
+        Assert.False((await grain.GetSnapshotJsonAsync().AsResultBoxAsync()).IsSuccess);                 // descriptor retained -> still faulted
 
         // Retry the same token: the reset completes and rebuilds.
         PoisonActive = false;
-        Assert.True((await grain.ResetProjectionFaultAsync(token)).IsSuccess);
+        Assert.True((await grain.ResetProjectionFaultAsync(token).AsResultBoxAsync()).IsSuccess);
         Assert.Equal(1, (await _executor.QueryAsync(new ResetCountQuery())).GetValue().Count);
     }
 
@@ -677,10 +678,10 @@ public class ProjectionFaultResetOrleansTests : IAsyncLifetime
         var (grain, _, _) = await FaultAndTokenAsync(8_000);
 
         var upsertsBefore = StateStore.UpsertCount;
-        Assert.True((await grain.PersistStateAsync()).IsSuccess);         // succeeds by skip, not by writing
+        Assert.True((await grain.PersistStateAsync().AsResultBoxAsync()).IsSuccess);         // succeeds by skip, not by writing
         Assert.Equal(upsertsBefore, StateStore.UpsertCount);             // no external upsert reached the store
         Assert.False((await SharedStateStore.GetLatestForVersionAsync(ResettableProjector.MultiProjectorName, ResettableProjector.MultiProjectorVersion).AsOptionalResultBoxAsync()).GetValue().HasValue);
-        Assert.False((await grain.GetSnapshotJsonAsync()).IsSuccess);     // still faulted
+        Assert.False((await grain.GetSnapshotJsonAsync().AsResultBoxAsync()).IsSuccess);     // still faulted
     }
 
     [Fact]
@@ -693,14 +694,14 @@ public class ProjectionFaultResetOrleansTests : IAsyncLifetime
         var grain = Client.GetGrain<IMultiProjectionGrain>(ResettableProjector.MultiProjectorName);
         await grain.SeedEventsAsync(new List<SerializableEvent> { Event(poison: false, 8_100, Guid.CreateVersion7()) });
         await grain.RefreshAsync();
-        Assert.True((await grain.PersistStateAsync()).IsSuccess);
+        Assert.True((await grain.PersistStateAsync().AsResultBoxAsync()).IsSuccess);
         await PollUntilAsync(async () =>
             (await SharedStateStore.GetLatestForVersionAsync(ResettableProjector.MultiProjectorName, "1.0").AsOptionalResultBoxAsync()).GetValue().HasValue);
 
         // Now fault the projection with a poison event.
         await grain.SeedEventsAsync(new List<SerializableEvent> { Event(poison: true, 8_150, Guid.CreateVersion7()) });
         await grain.RefreshAsync();
-        Assert.False((await grain.GetSnapshotJsonAsync()).IsSuccess); // faulted
+        Assert.False((await grain.GetSnapshotJsonAsync().AsResultBoxAsync()).IsSuccess); // faulted
 
         // The rewrite reaches the coordinated upsert, which returns a fault-blocked Error. So: updated stays false, the
         // store's upsert delegate is never invoked, NO MetadataMaintenance projector-version write happens, no new-version
@@ -788,21 +789,21 @@ public class ProjectionFaultResetOrleansTests : IAsyncLifetime
                 }
             },
             poisonActiveOnRestore: false);
-        await PollUntilAsync(async () => !(await reactivated.GetSnapshotJsonAsync()).IsSuccess); // faulted
+        await PollUntilAsync(async () => !(await reactivated.GetSnapshotJsonAsync().AsResultBoxAsync()).IsSuccess); // faulted
 
         var upsertsBefore = StateStore.UpsertCount;
         var writesBefore = TogglableGrainStorage.WriteCount;
         var snapshotBefore = (await SharedStateStore.GetLatestForVersionAsync(ResettableProjector.MultiProjectorName, ResettableProjector.MultiProjectorVersion).AsOptionalResultBoxAsync()).GetValue().HasValue;
 
         // The well-formed token cannot match a descriptor whose persisted field is null/empty.
-        var reset = await reactivated.ResetProjectionFaultAsync(token);
+        var reset = await reactivated.ResetProjectionFaultAsync(token).AsResultBoxAsync();
 
         Assert.False(reset.IsSuccess);                                                            // rejected
         Assert.Equal(writesBefore, TogglableGrainStorage.WriteCount);                             // zero grain/provider write, zero version change
         Assert.Equal(upsertsBefore, StateStore.UpsertCount);                                      // zero external upsert
         Assert.Equal(snapshotBefore, (await SharedStateStore.GetLatestForVersionAsync(ResettableProjector.MultiProjectorName, ResettableProjector.MultiProjectorVersion).AsOptionalResultBoxAsync()).GetValue().HasValue); // zero external delete (snapshot retained)
         // No live clear / no deactivation: state, scalar and list all continue to fail closed.
-        Assert.False((await reactivated.GetSnapshotJsonAsync()).IsSuccess);
+        Assert.False((await reactivated.GetSnapshotJsonAsync().AsResultBoxAsync()).IsSuccess);
         Assert.False((await _executor.QueryAsync(new ResetCountQuery())).IsSuccess);
         Assert.False((await _executor.QueryAsync(new ResetRowListQuery())).IsSuccess);
     }
@@ -825,7 +826,7 @@ public class ProjectionFaultResetOrleansTests : IAsyncLifetime
 
         // No parseable FaultEventId -> no live fault restored -> healthy (the first-query barrier folds the now-benign
         // poison successfully). Queries succeed; there is no faulted state a reset could be issued against.
-        await PollUntilAsync(async () => (await reactivated.GetSnapshotJsonAsync()).IsSuccess);
+        await PollUntilAsync(async () => (await reactivated.GetSnapshotJsonAsync().AsResultBoxAsync()).IsSuccess);
         Assert.True((await _executor.QueryAsync(new ResetCountQuery())).IsSuccess);
     }
 
@@ -847,7 +848,7 @@ public class ProjectionFaultResetOrleansTests : IAsyncLifetime
             poisonActiveOnRestore: true);
 
         // Barrier re-folds the still-active poison -> re-faulted with a fresh valid live fault.
-        await PollUntilAsync(async () => !(await reactivated.GetSnapshotJsonAsync()).IsSuccess);
+        await PollUntilAsync(async () => !(await reactivated.GetSnapshotJsonAsync().AsResultBoxAsync()).IsSuccess);
 
         // Persist that valid live fault (OnDeactivateAsync writes it) so the descriptor is self-healed to a valid one,
         // then the original well-formed token resets it — the malformed FaultEventId is gone.
@@ -855,9 +856,9 @@ public class ProjectionFaultResetOrleansTests : IAsyncLifetime
         await reactivated.RequestDeactivationAsync();
         await PollUntilAsync(() => Task.FromResult(TogglableGrainStorage.WriteCount > writesBeforeDeactivate));
         var healed = Client.GetGrain<IMultiProjectionGrain>(ResettableProjector.MultiProjectorName);
-        await PollUntilAsync(async () => !(await healed.GetSnapshotJsonAsync()).IsSuccess);
+        await PollUntilAsync(async () => !(await healed.GetSnapshotJsonAsync().AsResultBoxAsync()).IsSuccess);
 
-        Assert.True((await healed.ResetProjectionFaultAsync(token)).IsSuccess);
+        Assert.True((await healed.ResetProjectionFaultAsync(token).AsResultBoxAsync()).IsSuccess);
     }
 
     // C) Both-empty FALSE-MATCH: this is the scenario the non-empty guards actually protect against. Corrupt persisted
@@ -894,7 +895,7 @@ public class ProjectionFaultResetOrleansTests : IAsyncLifetime
             },
             poisonActiveOnRestore: false);
         // Trigger the activation (faulted for field 0/2, healthy for field 1) before probing.
-        await reactivated.GetSnapshotJsonAsync();
+        await reactivated.GetSnapshotJsonAsync().AsResultBoxAsync();
 
         // Token that mirrors the empty persisted field X, with the other two fields well-formed and matching.
         var emptyToken = field switch
@@ -908,7 +909,7 @@ public class ProjectionFaultResetOrleansTests : IAsyncLifetime
         var writesBefore = TogglableGrainStorage.WriteCount;
         var snapshotBefore = (await SharedStateStore.GetLatestForVersionAsync(ResettableProjector.MultiProjectorName, ResettableProjector.MultiProjectorVersion).AsOptionalResultBoxAsync()).GetValue().HasValue;
 
-        var reset = await reactivated.ResetProjectionFaultAsync(emptyToken);
+        var reset = await reactivated.ResetProjectionFaultAsync(emptyToken).AsResultBoxAsync();
 
         Assert.False(reset.IsSuccess);                                                            // no empty-identity false match
         Assert.Equal(writesBefore, TogglableGrainStorage.WriteCount);                             // zero grain/provider write

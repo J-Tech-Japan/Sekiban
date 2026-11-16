@@ -26,10 +26,7 @@ public class SerializableQuerySerializationTests
         var serialized = await SerializableQueryParameter.CreateFromAsync(
             query,
             _domainTypes.JsonSerializerOptions);
-        var deserializedBox = await serialized.ToQueryAsync(_domainTypes);
-
-        Assert.True(deserializedBox.IsSuccess);
-        var deserialized = Assert.IsType<TestQuery>(deserializedBox.GetValue());
+        var deserialized = Assert.IsType<TestQuery>(await serialized.ToQueryAsync(_domainTypes));
         Assert.Equal(query, deserialized);
     }
 
@@ -43,12 +40,9 @@ public class SerializableQuerySerializationTests
         var serialized = await SerializableQueryResult.CreateFromAsync(
             general,
             _domainTypes.JsonSerializerOptions);
-        var roundTripBox = await serialized.ToQueryResultAsync(_domainTypes);
+        var roundTrip = await serialized.ToQueryResultAsync(_domainTypes);
 
-        Assert.True(roundTripBox.IsSuccess);
-        var typedBox = ResultBox.WrapTry(() => roundTripBox.GetValue().ToTypedResult<TestResult>());
-        Assert.True(typedBox.IsSuccess);
-        Assert.Equal(result, typedBox.GetValue());
+        Assert.Equal(result, roundTrip.ToTypedResult<TestResult>());
     }
 
     [Fact]
@@ -73,10 +67,9 @@ public class SerializableQuerySerializationTests
         var serialized = await SerializableListQueryResult.CreateFromAsync(
             general,
             _domainTypes.JsonSerializerOptions);
-        var roundTripBox = await serialized.ToListQueryResultAsync(_domainTypes);
+        var roundTrip = await serialized.ToListQueryResultAsync(_domainTypes);
 
-        Assert.True(roundTripBox.IsSuccess);
-        var typed = roundTripBox.GetValue().ToTypedResult<TestRecord>();
+        var typed = roundTrip.ToTypedResult<TestRecord>();
         Assert.Equal(items.Cast<TestRecord>(), typed.Items);
         Assert.True(typed.IsCatchUpInProgress);
     }
@@ -95,17 +88,14 @@ public class SerializableQuerySerializationTests
             query,
             true);
 
-        var serializedBox = await SerializableListQueryResult.CreateFromResultBoxAsync(
-            ResultBox<IListQueryResult>.FromValue(result),
+        var serialized = await SerializableListQueryResult.CreateFromResultBoxAsync(
+            result,
             query,
             _domainTypes.JsonSerializerOptions);
 
-        Assert.True(serializedBox.IsSuccess);
+        var roundTrip = await serialized.ToListQueryResultAsync(_domainTypes);
 
-        var roundTripBox = await serializedBox.GetValue().ToListQueryResultAsync(_domainTypes);
-        Assert.True(roundTripBox.IsSuccess);
-
-        var typed = roundTripBox.GetValue().ToTypedResult<TestRecord>();
+        var typed = roundTrip.ToTypedResult<TestRecord>();
         Assert.True(typed.IsCatchUpInProgress);
     }
 

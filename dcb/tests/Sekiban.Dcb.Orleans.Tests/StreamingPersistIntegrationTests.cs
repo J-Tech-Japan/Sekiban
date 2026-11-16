@@ -64,7 +64,7 @@ public class StreamingPersistIntegrationTests : IAsyncLifetime
         await grain.RefreshAsync();
 
         // When: persisting with streaming IO enabled
-        var result = await grain.PersistStateAsync();
+        var result = await grain.PersistStateAsync().AsResultBoxAsync();
 
         // Then: persist succeeds
         Assert.True(result.IsSuccess);
@@ -84,7 +84,7 @@ public class StreamingPersistIntegrationTests : IAsyncLifetime
         await grain.SeedEventsAsync(ToSerializableEvents(events));
         await grain.RefreshAsync();
 
-        var persistResult = await grain.PersistStateAsync();
+        var persistResult = await grain.PersistStateAsync().AsResultBoxAsync();
         Assert.True(persistResult.IsSuccess);
 
         // When: deactivate and re-acquire
@@ -95,7 +95,7 @@ public class StreamingPersistIntegrationTests : IAsyncLifetime
         await Task.Delay(500);
 
         // Then: snapshot is restored with correct version
-        var snapshotJson = await grain2.GetSnapshotJsonAsync(canGetUnsafeState: false);
+        var snapshotJson = await grain2.GetSnapshotJsonAsync(canGetUnsafeState: false).AsResultBoxAsync();
         Assert.True(snapshotJson.IsSuccess);
 
         var env = JsonSerializer.Deserialize<SerializableMultiProjectionStateEnvelope>(
@@ -122,11 +122,11 @@ public class StreamingPersistIntegrationTests : IAsyncLifetime
         await grain.RefreshAsync();
 
         // Get pre-persist snapshot
-        var prePersistSnap = await grain.GetSnapshotJsonAsync(canGetUnsafeState: false);
+        var prePersistSnap = await grain.GetSnapshotJsonAsync(canGetUnsafeState: false).AsResultBoxAsync();
         Assert.True(prePersistSnap.IsSuccess);
 
         // Persist
-        var persistResult = await grain.PersistStateAsync();
+        var persistResult = await grain.PersistStateAsync().AsResultBoxAsync();
         Assert.True(persistResult.IsSuccess);
 
         // Deactivate and re-acquire
@@ -137,7 +137,7 @@ public class StreamingPersistIntegrationTests : IAsyncLifetime
         await Task.Delay(500);
 
         // Then: post-restore snapshot has same version and structure
-        var postRestoreSnap = await grain2.GetSnapshotJsonAsync(canGetUnsafeState: false);
+        var postRestoreSnap = await grain2.GetSnapshotJsonAsync(canGetUnsafeState: false).AsResultBoxAsync();
         Assert.True(postRestoreSnap.IsSuccess);
 
         var prePersistEnv = JsonSerializer.Deserialize<SerializableMultiProjectionStateEnvelope>(
@@ -172,7 +172,7 @@ public class StreamingPersistIntegrationTests : IAsyncLifetime
         await grain.SeedEventsAsync(ToSerializableEvents(events));
         await grain.RefreshAsync();
 
-        var persistResult = await grain.PersistStateAsync();
+        var persistResult = await grain.PersistStateAsync().AsResultBoxAsync();
         Assert.True(persistResult.IsSuccess);
         Assert.True(persistResult.GetValue());
 
@@ -182,7 +182,7 @@ public class StreamingPersistIntegrationTests : IAsyncLifetime
         var grain2 = _client.GetGrain<IMultiProjectionGrain>(grainId);
         await Task.Delay(500);
 
-        var snapshotJson = await grain2.GetSnapshotJsonAsync(canGetUnsafeState: false);
+        var snapshotJson = await grain2.GetSnapshotJsonAsync(canGetUnsafeState: false).AsResultBoxAsync();
         Assert.True(snapshotJson.IsSuccess);
 
         var env = JsonSerializer.Deserialize<SerializableMultiProjectionStateEnvelope>(snapshotJson.GetValue());
@@ -207,17 +207,17 @@ public class StreamingPersistIntegrationTests : IAsyncLifetime
             CreateEvent(new StreamingFaultEvt(Poison: true), DateTime.UtcNow.AddSeconds(-30))
         }));
         await grain.RefreshAsync();
-        Assert.False((await grain.GetSnapshotJsonAsync(canGetUnsafeState: false)).IsSuccess); // faulted
+        Assert.False((await grain.GetSnapshotJsonAsync(canGetUnsafeState: false).AsResultBoxAsync()).IsSuccess); // faulted
 
         // A streaming persist while faulted succeeds by skipping the external write, never by persisting.
-        Assert.True((await grain.PersistStateAsync()).IsSuccess);
+        Assert.True((await grain.PersistStateAsync().AsResultBoxAsync()).IsSuccess);
 
         // No external snapshot was written for the projector, and the projection is still faulted.
         var snapshot = await StreamingPersistSiloConfigurator.SharedStateStore.GetLatestForVersionAsync(
             FaultingStreamingProjector.MultiProjectorName,
             FaultingStreamingProjector.MultiProjectorVersion).AsOptionalResultBoxAsync();
         Assert.False(snapshot.GetValue().HasValue);
-        Assert.False((await grain.GetSnapshotJsonAsync(canGetUnsafeState: false)).IsSuccess); // still faulted
+        Assert.False((await grain.GetSnapshotJsonAsync(canGetUnsafeState: false).AsResultBoxAsync()).IsSuccess); // still faulted
     }
 
     private static Event CreateEvent(IEventPayload payload, DateTime when)

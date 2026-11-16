@@ -60,7 +60,7 @@ public class CheckpointCasNoBypassTests : IAsyncLifetime
         var safe = ToSerializable(CreateEvent(new Counted("safe"), DateTime.UtcNow.AddSeconds(-30)));
         await Shared.EventStore.WriteSerializableEventsAsync(new[] { safe }).AsResultBoxAsync();
         await grain.RefreshAsync();
-        Assert.True((await grain.PersistStateAsync()).IsSuccess);
+        Assert.True((await grain.PersistStateAsync().AsResultBoxAsync()).IsSuccess);
 
         // Trigger a retrograde full rebuild: a globally-earlier already-safe event delivered out of order after a compacted
         // baseline sets RebuildRequired, which drives invalidate (bump+tombstone) + rebuilt commit.
@@ -71,11 +71,11 @@ public class CheckpointCasNoBypassTests : IAsyncLifetime
         // Drive the rebuild to completion via queries (fail-closed until rebuilt), then persist the rebuilt checkpoint.
         for (var i = 0; i < 40; i++)
         {
-            var s = await grain.GetStateAsync();
+            var s = await grain.GetStateAsync().AsResultBoxAsync();
             if (s.IsSuccess && ((CountProjector)s.GetValue().Payload).Count == 2) break;
             await Task.Delay(150);
         }
-        _ = await grain.PersistStateAsync();
+        _ = await grain.PersistStateAsync().AsResultBoxAsync();
 
         // The CAS surface handled writes/invalidation; the legacy unconditional paths were NEVER used.
         Assert.Equal(0, Shared.StateStore.LegacyUpsertCount);

@@ -53,11 +53,11 @@ public sealed partial class MultiProjectionGrainCatchUpProductionPathTests
         SetPrivateField(grain, "_hostIsPristine", false);
         try
         {
-            _ = await grain.PersistStateAsync();
+            _ = await grain.PersistStateAsync().AsResultBoxAsync();
             var active = (await checkpoints.ReadCheckpointSlotAsync("production-catch-up", "v1").AsResultBoxAsync()).GetValue();
             var invalidation = await checkpoints.InvalidateWithTombstoneAsync("production-catch-up", "v1", CheckpointExpectation.FromSlot(active));
             Assert.Equal(CheckpointCasStatus.Committed, invalidation.Status);
-            _ = await grain.PersistStateAsync();
+            _ = await grain.PersistStateAsync().AsResultBoxAsync();
             Assert.Single(logger.Entries, e => e == (LogLevel.Warning, MultiProjectionLogEvents.StaleCheckpointHost.Id));
             Assert.Single(logger.Entries, e => e.Item1 >= LogLevel.Warning);
             var lastGood = state.State.LastGoodSafeVersion;
@@ -65,7 +65,7 @@ public sealed partial class MultiProjectionGrainCatchUpProductionPathTests
             var writes = state.WriteCalls;
             for (var i = 0; i < 3; i++)
             {
-                _ = await grain.PersistStateAsync();
+                _ = await grain.PersistStateAsync().AsResultBoxAsync();
                 Assert.Equal(invalidation.ResultingSlot, (await checkpoints.ReadCheckpointSlotAsync("production-catch-up", "v1").AsResultBoxAsync()).GetValue());
                 Assert.Equal(lastGood, state.State.LastGoodSafeVersion);
                 Assert.Equal(lastGoodEvents, state.State.LastGoodEventsProcessed);
@@ -96,7 +96,7 @@ public sealed partial class MultiProjectionGrainCatchUpProductionPathTests
 
         async Task PersistAsync()
         {
-            var result = await grain.PersistStateAsync().WaitAsync(timeout);
+            var result = await grain.PersistStateAsync().AsResultBoxAsync().WaitAsync(timeout);
             Assert.True(result.IsSuccess, result.IsSuccess ? "" : result.GetException().ToString());
         }
         async Task<CheckpointSlot> ReadAsync() =>
@@ -117,7 +117,7 @@ public sealed partial class MultiProjectionGrainCatchUpProductionPathTests
 
         await PersistAsync();
         checkpoints.ParkNextRead = true;
-        var delayedH1 = grain.PersistStateAsync();
+        var delayedH1 = grain.PersistStateAsync().AsResultBoxAsync();
         try
         {
             // Capture H1, then stop in CanSaveToExternalStoreAsync before it can serialize or enter the CAS gate.
@@ -208,13 +208,13 @@ public sealed partial class MultiProjectionGrainCatchUpProductionPathTests
         SetPrivateField(grain, "_projectorName", name);
         SetPrivateField(grain, "_grainKey", name);
         await grain.AddEventsAsync([ProjectionFaultOrleansTests.Event(false, 1_000)]).WaitAsync(timeout);
-        Assert.True((await grain.PersistStateAsync().WaitAsync(timeout)).IsSuccess);
+        Assert.True((await grain.PersistStateAsync().AsResultBoxAsync().WaitAsync(timeout)).IsSuccess);
         var active = (await checkpoints.ReadCheckpointSlotAsync(name, version).AsResultBoxAsync().WaitAsync(timeout)).GetValue();
         Assert.True(active.IsActive);
         var invalidated = await checkpoints.InvalidateWithTombstoneAsync(name, version,
             CheckpointExpectation.FromSlot(active)).WaitAsync(timeout);
         Assert.Equal(CheckpointCasStatus.Committed, invalidated.Status);
-        Assert.True((await grain.PersistStateAsync().WaitAsync(timeout)).IsSuccess);
+        Assert.True((await grain.PersistStateAsync().AsResultBoxAsync().WaitAsync(timeout)).IsSuccess);
         Assert.Same(stale, GetPrivateField<IProjectionActorHost>(grain, "_staleCheckpointHost"));
         Assert.Null(stale.CurrentFault);
         var writes = checkpoints.WriteCalls;
@@ -245,15 +245,15 @@ public sealed partial class MultiProjectionGrainCatchUpProductionPathTests
             Assert.Same(stale, GetPrivateField<IProjectionActorHost>(grain, "_host"));
             Assert.Same(fault, stale.CurrentFault);
 
-            var query = await grain.GetSnapshotJsonAsync().WaitAsync(timeout);
+            var query = await grain.GetSnapshotJsonAsync().AsResultBoxAsync().WaitAsync(timeout);
             Assert.False(query.IsSuccess);
             var error = Assert.IsType<SekibanProjectionFaultException>(query.GetException());
             Assert.Equal(poison.Id, error.Fault.EventId);
-            _ = await grain.PersistStateAsync().WaitAsync(timeout);
+            _ = await grain.PersistStateAsync().AsResultBoxAsync().WaitAsync(timeout);
             Assert.Equal(poison.Id.ToString(), state.State.FaultEventId);
             Assert.Equal(poison.SortableUniqueIdValue, state.State.FaultPosition);
             Assert.Contains("poison event", state.State.FaultMessage);
-            var committed = await grain.TryGetProjectionFaultAsync().WaitAsync(timeout);
+            var committed = await grain.TryGetProjectionFaultAsync().AsResultBoxAsync().WaitAsync(timeout);
             Assert.True(committed.IsSuccess);
             Assert.True(committed.GetValue().HasFault);
             Assert.Equal(poison.Id, committed.GetValue().Fault!.FaultEventId);
@@ -304,11 +304,11 @@ public sealed partial class MultiProjectionGrainCatchUpProductionPathTests
             actorOptions: new GeneralMultiProjectionActorOptions { SkipPersistWhenSafeCheckpointUnchanged = false },
             hostFactory: new ProductionCatchUpProjectionHostFactory(fresh));
         SetPrivateField(grain, "_hostIsPristine", false);
-        _ = await grain.PersistStateAsync();
+        _ = await grain.PersistStateAsync().AsResultBoxAsync();
         var active = (await checkpoints.ReadCheckpointSlotAsync("production-catch-up", "v1").AsResultBoxAsync()).GetValue();
         var invalidated = await checkpoints.InvalidateWithTombstoneAsync("production-catch-up", "v1", CheckpointExpectation.FromSlot(active));
         Assert.Equal(CheckpointCasStatus.Committed, invalidated.Status);
-        _ = await grain.PersistStateAsync(); // real rejection adopts the peer's generation
+        _ = await grain.PersistStateAsync().AsResultBoxAsync(); // real rejection adopts the peer's generation
         var tomb = (await checkpoints.ReadCheckpointSlotAsync("production-catch-up", "v1").AsResultBoxAsync()).GetValue();
         var catchUp = grain.RefreshAsync();
         Task<Exception?>? queryEntry = null;
@@ -350,7 +350,7 @@ public sealed partial class MultiProjectionGrainCatchUpProductionPathTests
             checkpointStore: store, logger: log,
             actorOptions: new GeneralMultiProjectionActorOptions { SkipPersistWhenSafeCheckpointUnchanged = false });
         SetPrivateField(grain, "_hostIsPristine", false);
-        var persisted = await grain.PersistStateAsync();
+        var persisted = await grain.PersistStateAsync().AsResultBoxAsync();
         Assert.True(persisted.IsSuccess, persisted.IsSuccess ? "" : persisted.GetException().ToString());
         Assert.True(persisted.GetValue());
         var active = (await store.ReadCheckpointSlotAsync("production-catch-up", "v1").AsResultBoxAsync()).GetValue();
@@ -440,7 +440,7 @@ public sealed partial class MultiProjectionGrainCatchUpProductionPathTests
 
         // Promote the unsafe range deterministically, then discard both layers of historical id deduplication.
         options.SafeWindowMs = 0;
-        var safe = (await host.GetStateAsync(canGetUnsafeState: false)).GetValue();
+        var safe = (await host.GetStateAsync(canGetUnsafeState: false).AsResultBoxAsync()).GetValue();
         Assert.Equal(events[^1].SortableUniqueIdValue, safe.LastSortableUniqueId);
         GetPrivateField<GeneralMultiProjectionActor>(host, "_actor").CompactSafeHistory();
         InvokePrivate(grain, "ClearProcessedEventCache", []);
@@ -452,7 +452,7 @@ public sealed partial class MultiProjectionGrainCatchUpProductionPathTests
         Assert.Equal(safe.LastSortableUniqueId, ensure.Start.StartPosition?.Value);
         Assert.All(store.ReadSinceValues.Skip(readsBeforeEnsure), since => Assert.Equal(safe.LastSortableUniqueId, since));
         Assert.Equal(20L, GetPrivateField<long>(grain, "_eventsProcessed"));
-        Assert.Equal(20, ((ForceFullResumeClusterTests.CountProjector)(await host.GetStateAsync()).GetValue().Payload).Count);
+        Assert.Equal(20, ((ForceFullResumeClusterTests.CountProjector)(await host.GetStateAsync().AsResultBoxAsync()).GetValue().Payload).Count);
         Assert.Equal(0, rebuilds);
         Assert.Equal(0, recreates);
     }
@@ -497,7 +497,7 @@ public sealed partial class MultiProjectionGrainCatchUpProductionPathTests
         Assert.Null(read!.Start!.StartPosition);
         Assert.Equal(CatchUpStartPositionSource.InferredCheckpoint, read.Start.Source);
         Assert.Equal(20L, GetPrivateField<long>(grain, "_eventsProcessed"));
-        Assert.Equal(20, ((ForceFullResumeClusterTests.CountProjector)(await host.GetStateAsync()).GetValue().Payload).Count);
+        Assert.Equal(20, ((ForceFullResumeClusterTests.CountProjector)(await host.GetStateAsync().AsResultBoxAsync()).GetValue().Payload).Count);
     }
 
     [Fact]
@@ -649,7 +649,7 @@ public sealed partial class MultiProjectionGrainCatchUpProductionPathTests
         });
         SetPrivateField(grain, "_firstQueryCatchUpMaxWaitMs", 100);
         InvokePrivate(grain, "ArmActivationFirstQueryGate", []);
-        var result = await grain.ResetProjectionFaultAsync(new ResetProjectionFaultRequest("production-catch-up", id, "position"));
+        var result = await grain.ResetProjectionFaultAsync(new ResetProjectionFaultRequest("production-catch-up", id, "position")).AsResultBoxAsync();
         Assert.True(result.IsSuccess, result.IsSuccess ? "" : result.GetException().ToString());
         Assert.False(IsBounded(grain));
         Assert.True(GetPrivateField<FirstQueryCatchUpGate>(grain, "_firstQueryGate").IsPending);
@@ -698,7 +698,7 @@ public sealed partial class MultiProjectionGrainCatchUpProductionPathTests
         else if (owner == "settlement") SetPrivateField(grain, "_boundedGateSettlement", releaseOwner.Task);
         else if (owner == "initiation") InvokePrivate(grain, "ObserveCatchUpRestart", [releaseOwner.Task]);
 
-        var pending = await grain.GetSnapshotJsonAsync();
+        var pending = await grain.GetSnapshotJsonAsync().AsResultBoxAsync();
         Assert.False(pending.IsSuccess);
         Assert.StartsWith(MultiProjectionQueryFailClosedMessages.CatchUpInProgressPrefix, pending.GetException().Message);
         Assert.Same(progress, GetPrivateFieldValue(grain, "_catchUpProgress"));
@@ -716,7 +716,7 @@ public sealed partial class MultiProjectionGrainCatchUpProductionPathTests
         Assert.False(GetPrivateFieldValue(grain, "_boundedCatchUpInitiation") is Task { IsCompleted: false });
         InvokePrivate(grain, "RecordBackgroundCatchUpFailure", [new Exception("previous attempt"), gate.ArmGeneration]);
 
-        var poll = grain.GetSnapshotJsonAsync();
+        var poll = grain.GetSnapshotJsonAsync().AsResultBoxAsync();
         await readStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
         Assert.True(gate.IsInFlight);
         Assert.NotSame(progress, GetPrivateFieldValue(grain, "_catchUpProgress"));
@@ -724,7 +724,7 @@ public sealed partial class MultiProjectionGrainCatchUpProductionPathTests
         Assert.False((await poll).IsSuccess);
         // The resumed Ensure has removed the timer and is parked inside its authoritative read. Repeated polls
         // must retain that owner rather than release progress and start another catch-up.
-        Assert.False((await grain.GetSnapshotJsonAsync()).IsSuccess);
+        Assert.False((await grain.GetSnapshotJsonAsync().AsResultBoxAsync()).IsSuccess);
         Assert.Same(resumedProgress, GetPrivateFieldValue(grain, "_catchUpProgress"));
         Assert.True((await grain.GetCatchUpStatusAsync()).IsActive);
         Assert.Equal(1, store.HeadReadCalls);
@@ -735,7 +735,7 @@ public sealed partial class MultiProjectionGrainCatchUpProductionPathTests
         Assert.False(gate.IsPending);
         Assert.False((await grain.GetCatchUpStatusAsync()).IsActive);
         Assert.Single(host.AppliedEventIds);
-        Assert.True((await grain.GetSnapshotJsonAsync()).IsSuccess);
+        Assert.True((await grain.GetSnapshotJsonAsync().AsResultBoxAsync()).IsSuccess);
         Assert.Equal(1, store.HeadReadCalls);
         Assert.Contains("previous attempt", (await grain.GetStatusAsync()).LastBackgroundCatchUpError);
         InvokePrivate(grain, "ArmActivationFirstQueryGate", []);
@@ -2127,10 +2127,10 @@ public sealed partial class MultiProjectionGrainCatchUpProductionPathTests
             return Task.CompletedTask;
         }
 
-        public Task<ResultBox<ProjectionStateMetadata>> GetStateMetadataAsync(bool includeUnsafe = true)
+        public Task<ProjectionStateMetadata> GetStateMetadataAsync(bool includeUnsafe = true)
         {
             StateMetadataCalls++;
-            return Task.FromResult(ResultBox.FromValue(new ProjectionStateMetadata(
+            return Task.FromResult(new ProjectionStateMetadata(
                     "production-catch-up",
                     "v1",
                     IsCatchedUp: true,
@@ -2138,16 +2138,16 @@ public sealed partial class MultiProjectionGrainCatchUpProductionPathTests
                     UnsafeLastSortableUniqueId: null,
                     UnsafeLastEventId: null,
                     SafeVersion: SafeVersion,
-                    SafeLastSortableUniqueId: SafePosition)));
+                    SafeLastSortableUniqueId: SafePosition));
         }
 
-        public Task<ResultBox<MultiProjectionState>> GetStateAsync(bool canGetUnsafeState = true)
+        public Task<MultiProjectionState> GetStateAsync(bool canGetUnsafeState = true)
         {
             StateCalls++;
             if (SignalOnPromotion && (SignalOnPromotionCall == 0 || StateCalls == SignalOnPromotionCall)) RebuildRequired = true;
             if (StateCalls == 1 && FailInitialStateRead)
             {
-                return Task.FromResult(ResultBox.Error<MultiProjectionState>(new InvalidOperationException("no state payload")));
+                return Task.FromException<MultiProjectionState>(new InvalidOperationException("no state payload"));
             }
 
             if (ThrowSafePromotion)
@@ -2157,17 +2157,17 @@ public sealed partial class MultiProjectionGrainCatchUpProductionPathTests
 
             if (FailSafePromotionWithResult)
             {
-                return Task.FromResult(ResultBox.Error<MultiProjectionState>(
-                    SafePromotionException ?? new InvalidOperationException("safe promotion failed by result")));
+                return Task.FromException<MultiProjectionState>(
+                    SafePromotionException ?? new InvalidOperationException("safe promotion failed by result"));
             }
 
-            return Task.FromResult(ResultBox.FromValue<MultiProjectionState>(new MultiProjectionState(
+            return Task.FromResult<MultiProjectionState>(new MultiProjectionState(
                 new TestProjectionPayload(),
                 "production-catch-up",
                 "v1",
                 SafePosition ?? string.Empty,
                 Guid.Empty,
-                SafeVersion)));
+                SafeVersion));
         }
 
         public Task<ProjectionHeadStatus> GetProjectionHeadStatusAsync()
@@ -2189,18 +2189,18 @@ public sealed partial class MultiProjectionGrainCatchUpProductionPathTests
                 catchUp));
         }
 
-        public Task<ResultBox<bool>> WriteSnapshotToStreamAsync(
+        public Task<bool> WriteSnapshotToStreamAsync(
             Stream target,
             bool canGetUnsafeState,
             CancellationToken cancellationToken) => WriteSnapshotAsync(target);
 
-        public Task<ResultBox<bool>> WriteSnapshotForPersistenceToStreamAsync(
+        public Task<bool> WriteSnapshotForPersistenceToStreamAsync(
             Stream target,
             bool canGetUnsafeState,
             int offloadThresholdBytes,
             CancellationToken cancellationToken) => WriteSnapshotAsync(target);
 
-        private async Task<ResultBox<bool>> WriteSnapshotAsync(Stream target)
+        private async Task<bool> WriteSnapshotAsync(Stream target)
         {
             SnapshotWriteCalls++;
             if (ThrowSnapshotWrite)
@@ -2210,34 +2210,34 @@ public sealed partial class MultiProjectionGrainCatchUpProductionPathTests
 
             if (SnapshotWriteException is { } snapshotWriteException)
             {
-                return ResultBox.Error<bool>(snapshotWriteException);
+                throw snapshotWriteException;
             }
 
             if (FailSnapshotWrite)
             {
-                return ResultBox.Error<bool>(new InvalidOperationException("snapshot write failed"));
+                throw new InvalidOperationException("snapshot write failed");
             }
 
             if (ReturnFalseSnapshotWrite)
             {
-                return ResultBox.FromValue(false);
+                return false;
             }
 
             await target.WriteAsync(new byte[] { 1 });
-            return ResultBox.FromValue(true);
+            return true;
         }
 
-        public Task<ResultBox<bool>> RestoreSnapshotFromStreamAsync(Stream source, CancellationToken cancellationToken) =>
-            Task.FromResult(ResultBox.FromValue(true));
+        public Task<bool> RestoreSnapshotFromStreamAsync(Stream source, CancellationToken cancellationToken) =>
+            Task.FromResult(true);
 
-        public Task<ResultBox<SerializableQueryResult>> ExecuteQueryAsync(
+        public Task<SerializableQueryResult> ExecuteQueryAsync(
             SerializableQueryParameter query,
             int? safeVersion,
             string? safeThreshold,
             DateTime? safeThresholdTime,
             int? unsafeVersion) => throw new NotSupportedException();
 
-        public Task<ResultBox<SerializableListQueryResult>> ExecuteListQueryAsync(
+        public Task<SerializableListQueryResult> ExecuteListQueryAsync(
             SerializableQueryParameter query,
             int? safeVersion,
             string? safeThreshold,
@@ -2260,7 +2260,7 @@ public sealed partial class MultiProjectionGrainCatchUpProductionPathTests
         public string PeekCurrentSafeWindowThreshold() => SortableUniqueId.Generate(DateTime.UtcNow, Guid.Empty);
         public string GetProjectorVersion() => "v1";
 
-        public Task<ResultBox<bool>> RewriteSnapshotVersionAsync(
+        public Task<bool> RewriteSnapshotVersionAsync(
             Stream source,
             Stream target,
             string newVersion,

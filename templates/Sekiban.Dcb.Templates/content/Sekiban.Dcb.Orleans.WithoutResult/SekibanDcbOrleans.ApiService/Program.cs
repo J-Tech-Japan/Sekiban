@@ -1085,17 +1085,26 @@ if (TemplateEnvironment.IsDevelopment(app.Environment.EnvironmentName))
                 var start = DateTime.UtcNow;
                 logger.LogDebug("PersistProjectionState request: name={Name}, start={Start:O}", name, start);
                 var grain = client.GetGrain<IMultiProjectionGrain>(ServiceIdGrainKey.Build(serviceId, name));
-                var rb = await grain.PersistStateAsync();
+                Exception? persistFailure = null;
+                var saved = false;
+                try
+                {
+                    saved = await grain.PersistStateAsync();
+                }
+                catch (Exception ex)
+                {
+                    persistFailure = ex;
+                }
                 var end = DateTime.UtcNow;
                 var elapsedMs = (end - start).TotalMilliseconds;
-                if (rb.IsSuccess)
+                if (persistFailure is null)
                 {
                     logger.LogDebug("PersistProjectionState success: name={Name}, elapsed={ElapsedMs:F1}ms", name, elapsedMs);
-                    return Results.Ok(new { success = rb.GetValue(), elapsedMs });
+                    return Results.Ok(new { success = saved, elapsedMs });
                 }
-                var err = rb.GetException()?.Message;
+                var err = persistFailure.Message;
                 logger.LogWarning("PersistProjectionState failure: name={Name}, elapsed={ElapsedMs:F1}ms, error={Error}", name, elapsedMs, err);
-                return ProjectionErrors.Map(rb.GetException(), Results.BadRequest(new { error = err, elapsedMs }));
+                return ProjectionErrors.Map(persistFailure, Results.BadRequest(new { error = err, elapsedMs }));
             })
             .WithName("PersistProjectionState");
 }
@@ -1136,9 +1145,16 @@ if (TemplateEnvironment.IsDevelopment(app.Environment.EnvironmentName))
             async ([FromQuery] string name, [FromQuery] bool? unsafeState, [FromServices] IClusterClient client) =>
             {
                 var grain = client.GetGrain<IMultiProjectionGrain>(ServiceIdGrainKey.Build(serviceId, name));
-                var rb = await grain.GetSnapshotJsonAsync(canGetUnsafeState: unsafeState ?? true);
-                if (!rb.IsSuccess) return ProjectionErrors.Map(rb.GetException(), Results.BadRequest(new { error = rb.GetException()?.Message }));
-                return Results.Text(rb.GetValue(), "application/json");
+                string snapshotJson;
+                try
+                {
+                    snapshotJson = await grain.GetSnapshotJsonAsync(canGetUnsafeState: unsafeState ?? true);
+                }
+                catch (Exception snapshotFailure)
+                {
+                    return ProjectionErrors.Map(snapshotFailure, Results.BadRequest(new { error = snapshotFailure.Message }));
+                }
+                return Results.Text(snapshotJson, "application/json");
             })
             .WithName("GetProjectionSnapshot");
 }

@@ -15,6 +15,7 @@ using System.Text;
 using System.Text.Json;
 using Xunit;
 
+using Sekiban.Dcb.TestSupport;
 namespace Sekiban.Dcb.Orleans.Tests;
 
 public class SnapshotVersioningTests : IAsyncLifetime
@@ -52,7 +53,7 @@ public class SnapshotVersioningTests : IAsyncLifetime
 
         // Catch up and persist snapshot
         await grain.RefreshAsync();
-        var persist = await grain.PersistStateAsync();
+        var persist = await grain.PersistStateAsync().AsResultBoxAsync();
         Assert.True(persist.IsSuccess);
 
         // Deactivate and wait for full deactivation
@@ -64,7 +65,7 @@ public class SnapshotVersioningTests : IAsyncLifetime
         // Wait for restoration to complete
         await Task.Delay(500);
 
-        var serStateAfter = await grain2.GetSnapshotJsonAsync(canGetUnsafeState: false);
+        var serStateAfter = await grain2.GetSnapshotJsonAsync(canGetUnsafeState: false).AsResultBoxAsync();
         Assert.True(serStateAfter.IsSuccess);
         var env = JsonSerializer.Deserialize<Sekiban.Dcb.Snapshots.SerializableMultiProjectionStateEnvelope>(serStateAfter.GetValue());
         Assert.NotNull(env);
@@ -84,7 +85,7 @@ public class SnapshotVersioningTests : IAsyncLifetime
 
         // Catch up and persist snapshot
         await grain.RefreshAsync();
-        var persist = await grain.PersistStateAsync();
+        var persist = await grain.PersistStateAsync().AsResultBoxAsync();
         Assert.True(persist.IsSuccess);
 
         // Corrupt the stored snapshot version to simulate mismatch
@@ -159,7 +160,7 @@ public class SnapshotVersioningTests : IAsyncLifetime
     {
         for (var attempt = 0; attempt < maxAttempts; attempt++)
         {
-            var serStateAfter = await grain.GetSnapshotJsonAsync(canGetUnsafeState: true);
+            var serStateAfter = await grain.GetSnapshotJsonAsync(canGetUnsafeState: true).AsResultBoxAsync();
             if (serStateAfter.IsSuccess)
             {
                 var env = JsonSerializer.Deserialize<Sekiban.Dcb.Snapshots.SerializableMultiProjectionStateEnvelope>(
@@ -181,7 +182,7 @@ public class SnapshotVersioningTests : IAsyncLifetime
             await Task.Delay(delayMs);
         }
 
-        var finalState = await grain.GetSnapshotJsonAsync(canGetUnsafeState: true);
+        var finalState = await grain.GetSnapshotJsonAsync(canGetUnsafeState: true).AsResultBoxAsync();
         if (!finalState.IsSuccess)
         {
             var ex = finalState.GetException();
@@ -269,7 +270,7 @@ public class SnapshotVersioningTests : IAsyncLifetime
         await grain.SeedEventsAsync(ToSerializableEvents(events));
         await grain.RefreshAsync();
 
-        var firstPersist = await grain.PersistStateAsync();
+        var firstPersist = await grain.PersistStateAsync().AsResultBoxAsync();
         Assert.True(firstPersist.IsSuccess);
         Assert.True(firstPersist.GetValue());
 
@@ -291,7 +292,7 @@ public class SnapshotVersioningTests : IAsyncLifetime
         Assert.Equal(5, version);
 
         // Then: persist succeeds (integrity guard does not block)
-        var secondPersist = await grain2.PersistStateAsync();
+        var secondPersist = await grain2.PersistStateAsync().AsResultBoxAsync();
         Assert.True(secondPersist.IsSuccess, "PersistStateAsync should succeed after external snapshot loss");
         Assert.True(secondPersist.GetValue(), "PersistStateAsync should return true after external snapshot loss");
     }
@@ -311,7 +312,7 @@ public class SnapshotVersioningTests : IAsyncLifetime
         await grain.RefreshAsync();
 
         // Persist snapshot -> should invoke custom Serialize
-        var persist = await grain.PersistStateAsync();
+        var persist = await grain.PersistStateAsync().AsResultBoxAsync();
         Assert.True(persist.IsSuccess);
         Assert.True(global::Sekiban.Dcb.Orleans.Tests.CounterProjector.SerializeCalls > 0);
 
@@ -325,7 +326,7 @@ public class SnapshotVersioningTests : IAsyncLifetime
         Assert.True(global::Sekiban.Dcb.Orleans.Tests.CounterProjector.DeserializeCalls > 0);
 
         // Verify by snapshot (avoid returning projector payload type through Orleans deep copy)
-        var snap = await grain2.GetSnapshotJsonAsync(canGetUnsafeState: true);
+        var snap = await grain2.GetSnapshotJsonAsync(canGetUnsafeState: true).AsResultBoxAsync();
         Assert.True(snap.IsSuccess);
         var env = System.Text.Json.JsonSerializer.Deserialize<Sekiban.Dcb.Snapshots.SerializableMultiProjectionStateEnvelope>(snap.GetValue());
         Assert.NotNull(env);

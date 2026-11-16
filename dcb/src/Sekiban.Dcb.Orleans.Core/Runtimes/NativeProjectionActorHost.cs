@@ -1,6 +1,5 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.DependencyInjection;
-using ResultBoxes;
 using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.MultiProjections;
@@ -54,8 +53,7 @@ public class NativeProjectionActorHost : IProjectionActorHost, IRebuildSignaling
         var resolvedLogger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance;
         var jsonOptions = domainTypes.JsonSerializerOptions;
 
-        var projectorVersion = ResultBox.WrapTry(() => domainTypes.MultiProjectorTypes.GetProjectorVersion(projectorName));
-        var version = projectorVersion.IsSuccess ? projectorVersion.GetValue() : "unknown";
+        var version = ResolveProjectorVersion(domainTypes, projectorName);
 
         var accumulator = primitive.CreateNativeAccumulator(projectorName, version, options, logger);
         _actor = accumulator.GetActor();
@@ -82,33 +80,25 @@ public class NativeProjectionActorHost : IProjectionActorHost, IRebuildSignaling
         return _actor.AddSerializableEventsAsync(events, finishedCatchUp);
     }
 
-    public async Task<ResultBox<ProjectionStateMetadata>> GetStateMetadataAsync(bool includeUnsafe = true)
+    public async Task<ProjectionStateMetadata> GetStateMetadataAsync(bool includeUnsafe = true)
     {
-        var unsafeResult = await _actor.GetStateAsync(canGetUnsafeState: true).ToResultBoxAsync();
-        var safeResult = await _actor.GetStateAsync(canGetUnsafeState: false).ToResultBoxAsync();
-
-        if (!safeResult.IsSuccess)
-        {
-            return ResultBox.Error<ProjectionStateMetadata>(safeResult.GetException());
-        }
-
-        var safeState = safeResult.GetValue();
-        var versionResult = ResultBox.WrapTry(() => _domainTypes.MultiProjectorTypes.GetProjectorVersion(_projectorName));
-        var projectorVersion = versionResult.IsSuccess ? versionResult.GetValue() : "unknown";
+        // An unavailable unsafe state only leaves the unsafe fields empty; an unavailable safe state fails the read.
+        var (unsafeState, unsafeFailure) = await TaskFailureCapture.CaptureAsync(_actor.GetStateAsync(canGetUnsafeState: true));
+        var safeState = await _actor.GetStateAsync(canGetUnsafeState: false);
+        var projectorVersion = ResolveProjectorVersion(_domainTypes, _projectorName);
 
         int unsafeVersion = 0;
         string? unsafeLastSortableUniqueId = null;
         Guid? unsafeLastEventId = null;
 
-        if (includeUnsafe && unsafeResult.IsSuccess)
+        if (includeUnsafe && unsafeFailure is null && unsafeState is not null)
         {
-            var unsafeState = unsafeResult.GetValue();
             unsafeVersion = unsafeState.Version;
             unsafeLastSortableUniqueId = unsafeState.LastSortableUniqueId;
             unsafeLastEventId = unsafeState.LastEventId;
         }
 
-        return ResultBox.FromValue(new ProjectionStateMetadata(
+        return new ProjectionStateMetadata(
             ProjectorName: _projectorName,
             ProjectorVersion: projectorVersion,
             IsCatchedUp: safeState.IsCatchedUp,
@@ -116,12 +106,12 @@ public class NativeProjectionActorHost : IProjectionActorHost, IRebuildSignaling
             UnsafeLastSortableUniqueId: unsafeLastSortableUniqueId,
             UnsafeLastEventId: unsafeLastEventId,
             SafeVersion: safeState.Version,
-            SafeLastSortableUniqueId: safeState.LastSortableUniqueId));
+            SafeLastSortableUniqueId: safeState.LastSortableUniqueId);
     }
 
-    public Task<ResultBox<MultiProjectionState>> GetStateAsync(bool canGetUnsafeState = true)
+    public Task<MultiProjectionState> GetStateAsync(bool canGetUnsafeState = true)
     {
-        return _actor.GetStateAsync(canGetUnsafeState).ToResultBoxAsync();
+        return _actor.GetStateAsync(canGetUnsafeState);
     }
 
     public Task<ProjectionHeadStatus> GetProjectionHeadStatusAsync()
@@ -129,7 +119,7 @@ public class NativeProjectionActorHost : IProjectionActorHost, IRebuildSignaling
         return _actor.GetProjectionHeadStatusAsync();
     }
 
-    public Task<ResultBox<bool>> WriteSnapshotToStreamAsync(
+    public Task<bool> WriteSnapshotToStreamAsync(
         Stream target,
         bool canGetUnsafeState,
         CancellationToken cancellationToken)
@@ -137,7 +127,7 @@ public class NativeProjectionActorHost : IProjectionActorHost, IRebuildSignaling
         return _snapshotHandler.WriteSnapshotToStreamAsync(target, canGetUnsafeState, cancellationToken);
     }
 
-    public Task<ResultBox<bool>> WriteSnapshotForPersistenceToStreamAsync(
+    public Task<bool> WriteSnapshotForPersistenceToStreamAsync(
         Stream target,
         bool canGetUnsafeState,
         int offloadThresholdBytes,
@@ -150,12 +140,12 @@ public class NativeProjectionActorHost : IProjectionActorHost, IRebuildSignaling
             cancellationToken);
     }
 
-    public Task<ResultBox<bool>> RestoreSnapshotFromStreamAsync(Stream source, CancellationToken cancellationToken)
+    public Task<bool> RestoreSnapshotFromStreamAsync(Stream source, CancellationToken cancellationToken)
     {
         return _snapshotHandler.RestoreSnapshotFromStreamAsync(source, cancellationToken);
     }
 
-    public Task<ResultBox<SerializableQueryResult>> ExecuteQueryAsync(
+    public Task<SerializableQueryResult> ExecuteQueryAsync(
         SerializableQueryParameter query,
         int? safeVersion,
         string? safeThreshold,
@@ -165,7 +155,7 @@ public class NativeProjectionActorHost : IProjectionActorHost, IRebuildSignaling
         return _queryExecutor.ExecuteQueryAsync(query, safeVersion, safeThreshold, safeThresholdTime, unsafeVersion);
     }
 
-    public Task<ResultBox<SerializableListQueryResult>> ExecuteListQueryAsync(
+    public Task<SerializableListQueryResult> ExecuteListQueryAsync(
         SerializableQueryParameter query,
         int? safeVersion,
         string? safeThreshold,
@@ -219,13 +209,22 @@ public class NativeProjectionActorHost : IProjectionActorHost, IRebuildSignaling
         return _actor.PeekCurrentSafeWindowThreshold().Value;
     }
 
-    public string GetProjectorVersion()
+    public string GetProjectorVersion() => ResolveProjectorVersion(_domainTypes, _projectorName);
+
+    // A projector whose version cannot be read reports "unknown".
+    private static string ResolveProjectorVersion(DcbDomainTypes domainTypes, string projectorName)
     {
-        var versionResult = ResultBox.WrapTry(() => _domainTypes.MultiProjectorTypes.GetProjectorVersion(_projectorName));
-        return versionResult.IsSuccess ? versionResult.GetValue() : "unknown";
+        try
+        {
+            return domainTypes.MultiProjectorTypes.GetProjectorVersion(projectorName) ?? "unknown";
+        }
+        catch (Exception)
+        {
+            return "unknown";
+        }
     }
 
-    public Task<ResultBox<bool>> RewriteSnapshotVersionAsync(
+    public Task<bool> RewriteSnapshotVersionAsync(
         Stream source,
         Stream target,
         string newVersion,

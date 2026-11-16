@@ -347,7 +347,7 @@ public sealed class OrleansFacadeProxyAcceptanceTests
             SerializableQueryParameter parameter,
             DcbDomainTypes domain)
         {
-            var query = (IQueryCommon)(await parameter.ToQueryAsync(domain)).GetValue();
+            var query = (IQueryCommon)await parameter.ToQueryAsync(domain);
             var result = new QueryResultGeneral(
                 new ProductionFacadeAcceptanceTests.AcceptanceResult(7),
                 typeof(ProductionFacadeAcceptanceTests.AcceptanceResult).AssemblyQualifiedName!,
@@ -359,7 +359,7 @@ public sealed class OrleansFacadeProxyAcceptanceTests
             SerializableQueryParameter parameter,
             DcbDomainTypes domain)
         {
-            var query = (IListQueryCommon)(await parameter.ToQueryAsync(domain)).GetValue();
+            var query = (IListQueryCommon)await parameter.ToQueryAsync(domain);
             var result = new ListQueryResultGeneral(
                 1,
                 1,

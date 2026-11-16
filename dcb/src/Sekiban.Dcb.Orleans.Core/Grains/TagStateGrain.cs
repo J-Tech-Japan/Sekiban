@@ -1,4 +1,3 @@
-using ResultBoxes;
 using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Capabilities;
 using Sekiban.Dcb.Common;
@@ -81,8 +80,16 @@ public class TagStateGrain : Grain, ITagStateGrain
         cancellationToken.ThrowIfCancellationRequested();
         var cachedState = _cache.State?.CachedState;
 
-        var projectorVersionResult = ResultBox.WrapTry(() => _tagProjectorTypes.GetProjectorVersion(_tagStateId.TagProjectorName));
-        var projectorVersion = projectorVersionResult.IsSuccess ? projectorVersionResult.GetValue() : string.Empty;
+        string projectorVersion;
+        try
+        {
+            projectorVersion = _tagProjectorTypes.GetProjectorVersion(_tagStateId.TagProjectorName) ?? string.Empty;
+        }
+        catch (Exception)
+        {
+            // An unknown projector version reads as empty, so no cached state matches it.
+            projectorVersion = string.Empty;
+        }
 
         if (cachedState != null &&
             cachedState.ProjectorVersion == projectorVersion &&
@@ -112,7 +119,8 @@ public class TagStateGrain : Grain, ITagStateGrain
             var until = string.IsNullOrEmpty(latestSortableUniqueId)
                 ? null
                 : new SortableUniqueId(latestSortableUniqueId);
-            var streamResult = await taggedStream.StreamStore!.StreamSerializableEventsByTagAsync(
+            var (_, streamFailure) = await TaskFailureCapture.CapturePropagatingCancellationAsync(
+                taggedStream.StreamStore!.StreamSerializableEventsByTagAsync(
                 tag,
                 since,
                 until,
@@ -154,34 +162,29 @@ public class TagStateGrain : Grain, ITagStateGrain
                     previousId = serializableEvent.SortableUniqueIdValue;
                     return ValueTask.CompletedTask;
                 },
-                cancellationToken).ToResultBoxPropagatingCancellationAsync();
+                cancellationToken));
             cancellationToken.ThrowIfCancellationRequested();
-            if (!streamResult.IsSuccess)
+            if (streamFailure is not null)
             {
-                if (streamResult.GetException() is OperationCanceledException cancellationException)
-                {
-                    throw cancellationException;
-                }
-
                 throw new InvalidOperationException(
-                    $"Failed to stream serialized events: {streamResult.GetException().Message}",
-                    streamResult.GetException());
+                    $"Failed to stream serialized events: {streamFailure.Message}",
+                    streamFailure);
             }
         }
         else
         {
-            var eventsResult = await ReadSerializableEventsByTagAsync(tag, since, cancellationToken);
+            var (events, eventsFailure) = await ReadSerializableEventsByTagAsync(tag, since, cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
-            if (!eventsResult.IsSuccess)
+            if (eventsFailure is not null)
             {
                 throw new InvalidOperationException(
-                    $"Failed to read serialized events: {eventsResult.GetException().Message}",
-                    eventsResult.GetException());
+                    $"Failed to read serialized events: {eventsFailure.Message}",
+                    eventsFailure);
             }
 
             // IEventStore's frozen list read cannot be interrupted. Once it returns, feed one ordered event at a time
             // so every legacy/default accumulator receives a cancellation observation between events.
-            foreach (var serializableEvent in eventsResult.GetValue().OrderBy(
+            foreach (var serializableEvent in events.OrderBy(
                          @event => @event.SortableUniqueIdValue,
                          StringComparer.Ordinal))
             {
@@ -239,20 +242,28 @@ public class TagStateGrain : Grain, ITagStateGrain
                 serialized.ProjectorVersion);
         }
 
-        var deserializeResult = ResultBox.WrapTry(() => _tagStatePayloadTypes.DeserializePayload(
-            serialized.ResolvedPayloadName,
-            serialized.Payload));
+        ITagStatePayload payload;
+        Exception? deserializeFailure = null;
+        try
+        {
+            payload = _tagStatePayloadTypes.DeserializePayload(serialized.ResolvedPayloadName, serialized.Payload);
+        }
+        catch (Exception ex)
+        {
+            payload = null!;
+            deserializeFailure = ex;
+        }
         cancellationToken.ThrowIfCancellationRequested();
-        if (!deserializeResult.IsSuccess)
+        if (deserializeFailure is not null)
         {
             throw new InvalidOperationException(
-                $"Failed to deserialize payload '{serialized.ResolvedPayloadName}': {deserializeResult.GetException().Message}",
-                deserializeResult.GetException());
+                $"Failed to deserialize payload '{serialized.ResolvedPayloadName}': {deserializeFailure.Message}",
+                deserializeFailure);
         }
 
         cancellationToken.ThrowIfCancellationRequested();
         return new TagState(
-            deserializeResult.GetValue(),
+            payload,
             serialized.Version,
             serialized.LastSortedUniqueId,
             serialized.TagGroup,
@@ -292,16 +303,18 @@ public class TagStateGrain : Grain, ITagStateGrain
         }
         else
         {
-            var serializeResult = ResultBox.WrapTry(() => _tagStatePayloadTypes.SerializePayload(newState.Payload));
-            if (!serializeResult.IsSuccess)
+            byte[] payloadBytes;
+            try
             {
-                throw new InvalidOperationException(
-                    $"Failed to serialize payload: {serializeResult.GetException().Message}",
-                    serializeResult.GetException());
+                payloadBytes = _tagStatePayloadTypes.SerializePayload(newState.Payload);
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException($"Failed to serialize payload: {ex.Message}", ex);
             }
 
             serialized = new SerializableTagState(
-                serializeResult.GetValue(),
+                payloadBytes,
                 newState.Version,
                 newState.LastSortedUniqueId,
                 newState.TagGroup,
@@ -341,15 +354,15 @@ public class TagStateGrain : Grain, ITagStateGrain
     {
         cancellationToken.ThrowIfCancellationRequested();
         var tagConsistentActorId = $"{tagStateId.TagGroup}:{tagStateId.TagContent}";
-        var tagConsistentActorResult = await _actorAccessor.GetActorAsync<ITagConsistentActorCommon>(tagConsistentActorId)
-            .ToResultBoxAsync();
+        var (tagConsistentActor, actorFailure) = await TaskFailureCapture.CaptureAsync(
+            _actorAccessor.GetActorAsync<ITagConsistentActorCommon>(tagConsistentActorId));
         cancellationToken.ThrowIfCancellationRequested();
-        if (!tagConsistentActorResult.IsSuccess)
+        if (actorFailure is not null)
         {
             return null;
         }
 
-        var latestSortableUniqueId = await TagConsistentLatestPositionReader.TryReadAsync(tagConsistentActorResult.GetValue());
+        var latestSortableUniqueId = await TagConsistentLatestPositionReader.TryReadAsync(tagConsistentActor);
         cancellationToken.ThrowIfCancellationRequested();
         return latestSortableUniqueId;
     }
@@ -385,19 +398,14 @@ public class TagStateGrain : Grain, ITagStateGrain
         return null;
     }
 
-    private async Task<ResultBox<IReadOnlyList<SerializableEvent>>> ReadSerializableEventsByTagAsync(
+    private async Task<(IReadOnlyList<SerializableEvent> Events, Exception? Failure)> ReadSerializableEventsByTagAsync(
         ITag tag,
         SortableUniqueId? since,
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var serializableResult = await _eventStore.ReadSerializableEventsByTagAsync(tag, since).ToResultBoxAsync();
+        var (events, failure) = await TaskFailureCapture.CaptureAsync(_eventStore.ReadSerializableEventsByTagAsync(tag, since));
         cancellationToken.ThrowIfCancellationRequested();
-        if (serializableResult.IsSuccess)
-        {
-            return ResultBox.FromValue<IReadOnlyList<SerializableEvent>>(serializableResult.GetValue().ToList());
-        }
-
-        return ResultBox.Error<IReadOnlyList<SerializableEvent>>(serializableResult.GetException());
+        return failure is null ? (events.ToList(), null) : (Array.Empty<SerializableEvent>(), failure);
     }
 }

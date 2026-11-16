@@ -16,7 +16,7 @@ public sealed record ProjectionFaultInfo(
 /// <summary>
 ///     Successful payload of <see cref="IMultiProjectionGrain.TryGetProjectionFaultAsync" />. A false
 ///     <see cref="HasFault" /> is the sole supported+no-fault state and means only that no descriptor exists in the
-///     committed grain record; failure to read and a legacy implementation remain ResultBox errors.
+///     committed grain record; failure to read and a legacy implementation fault the returned task.
 /// </summary>
 [GenerateSerializer]
 public sealed record ProjectionFaultReadResult(
