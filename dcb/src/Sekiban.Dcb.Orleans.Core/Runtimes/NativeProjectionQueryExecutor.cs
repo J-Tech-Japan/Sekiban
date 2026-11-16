@@ -4,6 +4,7 @@ using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.MultiProjections;
 using Sekiban.Dcb.Orleans.Serialization;
 using Sekiban.Dcb.Queries;
+using Sekiban.Dcb.Common;
 
 namespace Sekiban.Dcb.Runtime.Native;
 
@@ -52,7 +53,7 @@ internal class NativeProjectionQueryExecutor
                         $"Deserialized query does not implement IQueryCommon: {queryBox.GetValue().GetType().FullName}"));
             }
 
-            var stateResult = await _actor.GetStateAsync();
+            var stateResult = await _actor.GetStateAsync().ToResultBoxAsync();
             if (!stateResult.IsSuccess)
             {
                 // A failed state fetch is a real failure — a faulted projection, or a version-resolution error — and
@@ -116,7 +117,7 @@ internal class NativeProjectionQueryExecutor
                         $"Deserialized query does not implement IListQueryCommon: {queryBox.GetValue().GetType().FullName}"));
             }
 
-            var stateResult = await _actor.GetStateAsync();
+            var stateResult = await _actor.GetStateAsync().ToResultBoxAsync();
             if (!stateResult.IsSuccess)
             {
                 // Same as the single-query path: a faulted projection fails the list query with its fault, instead of

@@ -84,7 +84,7 @@ public class ProjectionFaultIntegrityTests
 
         // The read surface every query fetches first: it fails, and the failure names the fault, instead of handing
         // back the last pre-crash payload as a success.
-        var state = await actor.GetStateAsync();
+        var state = await ResultBox.WrapTry(() => actor.GetStateAsync());
         Assert.False(state.IsSuccess);
         var ex = Assert.IsType<SekibanProjectionFaultException>(state.GetException());
         Assert.Equal(MalformedEventPayloadFixture.EventTypeName, ex.Fault.EventType);
@@ -101,8 +101,8 @@ public class ProjectionFaultIntegrityTests
         var actor = new GeneralMultiProjectionActor(Domain(), StudentSummaries.MultiProjectorName, logger: logger);
 
         var original = await Assert.ThrowsAnyAsync<Exception>(() => actor.AddSerializableEventsAsync([Poison()]));
-        _ = await actor.GetStateAsync();
-        _ = await actor.GetStateAsync();
+        _ = await ResultBox.WrapTry(() => actor.GetStateAsync());
+        _ = await ResultBox.WrapTry(() => actor.GetStateAsync());
 
         var first = Assert.Single(logger.Entries, entry => entry.EventId.Name == "ProjectionFaultFirstObserved");
         Assert.Equal(1401, first.EventId.Id);
@@ -147,7 +147,7 @@ public class ProjectionFaultIntegrityTests
         Assert.Equal(MalformedEventPayloadFixture.EventTypeName, rejected.Fault.EventType);
 
         Assert.True(actor.IsFaulted);
-        Assert.False((await actor.GetStateAsync()).IsSuccess);
+        Assert.False((await ResultBox.WrapTry(() => actor.GetStateAsync())).IsSuccess);
     }
 
     [Fact]
@@ -175,7 +175,7 @@ public class ProjectionFaultIntegrityTests
 
         // After the rebuild reset, a healthy event applies and the state reads successfully again.
         await actor.AddEventsAsync([Healthy()]);
-        Assert.True((await actor.GetStateAsync()).IsSuccess);
+        Assert.True((await ResultBox.WrapTry(() => actor.GetStateAsync())).IsSuccess);
     }
 
     [Fact]
@@ -187,7 +187,7 @@ public class ProjectionFaultIntegrityTests
 
         Assert.False(actor.IsFaulted);
         Assert.Null(actor.CurrentFault);
-        Assert.True((await actor.GetStateAsync()).IsSuccess);
+        Assert.True((await ResultBox.WrapTry(() => actor.GetStateAsync())).IsSuccess);
     }
 
     // --- InMemory accessor: the swallow removal, at the boundary GetActorAsync already turns into ResultBox.Error ---
@@ -201,7 +201,7 @@ public class ProjectionFaultIntegrityTests
         // stand in for that already-durable row.)
         var accessor = new InMemoryObjectAccessor(new PoisonReadEventStore(), Domain());
 
-        var actorResult = await accessor.GetActorAsync<GeneralMultiProjectionActor>(StudentSummaries.MultiProjectorName);
+        var actorResult = await ResultBox.WrapTry(() => accessor.GetActorAsync<GeneralMultiProjectionActor>(StudentSummaries.MultiProjectorName));
 
         // Before SEK-G14 the replay swallow made this a successful, empty actor. Now the replay failure reaches
         // GetActorAsync's ResultBox.Error boundary un-swallowed.
@@ -214,7 +214,7 @@ public class ProjectionFaultIntegrityTests
         var domain = Domain();
         var accessor = new InMemoryObjectAccessor(new FailingReadEventStore(), domain);
 
-        var actorResult = await accessor.GetActorAsync<GeneralMultiProjectionActor>(StudentSummaries.MultiProjectorName);
+        var actorResult = await ResultBox.WrapTry(() => accessor.GetActorAsync<GeneralMultiProjectionActor>(StudentSummaries.MultiProjectorName));
 
         Assert.False(actorResult.IsSuccess);
         Assert.Contains("read failed", actorResult.GetException().Message);

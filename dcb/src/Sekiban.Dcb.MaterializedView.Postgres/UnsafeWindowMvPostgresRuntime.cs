@@ -895,11 +895,7 @@ public sealed class UnsafeWindowMvPromoter<TRow> where TRow : class, new()
                 }
 
                 var evResult = serialized.ToEvent(_eventTypes);
-                if (!evResult.IsSuccess)
-                {
-                    throw evResult.GetException();
-                }
-                combined[key] = evResult.GetValue();
+                combined[key] = evResult;
             }
         }
 
@@ -1027,12 +1023,8 @@ public sealed class UnsafeWindowMvCatchUpWorker<TRow> where TRow : class, new()
         {
             ct.ThrowIfCancellationRequested();
             var evResult = serialized.ToEvent(_eventTypes);
-            if (!evResult.IsSuccess)
-            {
-                throw evResult.GetException();
-            }
 
-            await _applier.ApplyEventAsync(connection, transaction, evResult.GetValue(), ct).ConfigureAwait(false);
+            await _applier.ApplyEventAsync(connection, transaction, evResult, ct).ConfigureAwait(false);
         }
         await transaction.CommitAsync(ct).ConfigureAwait(false);
         _logger.LogDebug("Unsafe window MV '{View}' caught up {Count} event(s).", _projector.ViewName, events.Count);

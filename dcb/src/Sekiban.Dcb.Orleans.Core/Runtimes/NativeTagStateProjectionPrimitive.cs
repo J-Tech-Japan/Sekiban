@@ -171,15 +171,24 @@ public sealed class NativeTagStateProjectionPrimitive : ITagStateProjectionPrimi
                 return true;
             }
 
-            var eventResult = serializableEvent.ToEvent(_eventTypes);
+            Event? domainEvent;
+            try
+            {
+                domainEvent = serializableEvent.ToEvent(_eventTypes);
+            }
+            catch (Exception)
+            {
+                domainEvent = null;
+            }
+
             cancellationToken.ThrowIfCancellationRequested();
-            if (!eventResult.IsSuccess)
+            if (domainEvent is null)
             {
                 return false;
             }
 
             cancellationToken.ThrowIfCancellationRequested();
-            _currentPayload = _projector!(_currentPayload, eventResult.GetValue());
+            _currentPayload = _projector!(_currentPayload, domainEvent);
             _version++;
             _lastSortableUniqueId = serializableEvent.SortableUniqueIdValue;
             _hasChanges = true;

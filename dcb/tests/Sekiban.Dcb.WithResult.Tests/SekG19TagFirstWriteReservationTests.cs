@@ -7,6 +7,7 @@ using Sekiban.Dcb.Tags;
 using CoreInMemoryEventStore = Sekiban.Dcb.Testing.InMemoryEventStore;
 using Xunit;
 using Sekiban.Dcb.TestSupport;
+using ResultBoxes;
 namespace Sekiban.Dcb.Tests;
 
 /// <summary>
@@ -42,13 +43,13 @@ public class SekG19TagFirstWriteReservationTests
         {
             var id = Guid.NewGuid();
             var actor = NewActor(new StudentTag(id).GetTag(), NewStore());
-            Assert.True((await actor.MakeReservationAsync("")).IsSuccess);
+            Assert.True((await ResultBox.WrapTry(() => actor.MakeReservationAsync(""))).IsSuccess);
         }
         // Class 3 — non-empty expected / empty current => CONFLICT (the tag never had that version).
         {
             var id = Guid.NewGuid();
             var actor = NewActor(new StudentTag(id).GetTag(), NewStore());
-            var r = await actor.MakeReservationAsync(SortableUniqueId.GenerateNew());
+            var r = await ResultBox.WrapTry(() => actor.MakeReservationAsync(SortableUniqueId.GenerateNew()));
             Assert.False(r.IsSuccess);
             Assert.Contains("has been modified", r.GetException().Message);   // stable safe context
         }
@@ -61,20 +62,20 @@ public class SekG19TagFirstWriteReservationTests
         // Class 2 — empty expected / non-empty current => CONFLICT (a second first-write against existing state; #1085).
         {
             var actor = NewActor(tag.GetTag(), store);
-            var r = await actor.MakeReservationAsync("");
+            var r = await ResultBox.WrapTry(() => actor.MakeReservationAsync(""));
             Assert.False(r.IsSuccess);
             Assert.Contains("has been modified", r.GetException().Message);
         }
         // Class 4 — non-empty expected mismatch / non-empty current => CONFLICT.
         {
             var actor = NewActor(tag.GetTag(), store);
-            var r = await actor.MakeReservationAsync(SortableUniqueId.GenerateNew());
+            var r = await ResultBox.WrapTry(() => actor.MakeReservationAsync(SortableUniqueId.GenerateNew()));
             Assert.False(r.IsSuccess);
         }
         // Class 5 — non-empty expected match / non-empty current => PASS (an ordinary update reservation).
         {
             var actor = NewActor(tag.GetTag(), store);
-            Assert.True((await actor.MakeReservationAsync(committed)).IsSuccess);
+            Assert.True((await ResultBox.WrapTry(() => actor.MakeReservationAsync(committed))).IsSuccess);
         }
     }
 
@@ -83,8 +84,8 @@ public class SekG19TagFirstWriteReservationTests
     {
         var id = Guid.NewGuid();
         var actor = NewActor(new StudentTag(id).GetTag(), NewStore());
-        Assert.True((await actor.MakeReservationAsync("")).IsSuccess);        // first write holds the reservation
-        var second = await actor.MakeReservationAsync("");                    // a second attempt while one is active
+        Assert.True((await ResultBox.WrapTry(() => actor.MakeReservationAsync(""))).IsSuccess);        // first write holds the reservation
+        var second = await ResultBox.WrapTry(() => actor.MakeReservationAsync(""));                    // a second attempt while one is active
         Assert.False(second.IsSuccess);
         Assert.Contains("currently reserved", second.GetException().Message); // the pre-existing active-reservation guard
     }
@@ -102,12 +103,12 @@ public class SekG19TagFirstWriteReservationTests
             var store = NewStore();
             var actor = NewActor(tag.GetTag(), store);
 
-            var a = await actor.MakeReservationAsync("");                     // flow A: first write on an empty tag
+            var a = await ResultBox.WrapTry(() => actor.MakeReservationAsync(""));                     // flow A: first write on an empty tag
             Assert.True(a.IsSuccess);
             await CommitCreateAsync(store, studentId, tag, "A");              // A durably commits its create
             Assert.True(await actor.ConfirmReservationAsync(a.GetValue()));   // A's reservation released; forces re-catch-up
 
-            var b = await actor.MakeReservationAsync("");                     // flow B: a second, non-overlapping first write
+            var b = await ResultBox.WrapTry(() => actor.MakeReservationAsync(""));                     // flow B: a second, non-overlapping first write
             Assert.False(b.IsSuccess);                                        // conflicts against A's committed state
             Assert.Contains("has been modified", b.GetException().Message);
         }
@@ -118,7 +119,7 @@ public class SekG19TagFirstWriteReservationTests
     {
         var id = Guid.NewGuid();
         var actor = NewActor(new StudentTag(id).GetTag(), NewStore());
-        var attempts = await Task.WhenAll(Enumerable.Range(0, 16).Select(_ => actor.MakeReservationAsync("")));
+        var attempts = await Task.WhenAll(Enumerable.Range(0, 16).Select(_ => ResultBox.WrapTry(() => actor.MakeReservationAsync(""))));
         Assert.Equal(1, attempts.Count(r => r.IsSuccess));                   // the reservation lock admits exactly one
         Assert.Equal(15, attempts.Count(r => !r.IsSuccess));
     }
@@ -131,14 +132,14 @@ public class SekG19TagFirstWriteReservationTests
         var store = NewStore();
 
         var actor1 = NewActor(tag.GetTag(), store);
-        var a = await actor1.MakeReservationAsync("");
+        var a = await ResultBox.WrapTry(() => actor1.MakeReservationAsync(""));
         Assert.True(a.IsSuccess);
         await CommitCreateAsync(store, studentId, tag, "winner");
         await actor1.ConfirmReservationAsync(a.GetValue());
 
         // "Restart": a fresh activation catches up from the store and a late first-write reservation must CONFLICT.
         var actor2 = NewActor(tag.GetTag(), store);
-        var late = await actor2.MakeReservationAsync("");
+        var late = await ResultBox.WrapTry(() => actor2.MakeReservationAsync(""));
         Assert.False(late.IsSuccess);
         Assert.Contains("has been modified", late.GetException().Message);
     }
@@ -148,12 +149,12 @@ public class SekG19TagFirstWriteReservationTests
     {
         var id = Guid.NewGuid();
         var actor = NewActor(new StudentTag(id).GetTag(), NewStore());
-        var a = await actor.MakeReservationAsync("");
+        var a = await ResultBox.WrapTry(() => actor.MakeReservationAsync(""));
         Assert.True(a.IsSuccess);
         Assert.True(await actor.CancelReservationAsync(a.GetValue()));        // the winner never committed; cancel releases it
 
         // The tag is still empty, so a fresh first-write reservation succeeds — no permanent lockout.
-        Assert.True((await actor.MakeReservationAsync("")).IsSuccess);
+        Assert.True((await ResultBox.WrapTry(() => actor.MakeReservationAsync(""))).IsSuccess);
     }
 
     [Fact]
@@ -163,8 +164,8 @@ public class SekG19TagFirstWriteReservationTests
         // removes it and the first-write ability is restored — a lost/expired winner never locks the tag out.
         var id = Guid.NewGuid();
         var actor = NewActor(new StudentTag(id).GetTag(), NewStore(), new TagConsistentActorOptions { CancellationWindowSeconds = 0 });
-        Assert.True((await actor.MakeReservationAsync("")).IsSuccess);        // immediately-expiring reservation
-        Assert.True((await actor.MakeReservationAsync("")).IsSuccess);        // expiry cleanup restores first-write
+        Assert.True((await ResultBox.WrapTry(() => actor.MakeReservationAsync(""))).IsSuccess);        // immediately-expiring reservation
+        Assert.True((await ResultBox.WrapTry(() => actor.MakeReservationAsync(""))).IsSuccess);        // expiry cleanup restores first-write
     }
 
     [Fact]
@@ -181,8 +182,8 @@ public class SekG19TagFirstWriteReservationTests
         var clusterA = NewActor(tag.GetTag(), store);   // activation on cluster A
         var clusterB = NewActor(tag.GetTag(), store);   // independent activation on cluster B (separate actor instance)
 
-        var ra = await clusterA.MakeReservationAsync("");
-        var rb = await clusterB.MakeReservationAsync("");
+        var ra = await ResultBox.WrapTry(() => clusterA.MakeReservationAsync(""));
+        var rb = await ResultBox.WrapTry(() => clusterB.MakeReservationAsync(""));
         Assert.True(ra.IsSuccess);
         Assert.True(rb.IsSuccess);   // BOTH per-cluster reservations succeed — this is expected, not a regression
 

@@ -1,4 +1,3 @@
-using ResultBoxes;
 using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Capabilities;
 using Sekiban.Dcb.Boundaries;
@@ -271,7 +270,7 @@ public class OrleansDcbExecutor : ISekibanExecutor, IConditionalCommandExecutor,
     {
         var context = new BoundaryContext("ISekibanExecutor.QueryAsync", typeof(TResult).Name);
         var general = await GuardedUnwrap.UnwrapAsync(result.ToQueryResultAsync(_construction.DomainTypes), context);
-        return GuardedUnwrap.Unwrap(general.ToTypedResult<TResult>(), context);
+        return GuardedUnwrap.Run(() => general.ToTypedResult<TResult>(), context);
     }
 
     private async Task<ListQueryResult<TResult>> DeserializeListQueryResultAsync<TResult>(
@@ -325,16 +324,16 @@ public class OrleansDcbExecutor : ISekibanExecutor, IConditionalCommandExecutor,
     public Task<EventStoreHeadStatus> GetEventStoreHeadStatusAsync(bool includeTotalEventCount = false) =>
         _construction.GeneralExecutor.GetEventStoreHeadStatusAsync(includeTotalEventCount);
 
-    public Task<ResultBox<SerializableTagState>> GetSerializableTagStateAsync(TagStateId tagStateId) =>
+    public Task<SerializableTagState> GetSerializableTagStateAsync(TagStateId tagStateId) =>
         _construction.GeneralExecutor.GetSerializableTagStateAsync(tagStateId);
 
-    public Task<ResultBox<SerializedCommitResult>> CommitSerializableEventsAsync(
+    public Task<SerializedCommitResult> CommitSerializableEventsAsync(
         SerializedCommitRequest request,
         CancellationToken cancellationToken = default) =>
         _construction.GeneralExecutor.CommitSerializableEventsAsync(request, cancellationToken);
 
     /// <summary>Forwards the additive V2 serialized expected-head contract to the common executor/store path.</summary>
-    public Task<ResultBox<SerializedCommitResult>> CommitSerializableEventsWithExpectedTagPositionsAsync(
+    public Task<SerializedCommitResult> CommitSerializableEventsWithExpectedTagPositionsAsync(
         VersionedExpectedTagPositionSerializedCommitRequest request,
         CancellationToken cancellationToken = default) =>
         _construction.GeneralExecutor.CommitSerializableEventsWithExpectedTagPositionsAsync(request, cancellationToken);

@@ -221,19 +221,19 @@ public partial class ObservedPositionClockSkewTests(ITestOutputHelper output)
             var seenLast = "?";
             if (serialized)
             {
-                var actor = (await Accessor.GetActorAsync<ITagStateActorCommon>(
-                    new TagStateId(tag, ProbeCounterProjector.ProjectorName).GetTagStateId())).GetValue();
+                var actor = await Accessor.GetActorAsync<ITagStateActorCommon>(
+                    new TagStateId(tag, ProbeCounterProjector.ProjectorName).GetTagStateId());
                 var state = await actor.GetStateAsync();
                 seenCount = state.ResolvedPayloadName == nameof(ProbeCounterState)
                     ? ((ProbeCounterState)Domain.TagStatePayloadTypes.DeserializePayload(state.ResolvedPayloadName, state.Payload)).Count
                     : 0;
                 seenLast = state.LastSortedUniqueId;
-                var commit = await ((ISerializedSekibanDcbExecutor)executor.Executor).CommitSerializableEventsAsync(
+                var commit = await ResultBox.WrapTry(() => ((ISerializedSekibanDcbExecutor)executor.Executor).CommitSerializableEventsAsync(
                     new SerializedCommitRequest(
                         [new SerializableEventCandidate(
                             JsonSerializer.SerializeToUtf8Bytes(new ProbeCounterIncremented(seenCount + 1, label), Domain.JsonSerializerOptions),
                             nameof(ProbeCounterIncremented), [tag.GetTag()])],
-                        [new ConsistencyTagEntry(tag.GetTag(), seenLast)]));
+                        [new ConsistencyTagEntry(tag.GetTag(), seenLast)])));
                 Assert.True(commit.IsSuccess, commit.IsSuccess ? "" : commit.GetException().ToString());
                 var id = (await Store.ReadEventsByTagAsync(tag, Domain.EventTypes).AsResultBoxAsync()).GetValue()
                     .Single(e => ((ProbeCounterIncremented)e.Payload).Label == label).SortableUniqueIdValue;
@@ -297,7 +297,7 @@ public partial class ObservedPositionClockSkewTests(ITestOutputHelper output)
 
         private async Task<(int Count, int Version, string Last)> ReadVia(InMemoryObjectAccessor accessor, TagStateId id)
         {
-            var actor = (await accessor.GetActorAsync<ITagStateActorCommon>(id.GetTagStateId())).GetValue();
+            var actor = (await ResultBox.WrapTry(() => accessor.GetActorAsync<ITagStateActorCommon>(id.GetTagStateId()))).GetValue();
             var state = await actor.GetStateAsync();
             var count = 0;
             if (state.ResolvedPayloadName == nameof(ProbeCounterState))

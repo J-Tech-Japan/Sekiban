@@ -35,7 +35,9 @@
     </ItemGroup>
 
     <ItemGroup>
-        <PackageReference Include="ResultBoxes" Version="0.4.0" PrivateAssets="All" />
+        <!-- GuardedUnwrap and the generic tag projectors still use ResultBox internally until the facade slice of 11.0
+             removes them; Sekiban.Dcb.Core no longer brings the package, so it must flow to consumers from here. -->
+        <PackageReference Include="ResultBoxes" Version="0.4.0" />
         <PackageReference Include="Microsoft.Sbom.Targets" Version="4.1.5">
             <PrivateAssets>all</PrivateAssets>
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>

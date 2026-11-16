@@ -123,7 +123,7 @@ public class MinimalOrleansTests : IAsyncLifetime
             new DefaultServiceIdProvider(),
             new ProjectionStatusOptions { SamplingWindow = TimeSpan.Zero });
 
-        var before = await reader.ReadAsync(new ProjectionStatusReadRequest(ProjectorName: projectorName));
+        var before = await ResultBox.WrapTry(() => reader.ReadAsync(new ProjectionStatusReadRequest(ProjectorName: projectorName)));
         Assert.True(before.IsSuccess);
         Assert.Empty(before.GetValue());
         Assert.Empty((await SharedStateStore.ListAsync(projectorName, "1.0").AsResultBoxAsync()).GetValue());

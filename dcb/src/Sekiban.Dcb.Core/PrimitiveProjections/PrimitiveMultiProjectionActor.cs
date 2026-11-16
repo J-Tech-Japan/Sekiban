@@ -1,7 +1,6 @@
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
-using ResultBoxes;
 using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.Queries;
@@ -53,7 +52,7 @@ public sealed class PrimitiveMultiProjectionActor
         return Task.CompletedTask;
     }
 
-    public Task<ResultBox<TResult>> QueryAsync<TResult>(IQueryCommon<TResult> query) where TResult : notnull
+    public Task<TResult> QueryAsync<TResult>(IQueryCommon<TResult> query) where TResult : notnull
     {
         try
         {
@@ -65,19 +64,19 @@ public sealed class PrimitiveMultiProjectionActor
             var result = JsonSerializer.Deserialize<TResult>(resultJson, _jsonOptions);
             if (default(TResult) is null && result is null)
             {
-                return Task.FromResult(ResultBox.Error<TResult>(
-                    new InvalidOperationException($"Failed to deserialize query result for {queryType}")));
+                return Task.FromException<TResult>(
+                    new InvalidOperationException($"Failed to deserialize query result for {queryType}"));
             }
 
-            return Task.FromResult(ResultBox.FromValue(result!));
+            return Task.FromResult(result!);
         }
         catch (Exception ex)
         {
-            return Task.FromResult(ResultBox.Error<TResult>(ex));
+            return Task.FromException<TResult>(ex);
         }
     }
 
-    public Task<ResultBox<ListQueryResult<TResult>>> ListQueryAsync<TResult>(IListQueryCommon<TResult> query)
+    public Task<ListQueryResult<TResult>> ListQueryAsync<TResult>(IListQueryCommon<TResult> query)
         where TResult : notnull
     {
         try
@@ -90,15 +89,15 @@ public sealed class PrimitiveMultiProjectionActor
             var result = JsonSerializer.Deserialize<ListQueryResult<TResult>>(resultJson, _jsonOptions);
             if (result is null)
             {
-                return Task.FromResult(ResultBox.Error<ListQueryResult<TResult>>(
-                    new InvalidOperationException($"Failed to deserialize list query result for {queryType}")));
+                return Task.FromException<ListQueryResult<TResult>>(
+                    new InvalidOperationException($"Failed to deserialize list query result for {queryType}"));
             }
 
-            return Task.FromResult(ResultBox.FromValue(result));
+            return Task.FromResult(result);
         }
         catch (Exception ex)
         {
-            return Task.FromResult(ResultBox.Error<ListQueryResult<TResult>>(ex));
+            return Task.FromException<ListQueryResult<TResult>>(ex);
         }
     }
 
@@ -106,8 +105,15 @@ public sealed class PrimitiveMultiProjectionActor
     {
         var instance = EnsureInstance();
         var stateJson = instance.SerializeState();
-        var versionResult = ResultBox.WrapTry(() => _domainTypes.MultiProjectorTypes.GetProjectorVersion(_projectorName));
-        var projectorVersion = versionResult.IsSuccess ? versionResult.GetValue() : "unknown";
+        string projectorVersion;
+        try
+        {
+            projectorVersion = _domainTypes.MultiProjectorTypes.GetProjectorVersion(_projectorName);
+        }
+        catch (Exception)
+        {
+            projectorVersion = "unknown";
+        }
 
         return Task.FromResult(
             new PrimitiveProjectionSnapshot(

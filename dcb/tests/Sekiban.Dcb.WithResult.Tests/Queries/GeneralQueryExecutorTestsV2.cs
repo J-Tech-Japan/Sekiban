@@ -83,9 +83,9 @@ public class GeneralQueryExecutorTestsV2
         var query = new GetItemByIdQueryV2(targetItem.Id);
 
         // Act
-        var result = await _queryExecutor.ExecuteQueryAsync<TestMultiProjector, GetItemByIdQueryV2, TestItem>(
+        var result = await ResultBox.WrapTry(() => _queryExecutor.ExecuteQueryAsync<TestMultiProjector, GetItemByIdQueryV2, TestItem>(
             query,
-            () => Task.FromResult(ResultBox.FromValue(projector)));
+            () => Task.FromResult(projector)));
 
         // Assert
         Assert.True(result.IsSuccess);
@@ -103,9 +103,9 @@ public class GeneralQueryExecutorTestsV2
         var query = new GetItemCountByCategoryQueryV2("Electronics");
 
         // Act
-        var result = await _queryExecutor.ExecuteQueryAsync<TestMultiProjector, GetItemCountByCategoryQueryV2, int>(
+        var result = await ResultBox.WrapTry(() => _queryExecutor.ExecuteQueryAsync<TestMultiProjector, GetItemCountByCategoryQueryV2, int>(
             query,
-            () => Task.FromResult(ResultBox.FromValue(projector)));
+            () => Task.FromResult(projector)));
 
         // Assert
         Assert.True(result.IsSuccess);
@@ -120,9 +120,9 @@ public class GeneralQueryExecutorTestsV2
         var query = new GetAllItemsQueryV2();
 
         // Act
-        var result = await _queryExecutor.ExecuteListQueryAsync<TestMultiProjector, GetAllItemsQueryV2, TestItem>(
+        var result = await ResultBox.WrapTry(() => _queryExecutor.ExecuteListQueryAsync<TestMultiProjector, GetAllItemsQueryV2, TestItem>(
             query,
-            () => Task.FromResult(ResultBox.FromValue(projector)));
+            () => Task.FromResult(projector)));
 
         // Assert
         Assert.True(result.IsSuccess);
@@ -146,9 +146,9 @@ public class GeneralQueryExecutorTestsV2
         var query = new GetAllItemsQueryV2 { PageSize = 2, PageNumber = 1 };
 
         // Act
-        var result = await _queryExecutor.ExecuteListQueryAsync<TestMultiProjector, GetAllItemsQueryV2, TestItem>(
+        var result = await ResultBox.WrapTry(() => _queryExecutor.ExecuteListQueryAsync<TestMultiProjector, GetAllItemsQueryV2, TestItem>(
             query,
-            () => Task.FromResult(ResultBox.FromValue(projector)));
+            () => Task.FromResult(projector)));
 
         // Assert
         Assert.True(result.IsSuccess);
@@ -168,9 +168,9 @@ public class GeneralQueryExecutorTestsV2
         var query = new GetAllItemsQueryV2 { PageSize = 2, PageNumber = 2 };
 
         // Act
-        var result = await _queryExecutor.ExecuteListQueryAsync<TestMultiProjector, GetAllItemsQueryV2, TestItem>(
+        var result = await ResultBox.WrapTry(() => _queryExecutor.ExecuteListQueryAsync<TestMultiProjector, GetAllItemsQueryV2, TestItem>(
             query,
-            () => Task.FromResult(ResultBox.FromValue(projector)));
+            () => Task.FromResult(projector)));
 
         // Assert
         Assert.True(result.IsSuccess);
@@ -187,9 +187,9 @@ public class GeneralQueryExecutorTestsV2
         var query = new GetAllItemsQueryV2 { PageSize = 2, PageNumber = 3 };
 
         // Act
-        var result = await _queryExecutor.ExecuteListQueryAsync<TestMultiProjector, GetAllItemsQueryV2, TestItem>(
+        var result = await ResultBox.WrapTry(() => _queryExecutor.ExecuteListQueryAsync<TestMultiProjector, GetAllItemsQueryV2, TestItem>(
             query,
-            () => Task.FromResult(ResultBox.FromValue(projector)));
+            () => Task.FromResult(projector)));
 
         // Assert
         Assert.True(result.IsSuccess);
@@ -207,9 +207,9 @@ public class GeneralQueryExecutorTestsV2
 
         // Act
         var result
-            = await _queryExecutor.ExecuteListQueryAsync<TestMultiProjector, GetItemsByCategoryQueryV2, TestItem>(
+            = await ResultBox.WrapTry(() => _queryExecutor.ExecuteListQueryAsync<TestMultiProjector, GetItemsByCategoryQueryV2, TestItem>(
                 query,
-                () => Task.FromResult(ResultBox.FromValue(projector)));
+                () => Task.FromResult(projector)));
 
         // Assert
         Assert.True(result.IsSuccess);
@@ -225,9 +225,9 @@ public class GeneralQueryExecutorTestsV2
         var projector = CreateSampleProjector();
 
         // Act
-        var result = await _queryExecutor.ExecuteWithHandlerAsync(
-            () => Task.FromResult(ResultBox.FromValue(projector)),
-            (p, context) => ResultBox.FromValue(p.Items.Sum(i => i.Price)));
+        var result = await ResultBox.WrapTry(() => _queryExecutor.ExecuteWithHandlerAsync(
+            () => Task.FromResult(projector),
+            (p, context) => p.Items.Sum(i => i.Price)));
 
         // Assert
         Assert.True(result.IsSuccess);
@@ -242,11 +242,11 @@ public class GeneralQueryExecutorTestsV2
         var pagingParam = new TestPagingParameter { PageSize = 2, PageNumber = 1 };
 
         // Act
-        var result = await _queryExecutor.ExecuteListWithHandlersAsync<TestMultiProjector, TestItem>(
-            () => Task.FromResult(ResultBox.FromValue(projector)),
-            (p, context) => ResultBox.FromValue(p.Items.Where(i => i.Price >= 50m).AsEnumerable()),
-            (items, context) => ResultBox.FromValue(items.OrderBy(i => i.Price).AsEnumerable()),
-            pagingParam);
+        var result = await ResultBox.WrapTry(() => _queryExecutor.ExecuteListWithHandlersAsync<TestMultiProjector, TestItem>(
+            () => Task.FromResult(projector),
+            (p, context) => p.Items.Where(i => i.Price >= 50m).AsEnumerable(),
+            (items, context) => items.OrderBy(i => i.Price).AsEnumerable(),
+            pagingParam));
 
         // Assert
         Assert.True(result.IsSuccess);
@@ -267,9 +267,9 @@ public class GeneralQueryExecutorTestsV2
         var query = new GetItemCountByCategoryQueryV2("Electronics");
 
         // Act
-        var result = await _queryExecutor.ExecuteQueryAsync<TestMultiProjector, GetItemCountByCategoryQueryV2, int>(
+        var result = await ResultBox.WrapTry(() => _queryExecutor.ExecuteQueryAsync<TestMultiProjector, GetItemCountByCategoryQueryV2, int>(
             query,
-            () => Task.FromResult(ResultBox.Error<TestMultiProjector>(new Exception("Provider failed"))));
+            () => Task.FromException<TestMultiProjector>(new Exception("Provider failed"))));
 
         // Assert
         Assert.False(result.IsSuccess);

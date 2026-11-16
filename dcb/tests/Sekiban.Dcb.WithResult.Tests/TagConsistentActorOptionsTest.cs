@@ -1,6 +1,7 @@
 using Dcb.Domain;
 using Sekiban.Dcb.Actors;
 using System.Globalization;
+using ResultBoxes;
 namespace Sekiban.Dcb.Tests;
 
 /// <summary>
@@ -32,7 +33,7 @@ public class TagConsistentActorOptionsTest
         var actor = new GeneralTagConsistentActor(tagName, null, customOptions, domainTypes.TagTypes);
 
         // Act
-        var reservationResult = await actor.MakeReservationAsync(""); // SEK-G19: first write on an empty tag = expect-empty
+        var reservationResult = await ResultBox.WrapTry(() => actor.MakeReservationAsync("")); // SEK-G19: first write on an empty tag = expect-empty
 
         // Assert
         Assert.True(reservationResult.IsSuccess);
@@ -67,7 +68,7 @@ public class TagConsistentActorOptionsTest
             domainTypes.TagTypes); // Using default options
 
         // Act
-        var reservationResult = await actor.MakeReservationAsync(""); // SEK-G19: first write on an empty tag = expect-empty
+        var reservationResult = await ResultBox.WrapTry(() => actor.MakeReservationAsync("")); // SEK-G19: first write on an empty tag = expect-empty
 
         // Assert
         Assert.True(reservationResult.IsSuccess);

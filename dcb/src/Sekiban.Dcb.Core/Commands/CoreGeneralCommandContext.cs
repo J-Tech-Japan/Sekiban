@@ -36,8 +36,8 @@ public class CoreGeneralCommandContext : ICoreCommandContext, ICommandContextRes
         var tagStateId = new TagStateId(tag, TProjector.ProjectorName);
         var tagStateActorId = tagStateId.GetTagStateId();
 
-        var actorResult = await _actorAccessor.GetActorAsync<ITagStateActorCommon>(tagStateActorId);
-        if (!actorResult.IsSuccess)
+        var actor = await TryGetActorAsync<ITagStateActorCommon>(tagStateActorId);
+        if (actor is null)
         {
             // If actor doesn't exist, return empty state with EmptyTagStatePayload
             // We can't cast EmptyTagStatePayload to TState, so we need to handle this differently
@@ -55,7 +55,6 @@ public class CoreGeneralCommandContext : ICoreCommandContext, ICommandContextRes
                 $"Expected state payload of type {typeof(TState).Name} but got {nameof(EmptyTagStatePayload)}");
         }
 
-        var actor = actorResult.GetValue();
         var serializableState = await actor.GetStateAsync();
 
         // Deserialize the payload
@@ -103,8 +102,8 @@ public class CoreGeneralCommandContext : ICoreCommandContext, ICommandContextRes
         var tagStateId = new TagStateId(tag, TProjector.ProjectorName);
         var tagStateActorId = tagStateId.GetTagStateId();
 
-        var actorResult = await _actorAccessor.GetActorAsync<ITagStateActorCommon>(tagStateActorId);
-        if (!actorResult.IsSuccess)
+        var actor = await TryGetActorAsync<ITagStateActorCommon>(tagStateActorId);
+        if (actor is null)
         {
             // If actor doesn't exist, return empty state
             return new TagState(
@@ -117,7 +116,6 @@ public class CoreGeneralCommandContext : ICoreCommandContext, ICommandContextRes
                 TProjector.ProjectorVersion);
         }
 
-        var actor = actorResult.GetValue();
         var serializableState = await actor.GetStateAsync();
 
         // Deserialize the payload
@@ -152,15 +150,14 @@ public class CoreGeneralCommandContext : ICoreCommandContext, ICommandContextRes
         // Get the TagConsistentActor for this tag
         var tagConsistentActorId = tag.GetTag();
 
-        var actorResult = await _actorAccessor.GetActorAsync<ITagConsistentActorCommon>(tagConsistentActorId);
-        if (!actorResult.IsSuccess)
+        var actor = await TryGetActorAsync<ITagConsistentActorCommon>(tagConsistentActorId);
+        if (actor is null)
         {
             // Actor doesn't exist means tag doesn't exist (not an error, just no data)
             return false;
         }
 
-        var actor = actorResult.GetValue();
-        var latestSortableUniqueId = (await actor.GetLatestSortableUniqueIdAsync()).GetValueOrRethrow();
+        var latestSortableUniqueId = await actor.GetLatestSortableUniqueIdAsync();
 
         // If there's a latest sortable unique ID, the tag EXISTS.
         if (!string.IsNullOrEmpty(latestSortableUniqueId))
@@ -193,17 +190,32 @@ public class CoreGeneralCommandContext : ICoreCommandContext, ICommandContextRes
         // Get the TagConsistentActor for this tag
         var tagConsistentActorId = tag.GetTag();
 
-        var actorResult = await _actorAccessor.GetActorAsync<ITagConsistentActorCommon>(tagConsistentActorId);
-        if (!actorResult.IsSuccess)
+        var actor = await TryGetActorAsync<ITagConsistentActorCommon>(tagConsistentActorId);
+        if (actor is null)
         {
             // If actor doesn't exist, return empty string (not an error, just no data)
             return "";
         }
 
-        var actor = actorResult.GetValue();
         // For now, we'll skip tracking in GetTagLatestSortableUniqueIdAsync to avoid double-fetching
         // The state will be tracked when GetStateAsync is called
-        return (await actor.GetLatestSortableUniqueIdAsync()).GetValueOrRethrow();
+        return await actor.GetLatestSortableUniqueIdAsync();
+    }
+
+    /// <summary>
+    ///     Resolves an actor, or returns <c>null</c> when the accessor cannot provide it. A failed actor lookup has
+    ///     always meant "no data" for the reads above (empty state, <c>false</c>, empty position), not an error.
+    /// </summary>
+    private async Task<T?> TryGetActorAsync<T>(string actorId) where T : class
+    {
+        try
+        {
+            return await _actorAccessor.GetActorAsync<T>(actorId);
+        }
+        catch (Exception)
+        {
+            return null;
+        }
     }
 
     public Task<EventOrNone> AppendEvent(IEventPayload ev, params ITag[] tags)

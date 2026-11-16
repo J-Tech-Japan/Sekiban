@@ -1,4 +1,3 @@
-using ResultBoxes;
 namespace Sekiban.Dcb.Actors;
 
 /// <summary>
@@ -12,8 +11,8 @@ public interface IActorObjectAccessor
     /// </summary>
     /// <typeparam name="T">The interface type the actor must implement</typeparam>
     /// <param name="actorId">The unique identifier of the actor</param>
-    /// <returns>A ResultBox containing the actor object or an error</returns>
-    Task<ResultBox<T>> GetActorAsync<T>(string actorId) where T : class;
+    /// <returns>The actor object. A failure (for example an unsupported actor type) faults the returned task.</returns>
+    Task<T> GetActorAsync<T>(string actorId) where T : class;
 
     /// <summary>
     ///     Checks if an actor with the specified ID exists

@@ -227,15 +227,15 @@ public sealed class TaggedStreamParityMatrixTests : PostgresTestBase
         private readonly HeadActor _actor = new();
         public string Head { get; set; } = head;
 
-        public Task<ResultBox<T>> GetActorAsync<T>(string actorId) where T : class
+        public Task<T> GetActorAsync<T>(string actorId) where T : class
         {
             if (typeof(T) != typeof(ITagConsistentActorCommon))
             {
-                return Task.FromResult(ResultBox.Error<T>(new NotSupportedException()));
+                return Task.FromException<T>(new NotSupportedException());
             }
 
             _actor.Head = Head;
-            return Task.FromResult(ResultBox.FromValue((T)(object)_actor));
+            return Task.FromResult((T)(object)_actor);
         }
 
         public Task<bool> ActorExistsAsync(string actorId) => Task.FromResult(true);
@@ -245,9 +245,9 @@ public sealed class TaggedStreamParityMatrixTests : PostgresTestBase
     {
         public string Head { get; set; } = string.Empty;
         public Task<string> GetTagActorIdAsync() => Task.FromResult("G53Parity:head");
-        public Task<ResultBox<string>> GetLatestSortableUniqueIdAsync() => Task.FromResult(ResultBox.FromValue(Head));
-        public Task<ResultBox<TagWriteReservation>> MakeReservationAsync(string? lastSortableUniqueId) =>
-            Task.FromResult(ResultBox.FromValue(new TagWriteReservation("reservation", DateTime.UtcNow.ToString("O"), "G53Parity:head")));
+        public Task<string> GetLatestSortableUniqueIdAsync() => Task.FromResult(Head);
+        public Task<TagWriteReservation> MakeReservationAsync(string? lastSortableUniqueId) =>
+            Task.FromResult(new TagWriteReservation("reservation", DateTime.UtcNow.ToString("O"), "G53Parity:head"));
         public Task<bool> ConfirmReservationAsync(TagWriteReservation reservation) => Task.FromResult(true);
         public Task<bool> CancelReservationAsync(TagWriteReservation reservation) => Task.FromResult(true);
         public Task NotifyEventWrittenAsync() => Task.CompletedTask;

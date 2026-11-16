@@ -1,4 +1,3 @@
-using ResultBoxes;
 using Sekiban.Dcb.Capabilities;
 using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Events;
@@ -52,13 +51,13 @@ public class TagStateService
     /// <summary>
     ///     Get the latest stored tag state from the event store
     /// </summary>
-    public Task<ResultBox<TagState>> GetLatestTagStateAsync(ITag tag)
-        => _eventStore.GetLatestTagAsync(tag).ToResultBoxAsync();
+    public Task<TagState> GetLatestTagStateAsync(ITag tag)
+        => _eventStore.GetLatestTagAsync(tag);
 
     /// <summary>
     ///     Get the latest stored tag state by tag string
     /// </summary>
-    public Task<ResultBox<TagState>> GetLatestTagStateByStringAsync(string tagString)
+    public Task<TagState> GetLatestTagStateByStringAsync(string tagString)
     {
         var tag = ParseTag(tagString);
         return GetLatestTagStateAsync(tag);
@@ -70,13 +69,13 @@ public class TagStateService
     /// <param name="tagString">Tag string in format 'group:content'</param>
     /// <param name="projectorName">Name of the tag projector to use</param>
     /// <returns>Projected tag state result</returns>
-    public Task<ResultBox<TagStateProjectionResult>> ProjectTagStateAsync(string tagString, string projectorName) =>
+    public Task<TagStateProjectionResult> ProjectTagStateAsync(string tagString, string projectorName) =>
         ProjectTagStateAsync(tagString, projectorName, CancellationToken.None);
 
     /// <summary>
     ///     Project events for a tag using a specified projector with optional cooperative cancellation.
     /// </summary>
-    public async Task<ResultBox<TagStateProjectionResult>> ProjectTagStateAsync(
+    public async Task<TagStateProjectionResult> ProjectTagStateAsync(
         string tagString,
         string projectorName,
         CancellationToken cancellationToken)
@@ -93,13 +92,13 @@ public class TagStateService
     /// </summary>
     /// <param name="tagString">Tag string in format 'group:content'</param>
     /// <returns>Projected tag state result</returns>
-    public Task<ResultBox<TagStateProjectionResult>> ProjectTagStateAsync(string tagString) =>
+    public Task<TagStateProjectionResult> ProjectTagStateAsync(string tagString) =>
         ProjectTagStateAsync(tagString, CancellationToken.None);
 
     /// <summary>
     ///     Project events for a tag inferred from its tag group with optional cooperative cancellation.
     /// </summary>
-    public async Task<ResultBox<TagStateProjectionResult>> ProjectTagStateAsync(
+    public async Task<TagStateProjectionResult> ProjectTagStateAsync(
         string tagString,
         CancellationToken cancellationToken)
     {
@@ -115,13 +114,13 @@ public class TagStateService
     /// </summary>
     /// <param name="tag">The tag to project</param>
     /// <returns>Projected tag state result</returns>
-    public Task<ResultBox<TagStateProjectionResult>> ProjectTagStateAsync(ITag tag) =>
+    public Task<TagStateProjectionResult> ProjectTagStateAsync(ITag tag) =>
         ProjectTagStateAsync(tag, CancellationToken.None);
 
     /// <summary>
     ///     Project events for a tag inferred from its tag group with optional cooperative cancellation.
     /// </summary>
-    public async Task<ResultBox<TagStateProjectionResult>> ProjectTagStateAsync(
+    public async Task<TagStateProjectionResult> ProjectTagStateAsync(
         ITag tag,
         CancellationToken cancellationToken)
     {
@@ -131,11 +130,10 @@ public class TagStateService
 
         if (projectorName == null)
         {
-            return ResultBox.Error<TagStateProjectionResult>(
-                new InvalidOperationException(
-                    $"Could not find a projector for tag group '{tagGroup}'. " +
-                    $"Tried '{tagGroup}Projector'. " +
-                    $"Available projectors: {string.Join(", ", GetAllTagProjectorNames())}"));
+            throw new InvalidOperationException(
+                $"Could not find a projector for tag group '{tagGroup}'. " +
+                $"Tried '{tagGroup}Projector'. " +
+                $"Available projectors: {string.Join(", ", GetAllTagProjectorNames())}");
         }
 
         cancellationToken.ThrowIfCancellationRequested();
@@ -148,30 +146,31 @@ public class TagStateService
     /// <param name="tag">The tag to project</param>
     /// <param name="projectorName">Name of the tag projector to use</param>
     /// <returns>Projected tag state result</returns>
-    public Task<ResultBox<TagStateProjectionResult>> ProjectTagStateAsync(ITag tag, string projectorName) =>
+    public Task<TagStateProjectionResult> ProjectTagStateAsync(ITag tag, string projectorName) =>
         ProjectTagStateAsync(tag, projectorName, CancellationToken.None);
 
     /// <summary>
     ///     Project events for a tag using a specified projector with optional cooperative cancellation.
     /// </summary>
-    public async Task<ResultBox<TagStateProjectionResult>> ProjectTagStateAsync(
+    public async Task<TagStateProjectionResult> ProjectTagStateAsync(
         ITag tag,
         string projectorName,
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         // Get the projector function
-        var projectorFuncResult = ResultBox.WrapTry(() => _tagProjectorTypes.GetProjectorFunction(projectorName));
-        if (!projectorFuncResult.IsSuccess)
-        {
-            return ResultBox.Error<TagStateProjectionResult>(projectorFuncResult.GetException());
-        }
+        var projectorFunc = _tagProjectorTypes.GetProjectorFunction(projectorName);
 
         // Get the projector version
-        var projectorVersionResult = ResultBox.WrapTry(() => _tagProjectorTypes.GetProjectorVersion(projectorName));
-        var projectorVersion = projectorVersionResult.IsSuccess ? projectorVersionResult.GetValue() : "unknown";
-
-        var projectorFunc = projectorFuncResult.GetValue();
+        string projectorVersion;
+        try
+        {
+            projectorVersion = _tagProjectorTypes.GetProjectorVersion(projectorName);
+        }
+        catch (Exception)
+        {
+            projectorVersion = "unknown";
+        }
 
         // Project all events. The legacy overload enters here with CancellationToken.None.
         ITagStatePayload state = new EmptyTagStatePayload();
@@ -181,7 +180,7 @@ public class TagStateService
 
         if (taggedStream.IsSupported)
         {
-            var streamResult = await TaggedStreamProjectionHelper.ProjectAsync(
+            var streamProjection = await TaggedStreamProjectionHelper.ProjectAsync(
                 taggedStream.StreamStore!,
                 tag,
                 null,
@@ -193,31 +192,27 @@ public class TagStateService
                 string.Empty,
                 cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
-            if (!streamResult.IsSuccess)
-            {
-                if (streamResult.GetException() is OperationCanceledException cancellationException)
-                {
-                    throw cancellationException;
-                }
-
-                return ResultBox.Error<TagStateProjectionResult>(streamResult.GetException());
-            }
-
-            var streamProjection = streamResult.GetValue();
             state = streamProjection.State;
             eventCount = streamProjection.EventCount;
             lastSortableUniqueId = streamProjection.LastSortableUniqueId;
         }
         else
         {
-            var eventsResult = await _eventStore.ReadEventsByTagAsync(tag, _eventTypes).ToResultBoxAsync();
-            cancellationToken.ThrowIfCancellationRequested();
-            if (!eventsResult.IsSuccess)
+            var read = _eventStore.ReadEventsByTagAsync(tag, _eventTypes);
+            IEnumerable<Event> events;
+            try
             {
-                return ResultBox.Error<TagStateProjectionResult>(eventsResult.GetException());
+                events = await read;
+            }
+            catch (Exception)
+            {
+                // As before, the caller's cancellation is observed before a failed read is reported.
+                cancellationToken.ThrowIfCancellationRequested();
+                throw;
             }
 
-            foreach (var evt in eventsResult.GetValue())
+            cancellationToken.ThrowIfCancellationRequested();
+            foreach (var evt in events)
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 state = projectorFunc(state, evt);
@@ -235,7 +230,7 @@ public class TagStateService
             eventCount,
             lastSortableUniqueId);
 
-        return ResultBox.FromValue(result);
+        return result;
     }
 
     /// <summary>

@@ -161,10 +161,10 @@ public class TagStateCancellationCompatibilityTests
 
     private sealed class TokenTrackingActorAccessor(TokenTrackingActor actor) : IActorObjectAccessor
     {
-        public Task<ResultBox<T>> GetActorAsync<T>(string actorId) where T : class =>
+        public Task<T> GetActorAsync<T>(string actorId) where T : class =>
             typeof(T) == typeof(ITagStateActorCommon)
-                ? Task.FromResult(ResultBox.FromValue((T)(object)actor))
-                : Task.FromResult(ResultBox.Error<T>(new NotSupportedException()));
+                ? Task.FromResult((T)(object)actor)
+                : Task.FromException<T>(new NotSupportedException());
 
         public Task<bool> ActorExistsAsync(string actorId) => Task.FromResult(true);
     }

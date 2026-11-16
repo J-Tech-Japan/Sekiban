@@ -8,6 +8,7 @@ using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
 using Xunit;
 using Sekiban.Dcb.TestSupport;
+using ResultBoxes;
 namespace Sekiban.Dcb.Postgres.Tests;
 
 public class PostgresWithActorsTests : PostgresTestBase
@@ -252,13 +253,13 @@ public class PostgresWithActorsTests : PostgresTestBase
 
         // Act - Get actor directly
         var tagConsistentActorId = studentTag.GetTag();
-        var actorResult = await Fixture.ActorAccessor.GetActorAsync<ITagConsistentActorCommon>(tagConsistentActorId);
+        var actorResult = await ResultBox.WrapTry(() => Fixture.ActorAccessor.GetActorAsync<ITagConsistentActorCommon>(tagConsistentActorId));
 
         // Assert - Actor should exist and have correct state
         Assert.True(actorResult.IsSuccess);
         var actor = actorResult.GetValue();
 
-        var latestIdResult = await actor.GetLatestSortableUniqueIdAsync();
+        var latestIdResult = await ResultBox.WrapTry(() => actor.GetLatestSortableUniqueIdAsync());
         Assert.True(latestIdResult.IsSuccess);
         Assert.NotEmpty(latestIdResult.GetValue());
 
@@ -289,10 +290,10 @@ public class PostgresWithActorsTests : PostgresTestBase
         await commandExecutor.ExecuteAsync(new CreateStudent(studentId, "Persistent Student"));
 
         // Get initial actor state
-        var actor1Result = await Fixture.ActorAccessor.GetActorAsync<ITagConsistentActorCommon>(tagConsistentActorId);
+        var actor1Result = await ResultBox.WrapTry(() => Fixture.ActorAccessor.GetActorAsync<ITagConsistentActorCommon>(tagConsistentActorId));
         Assert.True(actor1Result.IsSuccess);
         var actor1 = actor1Result.GetValue();
-        var latestId1Result = await actor1.GetLatestSortableUniqueIdAsync();
+        var latestId1Result = await ResultBox.WrapTry(() => actor1.GetLatestSortableUniqueIdAsync());
         Assert.True(latestId1Result.IsSuccess);
         var latestId1 = latestId1Result.GetValue();
 
@@ -301,12 +302,12 @@ public class PostgresWithActorsTests : PostgresTestBase
         Assert.True(removed);
 
         // Get actor again (should recreate from database)
-        var actor2Result = await Fixture.ActorAccessor.GetActorAsync<ITagConsistentActorCommon>(tagConsistentActorId);
+        var actor2Result = await ResultBox.WrapTry(() => Fixture.ActorAccessor.GetActorAsync<ITagConsistentActorCommon>(tagConsistentActorId));
         Assert.True(actor2Result.IsSuccess);
         var actor2 = actor2Result.GetValue();
 
         // Assert - New actor should have same state from database
-        var latestId2Result = await actor2.GetLatestSortableUniqueIdAsync();
+        var latestId2Result = await ResultBox.WrapTry(() => actor2.GetLatestSortableUniqueIdAsync());
         Assert.True(latestId2Result.IsSuccess);
         Assert.Equal(latestId1, latestId2Result.GetValue());
 

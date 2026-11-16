@@ -1,6 +1,5 @@
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using ResultBoxes;
 using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Events;
@@ -53,11 +52,7 @@ public sealed class DurableSubscriptionRunner : BackgroundService
 
     public async Task ResumeAsync(CancellationToken cancellationToken = default)
     {
-        var result = await _stateStore.ResumeAsync(Identity, cancellationToken).ConfigureAwait(false);
-        if (!result.IsSuccess)
-        {
-            throw result.GetException();
-        }
+        await _stateStore.ResumeAsync(Identity, cancellationToken).ConfigureAwait(false);
 
         Volatile.Write(ref _status, (int)DurableSubscriptionRunnerStatus.Starting);
         _wake.ReleaseIfNeeded();
@@ -71,17 +66,13 @@ public sealed class DurableSubscriptionRunner : BackgroundService
             throw new InvalidOperationException("The durable subscription runner does not currently own a lease.");
         }
 
-        var result = await _stateStore.HaltAsync(
+        await _stateStore.HaltAsync(
                 Identity,
                 _ownerId,
                 generation,
                 reason,
                 cancellationToken)
             .ConfigureAwait(false);
-        if (!result.IsSuccess)
-        {
-            throw result.GetException();
-        }
 
         Volatile.Write(ref _status, (int)DurableSubscriptionRunnerStatus.Halted);
         _wake.ReleaseIfNeeded();
@@ -92,15 +83,19 @@ public sealed class DurableSubscriptionRunner : BackgroundService
         _registration.Options.Validate();
         var identity = Identity;
         var safeTail = DurableSubscriptionSafeTail.Calculate(_registration.Options.SafeWindow);
-        var initialized = await _stateStore.InitializeOrGetAsync(
-                identity,
-                _registration.Options.StartPolicy,
-                safeTail,
-                stoppingToken)
-            .ConfigureAwait(false);
-        if (!initialized.IsSuccess)
+        // Store failures are logged and handled here, as the runner always did; they never stop the host.
+        try
         {
-            _logger.LogError(initialized.GetException(), "Durable subscription {ServiceId}/{Name} could not initialize.", identity.ServiceId, identity.Name);
+            await _stateStore.InitializeOrGetAsync(
+                    identity,
+                    _registration.Options.StartPolicy,
+                    safeTail,
+                    stoppingToken)
+                .ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Durable subscription {ServiceId}/{Name} could not initialize.", identity.ServiceId, identity.Name);
             Volatile.Write(ref _status, (int)DurableSubscriptionRunnerStatus.Stopped);
             return;
         }
@@ -145,15 +140,18 @@ public sealed class DurableSubscriptionRunner : BackgroundService
     private async Task RunOneCycleAsync(CancellationToken cancellationToken)
     {
         var identity = Identity;
-        var observed = await _stateStore.ReadAsync(identity, cancellationToken).ConfigureAwait(false);
-        if (!observed.IsSuccess)
+        DurableSubscriptionState state;
+        try
         {
-            _logger.LogError(observed.GetException(), "Durable subscription {ServiceId}/{Name} state read failed.", identity.ServiceId, identity.Name);
+            state = await _stateStore.ReadAsync(identity, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Durable subscription {ServiceId}/{Name} state read failed.", identity.ServiceId, identity.Name);
             await WaitForWakeOrPollAsync(cancellationToken).ConfigureAwait(false);
             return;
         }
 
-        var state = observed.GetValue();
         if (state.Phase == DurableSubscriptionPhase.Halted)
         {
             Volatile.Write(ref _status, (int)DurableSubscriptionRunnerStatus.Halted);
@@ -163,31 +161,35 @@ public sealed class DurableSubscriptionRunner : BackgroundService
 
         // A row read immediately precedes each acquisition attempt. The provider repeats the predicate under its
         // transaction, but this read makes standby state observable and prevents an optimistic local lease assumption.
-        var lease = await _stateStore.TryAcquireAsync(
-                identity,
-                _ownerId,
-                _registration.Options.LeaseDuration,
-                cancellationToken)
-            .ConfigureAwait(false);
-        if (!lease.IsSuccess)
+        DurableSubscriptionLease lease;
+        try
         {
-            _logger.LogError(lease.GetException(), "Durable subscription {ServiceId}/{Name} acquisition failed.", identity.ServiceId, identity.Name);
+            lease = await _stateStore.TryAcquireAsync(
+                    identity,
+                    _ownerId,
+                    _registration.Options.LeaseDuration,
+                    cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Durable subscription {ServiceId}/{Name} acquisition failed.", identity.ServiceId, identity.Name);
             await WaitForWakeOrPollAsync(cancellationToken).ConfigureAwait(false);
             return;
         }
 
-        if (!lease.GetValue().Acquired)
+        if (!lease.Acquired)
         {
             Volatile.Write(
                 ref _status,
-                (int)(lease.GetValue().Status == DurableSubscriptionRunnerStatus.Halted
+                (int)(lease.Status == DurableSubscriptionRunnerStatus.Halted
                     ? DurableSubscriptionRunnerStatus.Halted
                     : DurableSubscriptionRunnerStatus.Standby));
             await WaitForWakeOrPollAsync(cancellationToken).ConfigureAwait(false);
             return;
         }
 
-        state = lease.GetValue().State;
+        state = lease.State;
         Interlocked.Exchange(ref _ownerGeneration, state.OwnerGeneration);
         Volatile.Write(ref _status, (int)DurableSubscriptionRunnerStatus.Owner);
         var store = _eventStoreFactory.CreateForService(identity.ServiceId);
@@ -195,14 +197,16 @@ public sealed class DurableSubscriptionRunner : BackgroundService
         {
             while (!cancellationToken.IsCancellationRequested)
             {
-                var currentResult = await _stateStore.ReadAsync(identity, cancellationToken).ConfigureAwait(false);
-                if (!currentResult.IsSuccess)
+                try
                 {
-                    _logger.LogError(currentResult.GetException(), "Durable subscription {ServiceId}/{Name} state read failed while owned.", identity.ServiceId, identity.Name);
+                    state = await _stateStore.ReadAsync(identity, cancellationToken).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Durable subscription {ServiceId}/{Name} state read failed while owned.", identity.ServiceId, identity.Name);
                     return;
                 }
 
-                state = currentResult.GetValue();
                 if (state.Phase == DurableSubscriptionPhase.Halted)
                 {
                     Interlocked.Exchange(ref _ownerGeneration, 0);
@@ -210,14 +214,7 @@ public sealed class DurableSubscriptionRunner : BackgroundService
                     return;
                 }
 
-                var renewed = await _stateStore.RenewAsync(
-                        identity,
-                        _ownerId,
-                        state.OwnerGeneration,
-                        _registration.Options.LeaseDuration,
-                        cancellationToken)
-                    .ConfigureAwait(false);
-                if (!renewed.IsSuccess || !renewed.GetValue())
+                if (!await TryRenewAsync(state.OwnerGeneration, cancellationToken).ConfigureAwait(false))
                 {
                     Interlocked.Exchange(ref _ownerGeneration, 0);
                     Volatile.Write(ref _status, (int)DurableSubscriptionRunnerStatus.Standby);
@@ -226,43 +223,54 @@ public sealed class DurableSubscriptionRunner : BackgroundService
 
                 if (state.Phase == DurableSubscriptionPhase.Retrying)
                 {
-                    var retryDue = await _stateStore.IsRetryDueAsync(
-                            identity,
-                            _ownerId,
-                            state.OwnerGeneration,
-                            cancellationToken)
-                        .ConfigureAwait(false);
-                    if (!retryDue.IsSuccess)
+                    bool retryDue;
+                    try
                     {
-                        _logger.LogError(retryDue.GetException(), "Durable subscription {ServiceId}/{Name} retry timing could not be read.", identity.ServiceId, identity.Name);
+                        retryDue = await _stateStore.IsRetryDueAsync(
+                                identity,
+                                _ownerId,
+                                state.OwnerGeneration,
+                                cancellationToken)
+                            .ConfigureAwait(false);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Durable subscription {ServiceId}/{Name} retry timing could not be read.", identity.ServiceId, identity.Name);
                         return;
                     }
 
-                    if (!retryDue.GetValue())
+                    if (!retryDue)
                     {
                         await WaitForWakeOrPollAsync(cancellationToken).ConfigureAwait(false);
                         continue;
                     }
                 }
 
-                var read = await store.ReadAllSerializableEventsAsync(
-                        state.AcknowledgedPosition is null ? null : new SortableUniqueId(state.AcknowledgedPosition),
-                        _registration.Options.MaxBatchSize).ToResultBoxAsync()
-                    .ConfigureAwait(false);
-                if (!read.IsSuccess)
+                var read = store.ReadAllSerializableEventsAsync(
+                    state.AcknowledgedPosition is null ? null : new SortableUniqueId(state.AcknowledgedPosition),
+                    _registration.Options.MaxBatchSize);
+                IEnumerable<SerializableEvent> readEvents;
+                try
                 {
-                    _logger.LogError(read.GetException(), "Durable subscription {ServiceId}/{Name} event read failed.", identity.ServiceId, identity.Name);
+                    readEvents = await read.ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Durable subscription {ServiceId}/{Name} event read failed.", identity.ServiceId, identity.Name);
                     await WaitForWakeOrPollAsync(cancellationToken).ConfigureAwait(false);
                     return;
                 }
 
-                var events = read.GetValue().OrderBy(e => e.SortableUniqueIdValue, StringComparer.Ordinal).ToList();
+                var events = readEvents.OrderBy(e => e.SortableUniqueIdValue, StringComparer.Ordinal).ToList();
                 if (events.Count == 0)
                 {
-                    var idle = await _stateStore.MarkIdleAsync(identity, _ownerId, state.OwnerGeneration, cancellationToken).ConfigureAwait(false);
-                    if (!idle.IsSuccess)
+                    try
                     {
-                        _logger.LogWarning(idle.GetException(), "Durable subscription {ServiceId}/{Name} could not mark idle.", identity.ServiceId, identity.Name);
+                        await _stateStore.MarkIdleAsync(identity, _ownerId, state.OwnerGeneration, cancellationToken).ConfigureAwait(false);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Durable subscription {ServiceId}/{Name} could not mark idle.", identity.ServiceId, identity.Name);
                     }
 
                     await WaitForWakeOrPollAsync(cancellationToken).ConfigureAwait(false);
@@ -276,12 +284,16 @@ public sealed class DurableSubscriptionRunner : BackgroundService
                         return;
                     }
 
-                    var conversion = serializableEvent.ToEvent(_eventTypes);
-                    if (!conversion.IsSuccess)
+                    Event converted;
+                    try
+                    {
+                        converted = serializableEvent.ToEvent(_eventTypes);
+                    }
+                    catch (Exception conversionFailure)
                     {
                         var failed = await RecordFailureAndStopOrRetryAsync(
                                 serializableEvent,
-                                conversion.GetException().Message,
+                                conversionFailure.Message,
                                 conversionFailure: true,
                                 state.OwnerGeneration,
                                 cancellationToken)
@@ -295,7 +307,7 @@ public sealed class DurableSubscriptionRunner : BackgroundService
                     }
 
                     var delivery = await InvokeWithLeaseRenewalAsync(
-                            conversion.GetValue(),
+                            converted,
                             state.OwnerGeneration,
                             cancellationToken)
                         .ConfigureAwait(false);
@@ -323,16 +335,19 @@ public sealed class DurableSubscriptionRunner : BackgroundService
                         return;
                     }
 
-                    var acknowledged = await _stateStore.AcknowledgeAsync(
-                            identity,
-                            _ownerId,
-                            state.OwnerGeneration,
-                            serializableEvent.SortableUniqueIdValue,
-                            cancellationToken)
-                        .ConfigureAwait(false);
-                    if (!acknowledged.IsSuccess)
+                    try
                     {
-                        _logger.LogError(acknowledged.GetException(), "Durable subscription {ServiceId}/{Name} acknowledgement failed.", identity.ServiceId, identity.Name);
+                        await _stateStore.AcknowledgeAsync(
+                                identity,
+                                _ownerId,
+                                state.OwnerGeneration,
+                                serializableEvent.SortableUniqueIdValue,
+                                cancellationToken)
+                            .ConfigureAwait(false);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Durable subscription {ServiceId}/{Name} acknowledgement failed.", identity.ServiceId, identity.Name);
                         return;
                     }
                 }
@@ -354,24 +369,27 @@ public sealed class DurableSubscriptionRunner : BackgroundService
         long ownerGeneration,
         CancellationToken cancellationToken)
     {
-        var result = await _stateStore.RecordFailureAsync(
-                Identity,
-                _ownerId,
-                ownerGeneration,
-                serializableEvent.SortableUniqueIdValue,
-                reason,
-                conversionFailure,
-                _registration.Options.MaxHandlerAttempts,
-                _registration.Options.RetryDelay,
-                cancellationToken)
-            .ConfigureAwait(false);
-        if (!result.IsSuccess)
+        DurableSubscriptionState state;
+        try
         {
-            _logger.LogError(result.GetException(), "Durable subscription {ServiceId}/{Name} failure state could not be recorded.", Identity.ServiceId, Identity.Name);
+            state = await _stateStore.RecordFailureAsync(
+                    Identity,
+                    _ownerId,
+                    ownerGeneration,
+                    serializableEvent.SortableUniqueIdValue,
+                    reason,
+                    conversionFailure,
+                    _registration.Options.MaxHandlerAttempts,
+                    _registration.Options.RetryDelay,
+                    cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Durable subscription {ServiceId}/{Name} failure state could not be recorded.", Identity.ServiceId, Identity.Name);
             return null;
         }
 
-        var state = result.GetValue();
         if (state.Phase == DurableSubscriptionPhase.Halted)
         {
             Interlocked.Exchange(ref _ownerGeneration, 0);
@@ -432,14 +450,7 @@ public sealed class DurableSubscriptionRunner : BackgroundService
 
             try
             {
-                var renewed = await _stateStore.RenewAsync(
-                        Identity,
-                        _ownerId,
-                        ownerGeneration,
-                        _registration.Options.LeaseDuration,
-                        handlerCts.Token)
-                    .ConfigureAwait(false);
-                if (!renewed.IsSuccess || !renewed.GetValue())
+                if (!await TryRenewAsync(ownerGeneration, handlerCts.Token).ConfigureAwait(false))
                 {
                     markLeaseLost();
                     handlerCts.Cancel();
@@ -459,10 +470,26 @@ public sealed class DurableSubscriptionRunner : BackgroundService
         }
     }
 
-    private async Task<DurableSubscriptionState> GetStateOrThrowAsync(CancellationToken cancellationToken)
+    private Task<DurableSubscriptionState> GetStateOrThrowAsync(CancellationToken cancellationToken) =>
+        _stateStore.ReadAsync(Identity, cancellationToken);
+
+    // A renewal the store reports as failed, or that fails outright, means the lease is no longer held.
+    private async Task<bool> TryRenewAsync(long ownerGeneration, CancellationToken cancellationToken)
     {
-        var result = await _stateStore.ReadAsync(Identity, cancellationToken).ConfigureAwait(false);
-        return result.IsSuccess ? result.GetValue() : throw result.GetException();
+        try
+        {
+            return await _stateStore.RenewAsync(
+                    Identity,
+                    _ownerId,
+                    ownerGeneration,
+                    _registration.Options.LeaseDuration,
+                    cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (Exception)
+        {
+            return false;
+        }
     }
 
     private async Task WaitForWakeOrPollAsync(CancellationToken cancellationToken)

@@ -150,8 +150,8 @@ public sealed class ProductionFacadeAcceptanceTests
         PublisherFaultQuery.ResetObservations();
         var executor = CreateExecutor(clock, out _, out var accessor, out var publisher);
 
-        var actorResult = await accessor.GetActorAsync<GeneralMultiProjectionActor>(
-            PublisherFaultProjector.MultiProjectorName);
+        var actorResult = await ResultBox.WrapTry(() => accessor.GetActorAsync<GeneralMultiProjectionActor>(
+            PublisherFaultProjector.MultiProjectorName));
         Assert.True(actorResult.IsSuccess, actorResult.IsSuccess ? "" : actorResult.GetException().ToString());
 
         var poisonedEvent = new Event(

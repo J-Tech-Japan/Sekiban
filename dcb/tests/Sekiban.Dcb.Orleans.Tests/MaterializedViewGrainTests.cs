@@ -83,10 +83,10 @@ public class MaterializedViewGrainTests : IAsyncLifetime
             new InMemoryEventStore(serviceIdProvider),
             serviceIdProvider,
             new ProjectionStatusOptions { SamplingWindow = TimeSpan.Zero });
-        var passive = await reader.ReadAsync(new ProjectionStatusReadRequest(
+        var passive = await ResultBox.WrapTry(() => reader.ReadAsync(new ProjectionStatusReadRequest(
             "orders",
             identity.ProjectorName,
-            identity.ProjectorVersion));
+            identity.ProjectorVersion)));
 
         Assert.True(passive.IsSuccess);
         Assert.Empty(passive.GetValue());
@@ -98,10 +98,10 @@ public class MaterializedViewGrainTests : IAsyncLifetime
         await SharedStatusStore.Written.Task.WaitAsync(TimeSpan.FromSeconds(5));
 
         Assert.Equal(1, await CountMaterializedViewActivationsAsync(management));
-        var published = await reader.ReadAsync(new ProjectionStatusReadRequest(
+        var published = await ResultBox.WrapTry(() => reader.ReadAsync(new ProjectionStatusReadRequest(
             "orders",
             identity.ProjectorName,
-            identity.ProjectorVersion));
+            identity.ProjectorVersion)));
         Assert.True(published.IsSuccess);
         var snapshot = Assert.Single(published.GetValue());
         Assert.StartsWith("mv-orleans-", snapshot.ActivationId, StringComparison.Ordinal);

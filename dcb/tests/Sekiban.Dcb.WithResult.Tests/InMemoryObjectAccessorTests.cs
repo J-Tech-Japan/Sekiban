@@ -6,6 +6,7 @@ using Sekiban.Dcb.Testing;
 using Sekiban.Dcb.Storage;
 using CoreInMemoryEventStore = Sekiban.Dcb.Testing.InMemoryEventStore;
 using Sekiban.Dcb.TestSupport;
+using ResultBoxes;
 namespace Sekiban.Dcb.Tests;
 
 /// <summary>
@@ -31,7 +32,7 @@ public class InMemoryObjectAccessorTests
         var actorId = "Student:12345";
 
         // Act
-        var result = await _accessor.GetActorAsync<ITagConsistentActorCommon>(actorId);
+        var result = await ResultBox.WrapTry(() => _accessor.GetActorAsync<ITagConsistentActorCommon>(actorId));
 
         // Assert
         Assert.True(result.IsSuccess);
@@ -47,7 +48,7 @@ public class InMemoryObjectAccessorTests
         var actorId = "Student:12345:StudentProjector";
 
         // Act
-        var result = await _accessor.GetActorAsync<ITagStateActorCommon>(actorId);
+        var result = await ResultBox.WrapTry(() => _accessor.GetActorAsync<ITagStateActorCommon>(actorId));
 
         // Assert
         Assert.True(result.IsSuccess);
@@ -63,8 +64,8 @@ public class InMemoryObjectAccessorTests
         var actorId = "Student:12345";
 
         // Act
-        var result1 = await _accessor.GetActorAsync<ITagConsistentActorCommon>(actorId);
-        var result2 = await _accessor.GetActorAsync<ITagConsistentActorCommon>(actorId);
+        var result1 = await ResultBox.WrapTry(() => _accessor.GetActorAsync<ITagConsistentActorCommon>(actorId));
+        var result2 = await ResultBox.WrapTry(() => _accessor.GetActorAsync<ITagConsistentActorCommon>(actorId));
 
         // Assert
         Assert.True(result1.IsSuccess);
@@ -81,7 +82,7 @@ public class InMemoryObjectAccessorTests
         var actorId = "Student:12345";
 
         // Act
-        var result = await _accessor.GetActorAsync<ITagStateActorCommon>(actorId);
+        var result = await ResultBox.WrapTry(() => _accessor.GetActorAsync<ITagStateActorCommon>(actorId));
 
         // Assert
         Assert.False(result.IsSuccess);
@@ -91,9 +92,9 @@ public class InMemoryObjectAccessorTests
     public async Task GetActorAsync_Should_Return_Error_For_Empty_ActorId()
     {
         // Act
-        var result1 = await _accessor.GetActorAsync<ITagConsistentActorCommon>("");
-        var result2 = await _accessor.GetActorAsync<ITagConsistentActorCommon>(null!);
-        var result3 = await _accessor.GetActorAsync<ITagConsistentActorCommon>("   ");
+        var result1 = await ResultBox.WrapTry(() => _accessor.GetActorAsync<ITagConsistentActorCommon>(""));
+        var result2 = await ResultBox.WrapTry(() => _accessor.GetActorAsync<ITagConsistentActorCommon>(null!));
+        var result3 = await ResultBox.WrapTry(() => _accessor.GetActorAsync<ITagConsistentActorCommon>("   "));
 
         // Assert
         Assert.False(result1.IsSuccess);
@@ -173,12 +174,12 @@ public class InMemoryObjectAccessorTests
         await _eventStore.WriteEventAsync(event1, _domainTypes.EventTypes).AsResultBoxAsync();
 
         // Get TagConsistentActor and make a reservation with a sortable unique ID
-        var tagConsistentActorResult = await _accessor.GetActorAsync<ITagConsistentActorCommon>(tagConsistentActorId);
+        var tagConsistentActorResult = await ResultBox.WrapTry(() => _accessor.GetActorAsync<ITagConsistentActorCommon>(tagConsistentActorId));
         Assert.True(tagConsistentActorResult.IsSuccess);
         var tagConsistentActor = tagConsistentActorResult.GetValue();
 
         // Make a reservation with the event's sortable unique ID
-        var reservationResult = await tagConsistentActor.MakeReservationAsync(event1.SortableUniqueIdValue);
+        var reservationResult = await ResultBox.WrapTry(() => tagConsistentActor.MakeReservationAsync(event1.SortableUniqueIdValue));
         Assert.True(reservationResult.IsSuccess);
 
         // Add another event (this should not be included in the state)
@@ -186,7 +187,7 @@ public class InMemoryObjectAccessorTests
         await _eventStore.WriteEventAsync(event2, _domainTypes.EventTypes).AsResultBoxAsync();
 
         // Get TagStateActor
-        var tagStateActorResult = await _accessor.GetActorAsync<ITagStateActorCommon>(tagStateActorId);
+        var tagStateActorResult = await ResultBox.WrapTry(() => _accessor.GetActorAsync<ITagStateActorCommon>(tagStateActorId));
         Assert.True(tagStateActorResult.IsSuccess);
         var tagStateActor = tagStateActorResult.GetValue();
 
@@ -213,14 +214,13 @@ public class InMemoryObjectAccessorTests
 
         // Act
         var tasks = actorIds.Select(id => _accessor.GetActorAsync<ITagConsistentActorCommon>(id)).ToList();
-        var results = await Task.WhenAll(tasks);
+        var actors = (await Task.WhenAll(tasks)).ToList();
 
         // Assert
-        Assert.All(results, r => Assert.True(r.IsSuccess));
+        Assert.All(actors, Assert.NotNull);
         Assert.Equal(10, _accessor.ActorCount);
 
         // Verify all actors are unique
-        var actors = results.Select(r => r.GetValue()).ToList();
         var uniqueActors = actors.Distinct().Count();
         Assert.Equal(10, uniqueActors);
     }

@@ -1,4 +1,5 @@
 using Sekiban.Dcb.Queries;
+using ResultBoxes;
 namespace Sekiban.Dcb.Tests;
 
 /// <summary>
@@ -15,7 +16,7 @@ public class OrleansQuerySerializationTests
         var result = new QueryResultGeneral(testValue, typeof(TestQueryResult).FullName!, query);
 
         // Act - Convert to typed and back
-        var typedResult = result.ToTypedResult<TestQueryResult>();
+        var typedResult = ResultBox.WrapTry(() => result.ToTypedResult<TestQueryResult>());
 
         // Assert
         Assert.True(typedResult.IsSuccess);
@@ -69,7 +70,7 @@ public class OrleansQuerySerializationTests
         var result = new QueryResultGeneral(null!, string.Empty, query);
 
         // Act
-        var typedResult = result.ToTypedResult<TestQueryResult>();
+        var typedResult = ResultBox.WrapTry(() => result.ToTypedResult<TestQueryResult>());
 
         // Assert
         Assert.False(typedResult.IsSuccess);

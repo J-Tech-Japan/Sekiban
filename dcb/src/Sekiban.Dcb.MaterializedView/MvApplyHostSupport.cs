@@ -298,18 +298,14 @@ public sealed class NativeMvApplyHost : IMvApplyHost
     {
         var ownTableSnapshot = MvOwnTableSnapshot.Capture(tables);
         var eventResult = ev.ToEvent(_eventTypes);
-        if (!eventResult.IsSuccess)
-        {
-            throw eventResult.GetException();
-        }
 
         var applyContext = new NativeMvApplyContextAdapter(
-            eventResult.GetValue(),
+            eventResult,
             sortableUniqueId,
             queryPort,
             _databaseType,
             ownTableSnapshot);
-        var statements = await _projector.ApplyToViewAsync(eventResult.GetValue(), applyContext, ct).ConfigureAwait(false);
+        var statements = await _projector.ApplyToViewAsync(eventResult, applyContext, ct).ConfigureAwait(false);
         return statements.Select(statement => new MvSqlStatementDto(statement.Sql, MvParamConverter.FromObject(statement.Parameters))).ToList();
     }
 

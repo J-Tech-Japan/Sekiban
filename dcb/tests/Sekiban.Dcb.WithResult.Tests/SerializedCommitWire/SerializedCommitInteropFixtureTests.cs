@@ -90,8 +90,8 @@ public sealed class SerializedCommitInteropFixtureTests
         int expectedCandidates)
     {
         var executor = new RecordingExecutor();
-        var result = await new SerializedCommitAcceptor(executor).AcceptAsync(
-            SerializedCommitInteropFixtureRunner.LoadFixture(fixtureName));
+        var result = await ResultBox.WrapTry(() => new SerializedCommitAcceptor(executor).AcceptAsync(
+            SerializedCommitInteropFixtureRunner.LoadFixture(fixtureName)));
 
         Assert.True(result.IsSuccess, result.IsSuccess ? string.Empty : result.GetException().ToString());
         Assert.Equal(1, executor.CommitCalls);
@@ -106,8 +106,8 @@ public sealed class SerializedCommitInteropFixtureTests
         foreach (var fixture in manifest.Fixtures.Where(fixture => fixture.ClientShaped))
         {
             var executor = new RecordingExecutor();
-            var result = await new SerializedCommitAcceptor(executor).AcceptAsync(
-                SerializedCommitInteropFixtureRunner.LoadFixture(fixture.File));
+            var result = await ResultBox.WrapTry(() => new SerializedCommitAcceptor(executor).AcceptAsync(
+                SerializedCommitInteropFixtureRunner.LoadFixture(fixture.File)));
 
             var error = Assert.IsType<MalformedSerializedCommitException>(result.GetException());
             Assert.Equal(SerializedCommitShapeError.AliasedCollectionMember, error.Reason);
@@ -120,20 +120,20 @@ public sealed class SerializedCommitInteropFixtureTests
         public int CommitCalls { get; private set; }
         public SerializedCommitRequest? LastRequest { get; private set; }
 
-        public Task<ResultBox<SerializableTagState>> GetSerializableTagStateAsync(TagStateId tagStateId) =>
+        public Task<SerializableTagState> GetSerializableTagStateAsync(TagStateId tagStateId) =>
             throw new NotSupportedException();
 
-        public Task<ResultBox<SerializedCommitResult>> CommitSerializableEventsAsync(
+        public Task<SerializedCommitResult> CommitSerializableEventsAsync(
             SerializedCommitRequest request,
             CancellationToken cancellationToken = default)
         {
             CommitCalls++;
             LastRequest = request;
-            return Task.FromResult(ResultBox.FromValue(
+            return Task.FromResult(
                 new SerializedCommitResult(
                     Array.Empty<SerializableEvent>(),
                     Array.Empty<TagWriteResult>(),
-                    TimeSpan.Zero)));
+                    TimeSpan.Zero));
         }
     }
 }

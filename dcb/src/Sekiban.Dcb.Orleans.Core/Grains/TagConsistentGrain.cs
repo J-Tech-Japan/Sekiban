@@ -4,6 +4,7 @@ using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Orleans.ServiceId;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
+using Sekiban.Dcb.Common;
 namespace Sekiban.Dcb.Orleans.Grains;
 
 /// <summary>
@@ -44,7 +45,7 @@ public class TagConsistentGrain : Grain, ITagConsistentGrain
             return Task.FromResult(ResultBox.Error<string>(new InvalidOperationException("Actor not initialized")));
         }
 
-        return _actor.GetLatestSortableUniqueIdAsync();
+        return _actor.GetLatestSortableUniqueIdAsync().ToResultBoxAsync();
     }
 
     public Task<ResultBox<TagWriteReservation>> MakeReservationAsync(string? lastSortableUniqueId)
@@ -55,7 +56,7 @@ public class TagConsistentGrain : Grain, ITagConsistentGrain
                 ResultBox.Error<TagWriteReservation>(new InvalidOperationException("Actor not initialized")));
         }
 
-        return _actor.MakeReservationAsync(lastSortableUniqueId);
+        return _actor.MakeReservationAsync(lastSortableUniqueId).ToResultBoxAsync();
     }
 
     public Task<bool> ConfirmReservationAsync(TagWriteReservation reservation)

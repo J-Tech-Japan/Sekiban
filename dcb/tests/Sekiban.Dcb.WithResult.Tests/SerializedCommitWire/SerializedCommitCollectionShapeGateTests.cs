@@ -92,7 +92,7 @@ public class SerializedCommitCollectionShapeGateTests
     {
         var seams = new CountingExecutionSeams();
 
-        var result = await new SerializedCommitAcceptor(seams).AcceptAsync(Encoding.UTF8.GetBytes(json));
+        var result = await ResultBox.WrapTry(() => new SerializedCommitAcceptor(seams).AcceptAsync(Encoding.UTF8.GetBytes(json)));
 
         var error = Assert.IsType<MalformedSerializedCommitException>(result.GetException());
         Assert.Equal(expectedReason, error.Reason);
@@ -107,7 +107,7 @@ public class SerializedCommitCollectionShapeGateTests
     {
         var seams = new CountingExecutionSeams();
 
-        var result = await new SerializedCommitAcceptor(seams).AcceptAsync(Encoding.UTF8.GetBytes(json));
+        var result = await ResultBox.WrapTry(() => new SerializedCommitAcceptor(seams).AcceptAsync(Encoding.UTF8.GetBytes(json)));
 
         Assert.True(result.IsSuccess, result.IsSuccess ? string.Empty : result.GetException().ToString());
         Assert.Equal(1, seams.ExecutorCalls);
@@ -138,7 +138,7 @@ public class SerializedCommitCollectionShapeGateTests
                    {"eventCandidates":[{"payload":"AQID","eventPayloadName":"E","tags":["G:1"]}],"consistencyTags":[{"tag":"G:1","lastSortableUniqueId":""}],"candidates":[]}
                    """;
 
-        var result = await new SerializedCommitAcceptor(executor).AcceptAsync(Encoding.UTF8.GetBytes(json));
+        var result = await ResultBox.WrapTry(() => new SerializedCommitAcceptor(executor).AcceptAsync(Encoding.UTF8.GetBytes(json)));
 
         var error = Assert.IsType<MalformedSerializedCommitException>(result.GetException());
         Assert.Equal(SerializedCommitShapeError.AliasedCollectionMember, error.Reason);
@@ -158,7 +158,7 @@ public class SerializedCommitCollectionShapeGateTests
         Assert.Equal(FrozenConsultFixtureLength, fixture.Length);
         Assert.Equal(FrozenConsultFixtureSha256, Convert.ToHexString(SHA256.HashData(fixture)).ToLowerInvariant());
 
-        var result = await new SerializedCommitAcceptor(seams).AcceptAsync(fixture);
+        var result = await ResultBox.WrapTry(() => new SerializedCommitAcceptor(seams).AcceptAsync(fixture));
 
         Assert.False(result.IsSuccess);
         var error = Assert.IsType<MalformedSerializedCommitException>(result.GetException());
@@ -222,27 +222,27 @@ public class SerializedCommitCollectionShapeGateTests
         public int ReservationCalls { get; private set; }
         public int IdAllocationCalls { get; private set; }
 
-        public Task<ResultBox<SerializableTagState>> GetSerializableTagStateAsync(TagStateId tagStateId) =>
+        public Task<SerializableTagState> GetSerializableTagStateAsync(TagStateId tagStateId) =>
             throw new NotSupportedException();
 
-        public Task<ResultBox<SerializedCommitResult>> CommitSerializableEventsAsync(
+        public Task<SerializedCommitResult> CommitSerializableEventsAsync(
             SerializedCommitRequest request,
             CancellationToken cancellationToken = default) => CommitEmptyAsync();
 
-        public Task<ResultBox<SerializedCommitResult>> CommitSerializableEventsWithExpectedTagPositionsAsync(
+        public Task<SerializedCommitResult> CommitSerializableEventsWithExpectedTagPositionsAsync(
             VersionedExpectedTagPositionSerializedCommitRequest request,
             CancellationToken cancellationToken = default) => CommitEmptyAsync();
 
-        private Task<ResultBox<SerializedCommitResult>> CommitEmptyAsync()
+        private Task<SerializedCommitResult> CommitEmptyAsync()
         {
             ExecutorCalls++;
             EventStoreCalls++;
             ReservationCalls++;
             IdAllocationCalls++;
-            return Task.FromResult(ResultBox.FromValue(new SerializedCommitResult(
+            return Task.FromResult(new SerializedCommitResult(
                 Array.Empty<Sekiban.Dcb.Events.SerializableEvent>(),
                 Array.Empty<TagWriteResult>(),
-                TimeSpan.Zero)));
+                TimeSpan.Zero));
         }
     }
 
@@ -265,13 +265,13 @@ public class SerializedCommitCollectionShapeGateTests
     {
         public int ReservationCalls { get; private set; }
 
-        public Task<ResultBox<T>> GetActorAsync<T>(string actorId) where T : class
+        public Task<T> GetActorAsync<T>(string actorId) where T : class
         {
             if (typeof(T) == typeof(ITagConsistentActorCommon))
             {
-                return Task.FromResult(ResultBox.FromValue((T)(object)new ReservationCountingActor(this, actorId)));
+                return Task.FromResult((T)(object)new ReservationCountingActor(this, actorId));
             }
-            return Task.FromResult(ResultBox.Error<T>(new InvalidOperationException("Unexpected actor type.")));
+            return Task.FromException<T>(new InvalidOperationException("Unexpected actor type."));
         }
 
         public Task<bool> ActorExistsAsync(string actorId) => Task.FromResult(false);
@@ -281,14 +281,14 @@ public class SerializedCommitCollectionShapeGateTests
         {
             public Task<string> GetTagActorIdAsync() => Task.FromResult(actorId);
 
-            public Task<ResultBox<string>> GetLatestSortableUniqueIdAsync() =>
-                Task.FromResult(ResultBox.FromValue(string.Empty));
+            public Task<string> GetLatestSortableUniqueIdAsync() =>
+                Task.FromResult(string.Empty);
 
-            public Task<ResultBox<TagWriteReservation>> MakeReservationAsync(string? lastSortableUniqueId)
+            public Task<TagWriteReservation> MakeReservationAsync(string? lastSortableUniqueId)
             {
                 owner.ReservationCalls++;
-                return Task.FromResult(ResultBox.FromValue(
-                    new TagWriteReservation("reservation", DateTime.MaxValue.ToString("O"), actorId)));
+                return Task.FromResult(
+                    new TagWriteReservation("reservation", DateTime.MaxValue.ToString("O"), actorId));
             }
 
             public Task<bool> ConfirmReservationAsync(TagWriteReservation reservation) => Task.FromResult(true);

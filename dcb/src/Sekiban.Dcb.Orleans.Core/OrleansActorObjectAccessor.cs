@@ -66,11 +66,11 @@ public class OrleansActorObjectAccessor : IActorObjectAccessor, IExecutorRuntime
         _serviceIdProvider = serviceIdProvider ?? new DefaultServiceIdProvider();
     }
 
-    public Task<ResultBox<T>> GetActorAsync<T>(string actorId) where T : class
+    public Task<T> GetActorAsync<T>(string actorId) where T : class
     {
         if (string.IsNullOrEmpty(actorId))
         {
-            return Task.FromResult(ResultBox.Error<T>(new ArgumentException("Actor ID cannot be empty")));
+            return Task.FromException<T>(new ArgumentException("Actor ID cannot be empty"));
         }
 
         try
@@ -82,21 +82,20 @@ public class OrleansActorObjectAccessor : IActorObjectAccessor, IExecutorRuntime
                 var grainId = ServiceIdGrainKey.Build(_serviceIdProvider.GetCurrentServiceId(), actorId);
                 var grain = _clusterClient.GetGrain<ITagConsistentGrain>(grainId);
                 var wrapper = new TagConsistentGrainWrapper(grain);
-                return Task.FromResult(ResultBox.FromValue((T)(object)wrapper));
+                return Task.FromResult((T)(object)wrapper);
             }
             if (actorType == typeof(ITagStateActorCommon))
             {
                 var grainId = ServiceIdGrainKey.Build(_serviceIdProvider.GetCurrentServiceId(), actorId);
                 var grain = _clusterClient.GetGrain<ITagStateGrain>(grainId);
                 var wrapper = new TagStateGrainWrapper(grain);
-                return Task.FromResult(ResultBox.FromValue((T)(object)wrapper));
+                return Task.FromResult((T)(object)wrapper);
             }
-            return Task.FromResult(
-                ResultBox.Error<T>(new NotSupportedException($"Actor type {actorType.Name} is not supported")));
+            return Task.FromException<T>(new NotSupportedException($"Actor type {actorType.Name} is not supported"));
         }
         catch (Exception ex)
         {
-            return Task.FromResult(ResultBox.Error<T>(ex));
+            return Task.FromException<T>(ex);
         }
     }
 
@@ -109,6 +108,7 @@ public class OrleansActorObjectAccessor : IActorObjectAccessor, IExecutorRuntime
             return false;
         }
 
+        // A failed existence check answers "does not exist", as it always did.
         var result = await _eventStore.TagExistsAsync(tag).ToResultBoxAsync();
         return result.IsSuccess && result.GetValue();
     }
@@ -135,7 +135,8 @@ public class OrleansActorObjectAccessor : IActorObjectAccessor, IExecutorRuntime
     }
 
     /// <summary>
-    ///     Wrapper for TagConsistentGrain to implement ITagConsistentActorCommon
+    ///     Wrapper for TagConsistentGrain to implement ITagConsistentActorCommon. A failed result from the grain is
+    ///     thrown as the exception it carries.
     /// </summary>
     private class TagConsistentGrainWrapper : ITagConsistentActorCommon
     {
@@ -145,10 +146,11 @@ public class OrleansActorObjectAccessor : IActorObjectAccessor, IExecutorRuntime
 
         public Task<string> GetTagActorIdAsync() => _grain.GetTagActorIdAsync();
 
-        public Task<ResultBox<string>> GetLatestSortableUniqueIdAsync() => _grain.GetLatestSortableUniqueIdAsync();
+        public Task<string> GetLatestSortableUniqueIdAsync() =>
+            _grain.GetLatestSortableUniqueIdAsync().GetValueOrRethrowAsync();
 
-        public Task<ResultBox<TagWriteReservation>> MakeReservationAsync(string? lastSortableUniqueId) =>
-            _grain.MakeReservationAsync(lastSortableUniqueId);
+        public Task<TagWriteReservation> MakeReservationAsync(string? lastSortableUniqueId) =>
+            _grain.MakeReservationAsync(lastSortableUniqueId).GetValueOrRethrowAsync();
 
         public Task<bool> ConfirmReservationAsync(TagWriteReservation reservation) =>
             _grain.ConfirmReservationAsync(reservation);

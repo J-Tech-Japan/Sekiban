@@ -296,7 +296,7 @@ public class OrleansDcbExecutor : ISekibanExecutor, IConditionalCommandExecutor,
             return ResultBox.Error<TResult>(generalBox.GetException());
         }
 
-        return generalBox.GetValue().ToTypedResult<TResult>();
+        return ResultBox.WrapTry(() => generalBox.GetValue().ToTypedResult<TResult>());
     }
 
     private async Task<ResultBox<ListQueryResult<TResult>>> DeserializeListQueryResultAsync<TResult>(
@@ -387,6 +387,21 @@ public class OrleansDcbExecutor : ISekibanExecutor, IConditionalCommandExecutor,
         VersionedExpectedTagPositionSerializedCommitRequest request,
         CancellationToken cancellationToken = default) =>
         _construction.GeneralExecutor.CommitSerializableEventsWithExpectedTagPositionsAsync(request, cancellationToken);
+
+    // The serialized boundaries are exception-based core contracts; the boxed methods above are this facade's own API.
+    Task<SerializableTagState> ISerializedSekibanDcbExecutor.GetSerializableTagStateAsync(TagStateId tagStateId) =>
+        ((ISerializedSekibanDcbExecutor)_construction.GeneralExecutor).GetSerializableTagStateAsync(tagStateId);
+
+    Task<SerializedCommitResult> ISerializedSekibanDcbExecutor.CommitSerializableEventsAsync(
+        SerializedCommitRequest request,
+        CancellationToken cancellationToken) =>
+        ((ISerializedSekibanDcbExecutor)_construction.GeneralExecutor).CommitSerializableEventsAsync(request, cancellationToken);
+
+    Task<SerializedCommitResult> ISerializedExpectedTagPositionSekibanDcbExecutor.CommitSerializableEventsWithExpectedTagPositionsAsync(
+        VersionedExpectedTagPositionSerializedCommitRequest request,
+        CancellationToken cancellationToken) =>
+        ((ISerializedExpectedTagPositionSekibanDcbExecutor)_construction.GeneralExecutor)
+            .CommitSerializableEventsWithExpectedTagPositionsAsync(request, cancellationToken);
 
     private ResultBox<string> ResolveProjectorName(IQueryCommon queryCommon) =>
         ResultBox.WrapTry(() => ProjectionHeadStatusUtilities.ResolveProjectorName(

@@ -812,11 +812,11 @@ public class GeneralTagStateActorPersistenceTests
         private readonly Dictionary<string, ITagConsistentActorCommon> _actors = new();
         private readonly Dictionary<string, string> _latestSortable = new();
 
-        public Task<ResultBox<T>> GetActorAsync<T>(string actorId) where T : class
+        public Task<T> GetActorAsync<T>(string actorId) where T : class
         {
             if (typeof(T) != typeof(ITagConsistentActorCommon))
             {
-                return Task.FromResult(ResultBox.Error<T>(new NotSupportedException()));
+                return Task.FromException<T>(new NotSupportedException());
             }
 
             if (!_actors.TryGetValue(actorId, out var actor))
@@ -828,7 +828,7 @@ public class GeneralTagStateActorPersistenceTests
                 actor = mockActor;
             }
 
-            return Task.FromResult(ResultBox.FromValue((T)actor));
+            return Task.FromResult((T)actor);
         }
 
         public Task<bool> ActorExistsAsync(string actorId) => Task.FromResult(true);
@@ -844,16 +844,15 @@ public class GeneralTagStateActorPersistenceTests
 
         public Task<string> GetTagActorIdAsync() => Task.FromResult(_actorId);
 
-        public Task<ResultBox<string>> GetLatestSortableUniqueIdAsync() =>
-            Task.FromResult(ResultBox.FromValue(_lastSortableUniqueId));
+        public Task<string> GetLatestSortableUniqueIdAsync() =>
+            Task.FromResult(_lastSortableUniqueId);
 
-        public Task<ResultBox<TagWriteReservation>> MakeReservationAsync(string? lastSortableUniqueId) =>
+        public Task<TagWriteReservation> MakeReservationAsync(string? lastSortableUniqueId) =>
             Task.FromResult(
-                ResultBox.FromValue(
                     new TagWriteReservation(
                         Guid.NewGuid().ToString(),
                         DateTime.UtcNow.AddMinutes(1).ToString("O"),
-                        _actorId)));
+                        _actorId));
 
         public Task<bool> ConfirmReservationAsync(TagWriteReservation reservation) => Task.FromResult(true);
 

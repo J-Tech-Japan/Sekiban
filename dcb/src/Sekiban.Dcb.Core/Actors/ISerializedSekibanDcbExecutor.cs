@@ -1,4 +1,3 @@
-using ResultBoxes;
 using Sekiban.Dcb.Commands;
 using Sekiban.Dcb.Tags;
 namespace Sekiban.Dcb.Actors;
@@ -14,14 +13,14 @@ public interface ISerializedSekibanDcbExecutor
     ///     Gets the serializable tag state for a given tag state ID.
     ///     Returns the raw serialized state without deserialization.
     /// </summary>
-    Task<ResultBox<SerializableTagState>> GetSerializableTagStateAsync(TagStateId tagStateId);
+    Task<SerializableTagState> GetSerializableTagStateAsync(TagStateId tagStateId);
 
     /// <summary>
     ///     Commits serialized events with consistency reservation flow.
     ///     Server generates metadata (EventId, SortableUniqueId, EventMetadata)
     ///     and performs reservation → write → confirm/cancel.
     /// </summary>
-    Task<ResultBox<SerializedCommitResult>> CommitSerializableEventsAsync(
+    Task<SerializedCommitResult> CommitSerializableEventsAsync(
         SerializedCommitRequest request,
         CancellationToken cancellationToken = default);
 }

@@ -165,11 +165,11 @@ public class InMemoryDcbExecutor : ISekibanExecutor, ISerializedSekibanDcbExecut
     Task<ResultBox<EventStoreHeadStatus>> ISekibanExecutor.GetEventStoreHeadStatusAsync(bool includeTotalEventCount) =>
         _inner.GetEventStoreHeadStatusAsync(includeTotalEventCount);
 
-    Task<ResultBox<SerializableTagState>> ISerializedSekibanDcbExecutor.GetSerializableTagStateAsync(TagStateId tagStateId) =>
-        _inner.GetSerializableTagStateAsync(tagStateId);
+    Task<SerializableTagState> ISerializedSekibanDcbExecutor.GetSerializableTagStateAsync(TagStateId tagStateId) =>
+        ((ISerializedSekibanDcbExecutor)_inner).GetSerializableTagStateAsync(tagStateId);
 
-    Task<ResultBox<SerializedCommitResult>> ISerializedSekibanDcbExecutor.CommitSerializableEventsAsync(
+    Task<SerializedCommitResult> ISerializedSekibanDcbExecutor.CommitSerializableEventsAsync(
         SerializedCommitRequest request,
         CancellationToken cancellationToken) =>
-        _inner.CommitSerializableEventsAsync(request, cancellationToken);
+        ((ISerializedSekibanDcbExecutor)_inner).CommitSerializableEventsAsync(request, cancellationToken);
 }

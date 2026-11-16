@@ -72,12 +72,12 @@ public sealed class ExpectedTagPositionUnsupportedProviderInvocationTests
         Assert.Equal(0, observed.ProviderWriteCalls);
 
         // The direct V2 facade is distinct from the JSON acceptor route.
-        var directV2 = await Assert.IsAssignableFrom<ISerializedExpectedTagPositionSekibanDcbExecutor>(executor)
-            .CommitSerializableEventsWithExpectedTagPositionsAsync(ExpectedV2Request());
+        var directV2 = await ResultBox.WrapTry(() => Assert.IsAssignableFrom<ISerializedExpectedTagPositionSekibanDcbExecutor>(executor)
+            .CommitSerializableEventsWithExpectedTagPositionsAsync(ExpectedV2Request()));
         AssertUnsupported(directV2);
         Assert.Equal(0, observed.ProviderWriteCalls);
 
-        var wire = await new SerializedCommitAcceptor(executor).AcceptAsync(ExpectedV2Wire());
+        var wire = await ResultBox.WrapTry(() => new SerializedCommitAcceptor(executor).AcceptAsync(ExpectedV2Wire()));
         AssertUnsupported(wire);
         Assert.Equal(0, observed.ProviderWriteCalls);
 
@@ -85,12 +85,12 @@ public sealed class ExpectedTagPositionUnsupportedProviderInvocationTests
         // grain or writes the provider. The wire call also exercises the acceptor's optional-executor feature detection.
         var cluster = DispatchProxy.Create<IClusterClient, UnreachableClusterClient>();
         var orleans = new Sekiban.Dcb.Orleans.OrleansDcbExecutor(cluster, observed, domain);
-        var orleansDirectV2 = await Assert.IsAssignableFrom<ISerializedExpectedTagPositionSekibanDcbExecutor>(orleans)
-            .CommitSerializableEventsWithExpectedTagPositionsAsync(ExpectedV2Request());
+        var orleansDirectV2 = await ResultBox.WrapTry(() => Assert.IsAssignableFrom<ISerializedExpectedTagPositionSekibanDcbExecutor>(orleans)
+            .CommitSerializableEventsWithExpectedTagPositionsAsync(ExpectedV2Request()));
         AssertUnsupported(orleansDirectV2);
         Assert.Equal(0, observed.ProviderWriteCalls);
 
-        var orleansWire = await new SerializedCommitAcceptor(orleans).AcceptAsync(ExpectedV2Wire());
+        var orleansWire = await ResultBox.WrapTry(() => new SerializedCommitAcceptor(orleans).AcceptAsync(ExpectedV2Wire()));
         AssertUnsupported(orleansWire);
         Assert.Equal(0, observed.ProviderWriteCalls);
     }

@@ -72,13 +72,7 @@ internal class NativeProjectionSnapshotHandler
     {
         try
         {
-            var snapshotResult = await _actor.GetSnapshotAsync(canGetUnsafeState, cancellationToken);
-            if (!snapshotResult.IsSuccess)
-            {
-                return ResultBox.Error<bool>(snapshotResult.GetException());
-            }
-
-            var envelope = snapshotResult.GetValue();
+            var envelope = await _actor.GetSnapshotAsync(canGetUnsafeState, cancellationToken);
             await JsonSerializer.SerializeAsync(target, envelope, _jsonOptions, cancellationToken);
             return ResultBox.FromValue(true);
         }
@@ -118,7 +112,7 @@ internal class NativeProjectionSnapshotHandler
                 && _blobAccessor is not null
                 && offloadThresholdBytes > 0;
 
-            var snapshotResult = canStreamFirst
+            var envelope = canStreamFirst
                 ? await _actor.BuildSnapshotEnvelopeStreamFirstAsync(
                     _payloadBufferProvider,
                     canGetUnsafeState,
@@ -130,12 +124,7 @@ internal class NativeProjectionSnapshotHandler
                     _blobAccessor,
                     offloadThresholdBytes,
                     cancellationToken);
-            if (!snapshotResult.IsSuccess)
-            {
-                return ResultBox.Error<bool>(snapshotResult.GetException());
-            }
-
-            await JsonSerializer.SerializeAsync(target, snapshotResult.GetValue(), _jsonOptions, cancellationToken);
+            await JsonSerializer.SerializeAsync(target, envelope, _jsonOptions, cancellationToken);
             return ResultBox.FromValue(true);
         }
         catch (Exception ex)
@@ -148,10 +137,19 @@ internal class NativeProjectionSnapshotHandler
     {
         try
         {
-            var stateResult = _actor.GetStateAsync(canGetUnsafeState: includeUnsafeDetails).GetAwaiter().GetResult();
-            if (!stateResult.IsSuccess) return 0;
+            // An unavailable state estimates as zero without a warning; anything else thrown here is logged below.
+            var stateRead = _actor.GetStateAsync(canGetUnsafeState: includeUnsafeDetails);
+            MultiProjectionState state;
+            try
+            {
+                state = stateRead.GetAwaiter().GetResult();
+            }
+            catch (Exception)
+            {
+                return 0;
+            }
 
-            var payload = stateResult.GetValue().Payload;
+            var payload = state.Payload;
 
             var payloadType = payload.GetType();
             var stateProp = payloadType.GetProperty("State");

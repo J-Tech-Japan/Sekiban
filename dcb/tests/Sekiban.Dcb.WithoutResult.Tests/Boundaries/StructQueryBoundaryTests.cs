@@ -39,7 +39,7 @@ public class StructQueryBoundaryTests
     public void OrleansTypedResult_StructMismatch_Throws_InsteadOfAnsweringZero()
     {
         var general = new QueryResultGeneral("not an int", typeof(string).FullName!, new UnregisteredStudentCountQuery());
-        var typed = general.ToTypedResult<int>();
+        var typed = ResultBox.WrapTry(() => general.ToTypedResult<int>());
         var carried = typed.GetException();
 
         // The defect, stated: this is exactly the expression the Orleans executor used to end in.
@@ -58,8 +58,8 @@ public class StructQueryBoundaryTests
     {
         var general = new QueryResultGeneral(42, typeof(int).FullName!, new UnregisteredStudentCountQuery());
 
-        var value = GuardedUnwrap.Unwrap(
-            general.ToTypedResult<int>(),
+        var value = GuardedUnwrap.Run(
+            () => general.ToTypedResult<int>(),
             new BoundaryContext("ISekibanExecutor.QueryAsync", "StudentCount"));
 
         Assert.Equal(42, value);

@@ -20,9 +20,9 @@ public class SerializedCommitMalformedSecretSafetyTests
     private sealed class NeverCalledExecutor : ISerializedSekibanDcbExecutor
     {
         public int Calls { get; private set; }
-        public Task<ResultBox<SerializableTagState>> GetSerializableTagStateAsync(TagStateId tagStateId) =>
+        public Task<SerializableTagState> GetSerializableTagStateAsync(TagStateId tagStateId) =>
             throw new NotSupportedException();
-        public Task<ResultBox<SerializedCommitResult>> CommitSerializableEventsAsync(
+        public Task<SerializedCommitResult> CommitSerializableEventsAsync(
             SerializedCommitRequest request, CancellationToken cancellationToken = default)
         {
             Calls++;
@@ -63,7 +63,7 @@ public class SerializedCommitMalformedSecretSafetyTests
         var exec = new NeverCalledExecutor();
         var acceptor = new SerializedCommitAcceptor(exec);
 
-        var result = await acceptor.AcceptAsync(Encoding.UTF8.GetBytes(hostileJson));
+        var result = await ResultBox.WrapTry(() => acceptor.AcceptAsync(Encoding.UTF8.GetBytes(hostileJson)));
 
         Assert.False(result.IsSuccess);
         var ex = Assert.IsType<MalformedSerializedCommitException>(result.GetException());

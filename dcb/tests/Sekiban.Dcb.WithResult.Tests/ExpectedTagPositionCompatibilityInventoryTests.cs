@@ -138,7 +138,7 @@ public sealed class ExpectedTagPositionCompatibilityInventoryTests
         AssertMethod(
             typeof(ISerializedExpectedTagPositionSekibanDcbExecutor),
             nameof(ISerializedExpectedTagPositionSekibanDcbExecutor.CommitSerializableEventsWithExpectedTagPositionsAsync),
-            typeof(Task<ResultBox<SerializedCommitResult>>),
+            typeof(Task<SerializedCommitResult>),
             typeof(VersionedExpectedTagPositionSerializedCommitRequest), typeof(CancellationToken));
         AssertSerializedExpectedSurface(typeof(GeneralSekibanExecutor));
         AssertSerializedExpectedSurface(typeof(Sekiban.Dcb.Orleans.OrleansDcbExecutor));

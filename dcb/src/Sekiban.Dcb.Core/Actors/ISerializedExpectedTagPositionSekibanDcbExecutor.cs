@@ -1,4 +1,3 @@
-using ResultBoxes;
 using Sekiban.Dcb.Commands;
 
 namespace Sekiban.Dcb.Actors;
@@ -10,7 +9,7 @@ namespace Sekiban.Dcb.Actors;
 /// </summary>
 public interface ISerializedExpectedTagPositionSekibanDcbExecutor
 {
-    Task<ResultBox<SerializedCommitResult>> CommitSerializableEventsWithExpectedTagPositionsAsync(
+    Task<SerializedCommitResult> CommitSerializableEventsWithExpectedTagPositionsAsync(
         VersionedExpectedTagPositionSerializedCommitRequest request,
         CancellationToken cancellationToken = default);
 }

@@ -1,7 +1,6 @@
 using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.ServiceId;
-using ResultBoxes;
 
 namespace Sekiban.Dcb.Subscriptions;
 
@@ -151,43 +150,43 @@ public sealed record DurableSubscriptionLease(
 /// <summary>Provider-owned state boundary for a durable subscription.</summary>
 public interface IDurableSubscriptionStore
 {
-    Task<ResultBox<DurableSubscriptionState>> InitializeOrGetAsync(
+    Task<DurableSubscriptionState> InitializeOrGetAsync(
         DurableSubscriptionIdentity identity,
         DurableSubscriptionStartPolicy startPolicy,
         string safeTail,
         CancellationToken cancellationToken = default);
 
-    Task<ResultBox<DurableSubscriptionState>> ReadAsync(
+    Task<DurableSubscriptionState> ReadAsync(
         DurableSubscriptionIdentity identity,
         CancellationToken cancellationToken = default);
 
-    Task<ResultBox<DurableSubscriptionLease>> TryAcquireAsync(
+    Task<DurableSubscriptionLease> TryAcquireAsync(
         DurableSubscriptionIdentity identity,
         string ownerId,
         TimeSpan leaseDuration,
         CancellationToken cancellationToken = default);
 
-    Task<ResultBox<bool>> RenewAsync(
+    Task<bool> RenewAsync(
         DurableSubscriptionIdentity identity,
         string ownerId,
         long ownerGeneration,
         TimeSpan leaseDuration,
         CancellationToken cancellationToken = default);
 
-    Task<ResultBox<bool>> IsRetryDueAsync(
+    Task<bool> IsRetryDueAsync(
         DurableSubscriptionIdentity identity,
         string ownerId,
         long ownerGeneration,
         CancellationToken cancellationToken = default);
 
-    Task<ResultBox<DurableSubscriptionState>> AcknowledgeAsync(
+    Task<DurableSubscriptionState> AcknowledgeAsync(
         DurableSubscriptionIdentity identity,
         string ownerId,
         long ownerGeneration,
         string position,
         CancellationToken cancellationToken = default);
 
-    Task<ResultBox<DurableSubscriptionState>> RecordFailureAsync(
+    Task<DurableSubscriptionState> RecordFailureAsync(
         DurableSubscriptionIdentity identity,
         string ownerId,
         long ownerGeneration,
@@ -198,18 +197,18 @@ public interface IDurableSubscriptionStore
         TimeSpan retryDelay,
         CancellationToken cancellationToken = default);
 
-    Task<ResultBox<DurableSubscriptionState>> ResumeAsync(
+    Task<DurableSubscriptionState> ResumeAsync(
         DurableSubscriptionIdentity identity,
         CancellationToken cancellationToken = default);
 
-    Task<ResultBox<DurableSubscriptionState>> HaltAsync(
+    Task<DurableSubscriptionState> HaltAsync(
         DurableSubscriptionIdentity identity,
         string ownerId,
         long ownerGeneration,
         string reason,
         CancellationToken cancellationToken = default);
 
-    Task<ResultBox<DurableSubscriptionState>> MarkIdleAsync(
+    Task<DurableSubscriptionState> MarkIdleAsync(
         DurableSubscriptionIdentity identity,
         string ownerId,
         long ownerGeneration,

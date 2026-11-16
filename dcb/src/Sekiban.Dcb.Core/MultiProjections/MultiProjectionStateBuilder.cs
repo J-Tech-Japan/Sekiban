@@ -1,6 +1,5 @@
 using System.Text;
 using System.Text.Json;
-using ResultBoxes;
 using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Domains;
@@ -9,6 +8,7 @@ using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Storage.Checkpoints;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Sekiban.Dcb.Events;
 
 namespace Sekiban.Dcb.MultiProjections;
 
@@ -79,14 +79,17 @@ public class MultiProjectionStateBuilder
         options ??= new MultiProjectionBuildOptions();
 
         // Get projector version
-        var versionResult = ResultBox.WrapTry(() => _domainTypes.MultiProjectorTypes.GetProjectorVersion(projectorName));
-        if (!versionResult.IsSuccess)
+        string projectorVersion;
+        try
+        {
+            projectorVersion = _domainTypes.MultiProjectorTypes.GetProjectorVersion(projectorName);
+        }
+        catch (Exception ex)
         {
             return new ProjectorBuildResult(
                 projectorName, "unknown", BuildStatus.Failed,
-                $"Failed to get projector version: {versionResult.GetException().Message}", 0);
+                $"Failed to get projector version: {ex.Message}", 0);
         }
-        var projectorVersion = versionResult.GetValue();
 
         _logger.LogDebug(
             "[Builder] Processing {ProjectorName} (version: {ProjectorVersion})",
@@ -136,20 +139,12 @@ public class MultiProjectionStateBuilder
             var eventsProcessed = await ProcessEventsToSafeWindowAsync(
                 actor, startPosition, options, ct);
 
-            // Build snapshot
-            var snapshotResult = await actor.BuildSnapshotEnvelopeAsync(
+            // Build snapshot. A failure reaches the catch below, which reports it as a failed build.
+            var snapshotEnvelope = await actor.BuildSnapshotEnvelopeAsync(
                 canGetUnsafeState: false,
                 blobAccessor: _blobAccessor,
                 offloadThresholdBytes: options.OffloadThresholdBytes,
                 cancellationToken: ct);
-            if (!snapshotResult.IsSuccess)
-            {
-                return new ProjectorBuildResult(
-                    projectorName, projectorVersion, BuildStatus.Failed,
-                    snapshotResult.GetException().Message, 0);
-            }
-
-            var snapshotEnvelope = snapshotResult.GetValue();
 
             // Get safe position
             var safePosition = await actor.GetSafeLastSortableUniqueIdAsync();
@@ -212,11 +207,11 @@ public class MultiProjectionStateBuilder
 
                 envelopeStream.Position = 0;
                 var saveResult = await PersistCheckpointAsync(writeRequest, envelopeStream, options.OffloadThresholdBytes, ct);
-                if (!saveResult.IsSuccess)
+                if (saveResult.Failure is { } saveFailure)
                 {
                     return new ProjectorBuildResult(
                         projectorName, projectorVersion, BuildStatus.Failed,
-                        saveResult.GetException().Message, 0);
+                        saveFailure.Message, 0);
                 }
 
                 _logger.LogDebug(
@@ -265,24 +260,31 @@ public class MultiProjectionStateBuilder
         }
 
         // Get total event count
-        var totalEventsResult = await _eventStore.GetEventCountAsync(since: null).ToResultBoxAsync();
-        if (!totalEventsResult.IsSuccess)
+        long totalEvents;
+        var totalEventsRead = _eventStore.GetEventCountAsync(since: null);
+        try
         {
-            return (false, $"Failed to get event count: {totalEventsResult.GetException().Message}", null, 0);
+            totalEvents = await totalEventsRead;
         }
-        var totalEvents = totalEventsResult.GetValue();
+        catch (Exception ex)
+        {
+            return (false, $"Failed to get event count: {ex.Message}", null, 0);
+        }
 
         // Get current version state
-        var currentStateResult = await _stateStore.GetLatestForVersionAsync(projectorName, projectorVersion, ct).ToOptionalResultBoxAsync();
-        if (!currentStateResult.IsSuccess)
+        MultiProjectionStateRecord? currentState;
+        var currentStateRead = _stateStore.GetLatestForVersionAsync(projectorName, projectorVersion, ct);
+        try
         {
-            return (false, $"Failed to get current state: {currentStateResult.GetException().Message}", null, 0);
+            currentState = await currentStateRead;
         }
-        var currentStateOpt = currentStateResult.GetValue();
-
-        if (currentStateOpt.HasValue)
+        catch (Exception ex)
         {
-            var currentState = currentStateOpt.GetValue();
+            return (false, $"Failed to get current state: {ex.Message}", null, 0);
+        }
+
+        if (currentState is not null)
+        {
             // Same version state exists
             var unprocessedEvents = totalEvents - currentState.EventsProcessed;
             if (unprocessedEvents >= options.MinEventThreshold)
@@ -300,16 +302,19 @@ public class MultiProjectionStateBuilder
         }
 
         // Get any version state
-        var anyVersionResult = await _stateStore.GetLatestAnyVersionAsync(projectorName, ct).ToOptionalResultBoxAsync();
-        if (!anyVersionResult.IsSuccess)
+        MultiProjectionStateRecord? anyVersionState;
+        var anyVersionRead = _stateStore.GetLatestAnyVersionAsync(projectorName, ct);
+        try
         {
-            return (false, $"Failed to get any version state: {anyVersionResult.GetException().Message}", null, 0);
+            anyVersionState = await anyVersionRead;
         }
-        var anyVersionStateOpt = anyVersionResult.GetValue();
-
-        if (anyVersionStateOpt.HasValue)
+        catch (Exception ex)
         {
-            var anyVersionState = anyVersionStateOpt.GetValue();
+            return (false, $"Failed to get any version state: {ex.Message}", null, 0);
+        }
+
+        if (anyVersionState is not null)
+        {
             // Old version exists
             if (anyVersionState.EventsProcessed >= options.MinEventThreshold)
             {
@@ -346,16 +351,21 @@ public class MultiProjectionStateBuilder
         {
             ct.ThrowIfCancellationRequested();
 
-            var eventsResult = await _eventStore.ReadAllSerializableEventsAsync(since, batchSize).ToResultBoxAsync();
-            if (!eventsResult.IsSuccess)
+            var eventsRead = _eventStore.ReadAllSerializableEventsAsync(since, batchSize);
+            IEnumerable<SerializableEvent> readEvents;
+            try
+            {
+                readEvents = await eventsRead;
+            }
+            catch (Exception ex)
             {
                 _logger.LogError(
-                    eventsResult.GetException(),
+                    ex,
                     "    Error reading events");
                 break;
             }
 
-            var events = eventsResult.GetValue().ToList();
+            var events = readEvents.ToList();
             if (events.Count == 0)
             {
                 break;
@@ -402,13 +412,7 @@ public class MultiProjectionStateBuilder
         MultiProjectionStateRecord record,
         CancellationToken ct)
     {
-        var openResult = await _stateStore.OpenStateDataReadStreamAsync(record, ct).ToResultBoxAsync();
-        if (!openResult.IsSuccess)
-        {
-            throw openResult.GetException();
-        }
-
-        await using var dataStream = openResult.GetValue();
+        await using var dataStream = await _stateStore.OpenStateDataReadStreamAsync(record, ct);
 
         if (record.PayloadType != typeof(SerializableMultiProjectionStateEnvelope).FullName)
         {
@@ -432,7 +436,7 @@ public class MultiProjectionStateBuilder
     // SEK-G20: the CLI/offline build persists through the sole checkpoint-mutation coordinator (generation/tombstone CAS
     // when capable, legacy upsert otherwise), so it cannot re-contaminate a shared row outside the tombstone protocol. The
     // builder holds NO raw store mutation reach — all mutation lives in CheckpointMutationCoordinator.
-    private Task<ResultBox<bool>> PersistCheckpointAsync(
+    private Task<CheckpointPersistOutcome> PersistCheckpointAsync(
         MultiProjectionStateWriteRequest writeRequest, Stream stream, int offloadThreshold, CancellationToken ct) =>
         _checkpointMutation.PersistOnceAsync(writeRequest, stream, offloadThreshold, ct);
 }

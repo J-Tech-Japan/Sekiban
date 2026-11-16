@@ -649,12 +649,8 @@ public sealed class UnsafeWindowMvMySqlCatchUpWorker<TRow> : IUnsafeWindowMvCatc
         {
             cancellationToken.ThrowIfCancellationRequested();
             var evResult = serialized.ToEvent(_eventTypes);
-            if (!evResult.IsSuccess)
-            {
-                throw evResult.GetException();
-            }
 
-            await _applier.ApplyEventAsync(connection, transaction, evResult.GetValue(), cancellationToken).ConfigureAwait(false);
+            await _applier.ApplyEventAsync(connection, transaction, evResult, cancellationToken).ConfigureAwait(false);
         }
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
         _logger.LogDebug("Unsafe window MV '{View}' caught up {Count} event(s) on MySQL.", _projector.ViewName, events.Count);
@@ -821,11 +817,7 @@ public sealed class UnsafeWindowMvMySqlPromoter<TRow> : IUnsafeWindowMvPromoter 
                 }
 
                 var evResult = serialized.ToEvent(_eventTypes);
-                if (!evResult.IsSuccess)
-                {
-                    throw evResult.GetException();
-                }
-                combined[key] = evResult.GetValue();
+                combined[key] = evResult;
             }
         }
 

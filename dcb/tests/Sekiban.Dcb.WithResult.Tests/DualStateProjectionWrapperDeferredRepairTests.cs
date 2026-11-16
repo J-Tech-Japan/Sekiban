@@ -213,7 +213,7 @@ public class DualStateProjectionWrapperDeferredRepairTests
 
         // A fault re-raise does not create another first-observed entry. Deliberate recovery leaves the retained dirty
         // history in place, then lets the same actor consume it without dropping high/low/middle.
-        _ = await actor.GetStateAsync();
+        _ = await ResultBox.WrapTry(() => actor.GetStateAsync());
         Assert.Single(logger.Entries, entry => entry.EventId.Name == "ProjectionFaultFirstObserved");
         fixture.TagTypes.ReplayFailures.Remove(seed.High.Id);
         actor.ClearFaultForRebuild();
@@ -245,7 +245,7 @@ public class DualStateProjectionWrapperDeferredRepairTests
         var original = new InvalidOperationException($"Configured state-read replay failure for {seed.High.Id}");
         fixture.TagTypes.ReplayFailures[seed.High.Id] = original;
 
-        var state = await actor.GetStateAsync(canGetUnsafeState: true);
+        var state = await ResultBox.WrapTry(() => actor.GetStateAsync(canGetUnsafeState: true));
 
         Assert.False(state.IsSuccess);
         var failure = Assert.IsType<InvalidOperationException>(state.GetException());
@@ -268,7 +268,7 @@ public class DualStateProjectionWrapperDeferredRepairTests
 
         fixture.TagTypes.ReplayFailures.Remove(seed.High.Id);
         actor.ClearFaultForRebuild();
-        var retried = await actor.GetStateAsync(canGetUnsafeState: true);
+        var retried = await ResultBox.WrapTry(() => actor.GetStateAsync(canGetUnsafeState: true));
         Assert.True(retried.IsSuccess);
         Assert.Equal("ABC", Assert.IsType<CountingProjector>(retried.GetValue().Payload).Order);
     }
@@ -428,7 +428,7 @@ public class DualStateProjectionWrapperDeferredRepairTests
         var original = new InvalidOperationException($"Configured snapshot replay failure for {seed.High.Id}");
         fixture.TagTypes.ReplayFailures[seed.High.Id] = original;
 
-        var result = await actor.BuildSnapshotForPersistenceAsync();
+        var result = await ResultBox.WrapTry(() => actor.BuildSnapshotForPersistenceAsync());
 
         Assert.False(result.IsSuccess);
         var failure = Assert.IsType<InvalidOperationException>(result.GetException());
@@ -454,7 +454,7 @@ public class DualStateProjectionWrapperDeferredRepairTests
 
         fixture.TagTypes.ReplayFailures.Remove(seed.High.Id);
         actor.ClearFaultForRebuild();
-        var retried = await actor.BuildSnapshotForPersistenceAsync();
+        var retried = await ResultBox.WrapTry(() => actor.BuildSnapshotForPersistenceAsync());
         Assert.True(retried.IsSuccess);
         Assert.Equal(seed.High.SortableUniqueIdValue, retried.GetValue().SafeLastSortableUniqueId);
     }

@@ -47,10 +47,10 @@ public class SortableUniqueIdProductionPathTests
         Assert.True(typedMulti.IsSuccess);
 
         var serialized = (ISerializedSekibanDcbExecutor)executor;
-        var serializedMulti = await serialized.CommitSerializableEventsAsync(
+        var serializedMulti = await ResultBox.WrapTry(() => serialized.CommitSerializableEventsAsync(
             new SerializedCommitRequest(
                 [Candidate(domain, "serialized-1"), Candidate(domain, "serialized-2")],
-                []));
+                [])));
         Assert.True(serializedMulti.IsSuccess);
 
         var typedConditional = await executor.ExecuteAsync(
@@ -63,12 +63,12 @@ public class SortableUniqueIdProductionPathTests
             });
         Assert.True(typedConditional.IsSuccess);
 
-        var serializedConditional = await ((ISerializedConditionalSekibanDcbExecutor)executor)
+        var serializedConditional = await ResultBox.WrapTry(() => ((ISerializedConditionalSekibanDcbExecutor)executor)
             .CommitSerializableEventConditionallyAsync(
                 new SerializedConditionalCommitRequest(
                     SerializedConditionalCommitRequest.CurrentVersion,
                     Candidate(domain, "serialized-conditional"),
-                    "serialized-key"));
+                    "serialized-key")));
         Assert.True(serializedConditional.IsSuccess);
 
         Assert.Equal(6, generator.GenerateCalls);
@@ -397,14 +397,14 @@ public class SortableUniqueIdProductionPathTests
         private int _reservationCalls;
         public int Calls => Volatile.Read(ref _calls);
         public int ReservationCalls => Volatile.Read(ref _reservationCalls);
-        public Task<ResultBox<T>> GetActorAsync<T>(string actorId) where T : class
+        public Task<T> GetActorAsync<T>(string actorId) where T : class
         {
             Interlocked.Increment(ref _calls);
             if (typeof(T) == typeof(ITagConsistentActorCommon))
             {
-                return Task.FromResult(ResultBox.FromValue((T)(object)new CountingTagConsistentActor(this, actorId)));
+                return Task.FromResult((T)(object)new CountingTagConsistentActor(this, actorId));
             }
-            return Task.FromResult(ResultBox.Error<T>(new InvalidOperationException("unexpected actor type")));
+            return Task.FromException<T>(new InvalidOperationException("unexpected actor type"));
         }
         public Task<bool> ActorExistsAsync(string actorId)
         {
@@ -416,13 +416,13 @@ public class SortableUniqueIdProductionPathTests
             : ITagConsistentActorCommon
         {
             public Task<string> GetTagActorIdAsync() => Task.FromResult(actorId);
-            public Task<ResultBox<string>> GetLatestSortableUniqueIdAsync() =>
-                Task.FromResult(ResultBox.FromValue(string.Empty));
-            public Task<ResultBox<TagWriteReservation>> MakeReservationAsync(string? lastSortableUniqueId)
+            public Task<string> GetLatestSortableUniqueIdAsync() =>
+                Task.FromResult(string.Empty);
+            public Task<TagWriteReservation> MakeReservationAsync(string? lastSortableUniqueId)
             {
                 Interlocked.Increment(ref owner._reservationCalls);
-                return Task.FromResult(ResultBox.FromValue(
-                    new TagWriteReservation("reservation", DateTime.MaxValue.ToString("O"), actorId)));
+                return Task.FromResult(
+                    new TagWriteReservation("reservation", DateTime.MaxValue.ToString("O"), actorId));
             }
             public Task<bool> ConfirmReservationAsync(TagWriteReservation reservation) => Task.FromResult(true);
             public Task<bool> CancelReservationAsync(TagWriteReservation reservation) => Task.FromResult(true);

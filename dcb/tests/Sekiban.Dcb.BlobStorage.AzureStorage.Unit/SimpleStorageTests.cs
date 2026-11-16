@@ -122,7 +122,7 @@ public class SimpleStorageTests
         }
 
         // Act
-        var snapshot = await actor.GetSnapshotAsync(true);
+        var snapshot = await ResultBox.WrapTry(() => actor.GetSnapshotAsync(true));
         Assert.True(snapshot.IsSuccess);
         var env = snapshot.GetValue();
 

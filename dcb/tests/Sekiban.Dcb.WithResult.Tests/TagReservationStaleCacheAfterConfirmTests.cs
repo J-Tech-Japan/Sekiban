@@ -22,7 +22,7 @@ public class TagReservationStaleCacheAfterConfirmTests
     {
         var f = new Fixture();
         var expected = seedExisting ? await f.WriteAsync("seed") : string.Empty;
-        var winner = (await f.Actor.MakeReservationAsync(expected)).GetValue();
+        var winner = (await ResultBox.WrapTry(() => f.Actor.MakeReservationAsync(expected))).GetValue();
         await f.WriteAsync("winner");
         var gate = ReservationLock(f.Actor);
         await gate.WaitAsync();
@@ -38,7 +38,7 @@ public class TagReservationStaleCacheAfterConfirmTests
             f.Store.AfterRead = _ => ResultBox.Error<TagState>(new IOException("staging catch-up failure"));
             confirm = f.Actor.ConfirmReservationAsync(winner);
             Assert.False(confirm.IsCompleted);
-            loser = f.Actor.MakeReservationAsync(expected);
+            loser = ResultBox.WrapTry(() => f.Actor.MakeReservationAsync(expected));
             Assert.False(loser.IsCompleted);
         }
         finally
@@ -63,7 +63,7 @@ public class TagReservationStaleCacheAfterConfirmTests
     {
         var f = new Fixture();
         var x = await f.WriteAsync("X");
-        var reservation = (await f.Actor.MakeReservationAsync(x)).GetValue();
+        var reservation = (await ResultBox.WrapTry(() => f.Actor.MakeReservationAsync(x))).GetValue();
         Assert.True(await f.Actor.ConfirmReservationAsync(reservation));
         using var read = f.Store.GateNextRead();
         var pending = f.Actor.MakeReservationAsync(x);
@@ -72,7 +72,7 @@ public class TagReservationStaleCacheAfterConfirmTests
         await f.Actor.NotifyEventWrittenAsync();
         var calls = f.Store.Calls;
         read.Release.TrySetResult();
-        Conflict(await pending.WaitAsync(Timeout));
+        Conflict(await ResultBox.WrapTry(() => pending.WaitAsync(Timeout)));
         Assert.Equal(calls + 1, f.Store.Calls);
         Assert.Equal(y, Cache(f.Actor));
     }
@@ -81,7 +81,7 @@ public class TagReservationStaleCacheAfterConfirmTests
     public async Task SekG22Read_WithEqualGenerations_RetriesOnNotify()
     {
         var f = new Fixture();
-        Assert.Equal(string.Empty, (await f.Actor.GetLatestSortableUniqueIdAsync()).GetValue());
+        Assert.Equal(string.Empty, (await ResultBox.WrapTry(() => f.Actor.GetLatestSortableUniqueIdAsync())).GetValue());
         var x = await f.WriteAsync("X"); // No notification: cached empty and equal generations.
         using var read = f.Store.GateNextRead();
         var pending = f.Actor.MakeReservationAsync(x);
@@ -90,7 +90,7 @@ public class TagReservationStaleCacheAfterConfirmTests
         await f.Actor.NotifyEventWrittenAsync();
         var calls = f.Store.Calls;
         read.Release.TrySetResult();
-        Conflict(await pending.WaitAsync(Timeout));
+        Conflict(await ResultBox.WrapTry(() => pending.WaitAsync(Timeout)));
         Assert.Equal(calls + 1, f.Store.Calls);
         Assert.Equal(y, Cache(f.Actor));
     }
@@ -111,10 +111,10 @@ public class TagReservationStaleCacheAfterConfirmTests
         {
             // Pre-stage past EnsureCatchUpCompletedAsync while completion is still current. The synchronous
             // read wrapper means this incomplete task is queued on the test-held reservation lock.
-            reservation = f.Actor.MakeReservationAsync(x);
+            reservation = ResultBox.WrapTry(() => f.Actor.MakeReservationAsync(x));
             Assert.False(reservation.IsCompleted);
             await f.Actor.NotifyEventWrittenAsync();
-            getter = f.Actor.GetLatestSortableUniqueIdAsync();
+            getter = ResultBox.WrapTry(() => f.Actor.GetLatestSortableUniqueIdAsync());
             await read.Captured.Task.WaitAsync(Timeout); // Snapshot X, holding _catchUpLock.
             y = await f.WriteAsync("Y");
             await f.Actor.NotifyEventWrittenAsync();
@@ -126,7 +126,7 @@ public class TagReservationStaleCacheAfterConfirmTests
         Assert.Equal(y, (await getter.WaitAsync(Timeout)).GetValue());
         Assert.Equal(y, Cache(f.Actor));
         Assert.True(Generation(f.Actor, "_catchUpGeneration") < Generation(f.Actor, "_invalidationGeneration"));
-        Conflict(await f.Actor.MakeReservationAsync(x));
+        Conflict(await ResultBox.WrapTry(() => f.Actor.MakeReservationAsync(x)));
     }
 
     [Fact]
@@ -142,32 +142,32 @@ public class TagReservationStaleCacheAfterConfirmTests
         var y = await f.WriteAsync("Y");
         await f.Actor.NotifyEventWrittenAsync();
         read.Release.TrySetResult();
-        Assert.Equal(x, (await getter.WaitAsync(Timeout)).GetValue());
+        Assert.Equal(x, (await ResultBox.WrapTry(() => getter.WaitAsync(Timeout))).GetValue());
         var calls = f.Store.Calls;
-        Assert.Equal(y, (await f.Actor.GetLatestSortableUniqueIdAsync()).GetValue());
+        Assert.Equal(y, (await ResultBox.WrapTry(() => f.Actor.GetLatestSortableUniqueIdAsync())).GetValue());
         Assert.Equal(calls + 1, f.Store.Calls);
-        Conflict(await f.Actor.MakeReservationAsync(x));
+        Conflict(await ResultBox.WrapTry(() => f.Actor.MakeReservationAsync(x)));
     }
 
     [Fact]
     public async Task UnderLockReadFailure_FailsClosed_ThenRecovers()
     {
         var f = new Fixture();
-        var reservation = (await f.Actor.MakeReservationAsync(string.Empty)).GetValue();
+        var reservation = (await ResultBox.WrapTry(() => f.Actor.MakeReservationAsync(string.Empty))).GetValue();
         // The confirm invalidates under the lock, so the next access does a lock-free catch-up read (which succeeds
         // here) and then the authoritative under-lock read (which fails).
         Assert.True(await f.Actor.ConfirmReservationAsync(reservation));
         var calls = f.Store.Calls;
         f.Store.AfterRead = result => ReservationLock(f.Actor).CurrentCount == 0
             ? ResultBox.Error<TagState>(new IOException("under-lock failure")) : result;
-        var failed = await f.Actor.MakeReservationAsync(string.Empty);
+        var failed = await ResultBox.WrapTry(() => f.Actor.MakeReservationAsync(string.Empty));
         Assert.False(failed.IsSuccess);
         Assert.Equal("under-lock failure", failed.GetException().InnerException!.Message);
         Assert.Equal(calls + 2, f.Store.Calls);
         Assert.Empty(await f.Actor.GetActiveReservationsAsync());
         f.Store.AfterRead = null;
         // Catch-up is already complete for this generation; only the under-lock read is retried.
-        Assert.True((await f.Actor.MakeReservationAsync(string.Empty)).IsSuccess);
+        Assert.True((await ResultBox.WrapTry(() => f.Actor.MakeReservationAsync(string.Empty))).IsSuccess);
         Assert.Equal(calls + 3, f.Store.Calls);
     }
 
@@ -185,7 +185,7 @@ public class TagReservationStaleCacheAfterConfirmTests
             Assert.True(f.Actor.NotifyEventWrittenAsync().IsCompletedSuccessfully);
             return result;
         };
-        var failed = await f.Actor.MakeReservationAsync(string.Empty);
+        var failed = await ResultBox.WrapTry(() => f.Actor.MakeReservationAsync(string.Empty));
         Assert.False(failed.IsSuccess);
         Assert.Contains("is being written concurrently", failed.GetException().Message);
         Assert.Equal(calls + 3, f.Store.Calls);
@@ -201,7 +201,7 @@ public class TagReservationStaleCacheAfterConfirmTests
         var calls = f.Store.Calls;
         for (var i = 0; i < 3; i++)
         {
-            var reservation = (await f.Actor.MakeReservationAsync(string.Empty)).GetValue();
+            var reservation = (await ResultBox.WrapTry(() => f.Actor.MakeReservationAsync(string.Empty))).GetValue();
             Assert.True(await f.Actor.CancelReservationAsync(reservation));
         }
         Assert.Equal(calls, f.Store.Calls);
@@ -212,11 +212,11 @@ public class TagReservationStaleCacheAfterConfirmTests
     {
         // Another cluster's write is never notified to this actor; the first access after a confirm must re-read.
         var f = new Fixture();
-        var reservation = (await f.Actor.MakeReservationAsync(string.Empty)).GetValue();
+        var reservation = (await ResultBox.WrapTry(() => f.Actor.MakeReservationAsync(string.Empty))).GetValue();
         await f.WriteAsync("own");
         Assert.True(await f.Actor.ConfirmReservationAsync(reservation));
         var other = await f.WriteAsync("other-cluster");
-        Assert.Equal(other, (await f.Actor.GetLatestSortableUniqueIdAsync()).GetValue());
+        Assert.Equal(other, (await ResultBox.WrapTry(() => f.Actor.GetLatestSortableUniqueIdAsync())).GetValue());
     }
 
     [Fact]
@@ -227,7 +227,7 @@ public class TagReservationStaleCacheAfterConfirmTests
         await f.Actor.GetLatestSortableUniqueIdAsync();
         await f.WriteAsync("Y");
         await f.Actor.NotifyEventWrittenAsync();
-        Conflict(await f.Actor.MakeReservationAsync(x));
+        Conflict(await ResultBox.WrapTry(() => f.Actor.MakeReservationAsync(x)));
     }
 
     [Fact]
@@ -239,7 +239,7 @@ public class TagReservationStaleCacheAfterConfirmTests
         await f.Actor.GetLatestSortableUniqueIdAsync();
         var calls = f.Store.Calls;
         f.Store.AfterRead = _ => throw new IOException("must not read");
-        var reservation = await f.Actor.MakeReservationAsync(null);
+        var reservation = await ResultBox.WrapTry(() => f.Actor.MakeReservationAsync(null));
         Assert.True(reservation.IsSuccess);
         Assert.Equal(calls, f.Store.Calls);
         Assert.True(await f.Actor.CancelReservationAsync(reservation.GetValue()));
@@ -258,7 +258,7 @@ public class TagReservationStaleCacheAfterConfirmTests
         Assert.Equal(2, f.Store.Calls);
         f.Store.AfterRead = null;
         var x = await f.WriteAsync("X");
-        Assert.Equal(x, (await f.Actor.GetLatestSortableUniqueIdAsync()).GetValue());
+        Assert.Equal(x, (await ResultBox.WrapTry(() => f.Actor.GetLatestSortableUniqueIdAsync())).GetValue());
     }
 
     [Fact]
@@ -268,7 +268,7 @@ public class TagReservationStaleCacheAfterConfirmTests
         await f.Actor.GetLatestSortableUniqueIdAsync();
         var x = await f.WriteAsync("X");
         Assert.False(await f.Actor.ConfirmReservationAsync(new TagWriteReservation("missing", "", f.Tag.GetTag())));
-        Conflict(await f.Actor.MakeReservationAsync(string.Empty));
+        Conflict(await ResultBox.WrapTry(() => f.Actor.MakeReservationAsync(string.Empty)));
         Assert.Equal(x, Cache(f.Actor));
     }
 

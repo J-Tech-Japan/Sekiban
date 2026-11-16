@@ -142,8 +142,8 @@ public sealed class MvApplyReplayRegressionTests
         protected override MvDbType DatabaseType => MvDbType.Sqlite;
         public Task<MvCatchUpResult> CompleteAsync(IMvApplyHost host, IEnumerable<SerializableEvent> events,
             MvProjectionStatusSnapshot snapshot, bool additiveOverload) => additiveOverload
-                ? CompleteCatchUpAsync(host, Service, ResultBox.FromValue(events), snapshot, CancellationToken.None, true)
-                : CompleteCatchUpAsync(host, Service, ResultBox.FromValue(events), snapshot, CancellationToken.None);
+                ? CompleteCatchUpAsync(host, Service, events, snapshot, CancellationToken.None, true)
+                : CompleteCatchUpAsync(host, Service, events, snapshot, CancellationToken.None);
         public override Task<MvCatchUpResult> CatchUpOnceAsync(IMvApplyHost host, string? serviceId = null,
             CancellationToken cancellationToken = default) => throw new NotSupportedException();
         protected override IEventStore SelectEventStoreForService(string serviceId) => throw new NotSupportedException();

@@ -485,7 +485,7 @@ public class TaggedStreamContractTests
             tagTypes,
             projectors,
             new JsonSerializerOptions());
-        var coreResult = await core.ProjectTagStateAsync(tag, ServiceCounterProjector.ProjectorName);
+        var coreResult = await ResultBox.WrapTry(() => core.ProjectTagStateAsync(tag, ServiceCounterProjector.ProjectorName));
 
         Assert.True(coreResult.IsSuccess, coreResult.IsSuccess ? string.Empty : coreResult.GetException().ToString());
         Assert.Equal(3, Assert.IsType<ServiceCounterState>(coreResult.GetValue().State).Total);
@@ -499,7 +499,7 @@ public class TaggedStreamContractTests
             tagTypes,
             projectors,
             new JsonSerializerOptions());
-        var sqliteResult = await sqlite.ProjectTagStateAsync(tag, ServiceCounterProjector.ProjectorName);
+        var sqliteResult = await ResultBox.WrapTry(() => sqlite.ProjectTagStateAsync(tag, ServiceCounterProjector.ProjectorName));
 
         Assert.True(sqliteResult.IsSuccess, sqliteResult.IsSuccess ? string.Empty : sqliteResult.GetException().ToString());
         Assert.Equal(3, Assert.IsType<ServiceCounterState>(sqliteResult.GetValue().State).Total);
@@ -613,7 +613,7 @@ public class TaggedStreamContractTests
 
     private static async Task AssertServiceCancellationAsync<TProjection>(
         GatedServiceStreamStore store,
-        Func<CancellationToken, Task<ResultBox<TProjection>>> project)
+        Func<CancellationToken, Task<TProjection>> project)
         where TProjection : notnull
     {
         using (var preCancelled = new CancellationTokenSource())

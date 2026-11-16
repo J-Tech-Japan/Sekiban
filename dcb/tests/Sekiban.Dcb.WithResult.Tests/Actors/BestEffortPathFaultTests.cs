@@ -42,7 +42,7 @@ public class BestEffortPathFaultTests
         var accessor = new InMemoryObjectAccessor(new EmptyStore(), Domain());
 
         // Cache a healthy projection actor.
-        var actorResult = await accessor.GetActorAsync<GeneralMultiProjectionActor>(ThrowingProjector.MultiProjectorName);
+        var actorResult = await ResultBox.WrapTry(() => accessor.GetActorAsync<GeneralMultiProjectionActor>(ThrowingProjector.MultiProjectorName));
         Assert.True(actorResult.IsSuccess);
         var actor = actorResult.GetValue();
 
@@ -53,7 +53,7 @@ public class BestEffortPathFaultTests
         await publisher.PublishAsync([(Poison(), Array.Empty<ITag>())]); // does not throw — swallowed
 
         // ...but the actor is faulted, and the query says so. The swallow hid nothing authoritative.
-        var state = await actor.GetStateAsync();
+        var state = await ResultBox.WrapTry(() => actor.GetStateAsync());
         Assert.False(state.IsSuccess);
         Assert.IsType<SekibanProjectionFaultException>(state.GetException());
     }
@@ -72,7 +72,7 @@ public class BestEffortPathFaultTests
         // Delivering the poison faults the actor; the subscription swallows the throw so other subscribers survive.
         await subscription.PublishEventAsync(Poison()); // does not throw
 
-        var state = await actor.GetStateAsync();
+        var state = await ResultBox.WrapTry(() => actor.GetStateAsync());
         Assert.False(state.IsSuccess);
         Assert.IsType<SekibanProjectionFaultException>(state.GetException());
     }

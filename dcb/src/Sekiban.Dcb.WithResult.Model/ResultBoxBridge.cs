@@ -24,4 +24,8 @@ internal static class ResultBoxBridge
 
         return box.GetValue();
     }
+
+    /// <summary>Awaits a box returned by WithResult user code and opens it as <see cref="Unwrap{T}" /> does.</summary>
+    internal static async Task<T> UnwrapAsync<T>(Task<ResultBox<T>> boxTask) where T : notnull =>
+        Unwrap(await boxTask);
 }

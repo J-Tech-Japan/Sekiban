@@ -1,5 +1,4 @@
 using Microsoft.Extensions.Logging;
-using ResultBoxes;
 using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.Snapshots;
@@ -44,12 +43,12 @@ public interface IMultiProjectionProjectionAccumulator
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    ///     Gets the current serialized snapshot envelope.
+    ///     Gets the current serialized snapshot envelope. Throws when the snapshot cannot be built.
     /// </summary>
-    ResultBox<SerializableMultiProjectionStateEnvelope> GetSnapshot();
+    SerializableMultiProjectionStateEnvelope GetSnapshot();
 
     /// <summary>
     ///     Gets projection metadata (safe/unsafe versions and positions) from current state.
     /// </summary>
-    ResultBox<MultiProjectionStateMetadata> GetMetadata();
+    MultiProjectionStateMetadata GetMetadata();
 }

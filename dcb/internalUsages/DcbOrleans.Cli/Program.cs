@@ -1528,11 +1528,14 @@ static async Task ShowTagStateAsync(
 
     // Project the tag state
     Console.WriteLine("Projecting events...\n");
-    var result = await tagStateService.ProjectTagStateAsync(tagString, resolvedProjectorName);
-
-    if (!result.IsSuccess)
+    TagStateProjectionResult projectionResult;
+    try
     {
-        Console.WriteLine($"Error: {result.GetException().Message}");
+        projectionResult = await tagStateService.ProjectTagStateAsync(tagString, resolvedProjectorName);
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"Error: {ex.Message}");
 
         // Show available projectors
         Console.WriteLine("\nAvailable Tag Projectors:");
@@ -1542,8 +1545,6 @@ static async Task ShowTagStateAsync(
         }
         return;
     }
-
-    var projectionResult = result.GetValue();
 
     Console.WriteLine($"Tag: {projectionResult.Tag}");
     Console.WriteLine($"Projector: {projectionResult.ProjectorName} (v{projectionResult.ProjectorVersion})");
@@ -1692,14 +1693,16 @@ static async Task ListTagsAsync(
         : $"tag_list_{tagGroup}_{timestamp}.json";
     var filePath = Path.Combine(outputDir, fileName);
 
-    var result = await tagListService.ExportTagListAsync(filePath, tagGroup);
-    if (!result.IsSuccess)
+    TagListExportResult exportResult;
+    try
     {
-        Console.WriteLine($"Error: {result.GetException().Message}");
+        exportResult = await tagListService.ExportTagListAsync(filePath, tagGroup);
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"Error: {ex.Message}");
         return;
     }
-
-    var exportResult = result.GetValue();
 
     Console.WriteLine($"Total Tag Groups: {exportResult.TotalTagGroups}");
     Console.WriteLine($"Total Tags: {exportResult.TotalTags}");

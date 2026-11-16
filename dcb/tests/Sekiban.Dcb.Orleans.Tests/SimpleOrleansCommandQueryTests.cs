@@ -201,7 +201,7 @@ public class SimpleOrleansCommandQueryTests : IAsyncLifetime
 
         var subscriptionHandle = await stream.SubscribeAsync(async (serializableEvt, token) =>
         {
-            var evtResult = serializableEvt.ToEvent(_domainTypes.EventTypes);
+            var evtResult = ResultBox.WrapTry(() => serializableEvt.ToEvent(_domainTypes.EventTypes));
             if (evtResult.IsSuccess)
             {
                 var evt = evtResult.GetValue();
@@ -458,7 +458,7 @@ public class SimpleOrleansCommandQueryTests : IAsyncLifetime
 
         var handle1 = await stream.SubscribeAsync(async (serializableEvt, token) =>
         {
-            var evtResult = serializableEvt.ToEvent(_domainTypes.EventTypes);
+            var evtResult = ResultBox.WrapTry(() => serializableEvt.ToEvent(_domainTypes.EventTypes));
             if (evtResult.IsSuccess)
             {
                 var evt = evtResult.GetValue();
@@ -472,7 +472,7 @@ public class SimpleOrleansCommandQueryTests : IAsyncLifetime
 
         var handle2 = await stream.SubscribeAsync(async (serializableEvt, token) =>
         {
-            var evtResult = serializableEvt.ToEvent(_domainTypes.EventTypes);
+            var evtResult = ResultBox.WrapTry(() => serializableEvt.ToEvent(_domainTypes.EventTypes));
             if (evtResult.IsSuccess)
             {
                 var evt = evtResult.GetValue();

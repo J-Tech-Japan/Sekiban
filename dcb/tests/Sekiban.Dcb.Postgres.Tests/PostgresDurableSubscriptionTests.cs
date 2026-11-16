@@ -68,14 +68,14 @@ public sealed class PostgresDurableSubscriptionTests : PostgresTestBase
         var safeTail = SortableUniqueId.Generate(DateTime.UtcNow.AddMinutes(-1), Guid.Empty);
         var store = new PostgresDurableSubscriptionStore(Fixture.DbContextFactory, legacyAutoProvision: false);
 
-        var first = await store.InitializeOrGetAsync(
+        var first = await ResultBox.WrapTry(() => store.InitializeOrGetAsync(
             identity,
             DurableSubscriptionStartPolicy.FromNow,
-            safeTail);
-        var second = await store.InitializeOrGetAsync(
+            safeTail));
+        var second = await ResultBox.WrapTry(() => store.InitializeOrGetAsync(
             identity,
             DurableSubscriptionStartPolicy.FromBeginning,
-            SortableUniqueId.Generate(DateTime.UtcNow, Guid.Empty));
+            SortableUniqueId.Generate(DateTime.UtcNow, Guid.Empty)));
 
         Assert.True(first.IsSuccess, first.IsSuccess ? string.Empty : first.GetException().ToString());
         Assert.True(second.IsSuccess, second.IsSuccess ? string.Empty : second.GetException().ToString());
@@ -89,14 +89,14 @@ public sealed class PostgresDurableSubscriptionTests : PostgresTestBase
     public async Task InitializeOrGet_EmptyStoreUsesNullCursor_ForBothStartPolicies()
     {
         var store = new PostgresDurableSubscriptionStore(Fixture.DbContextFactory, legacyAutoProvision: false);
-        var fromNow = await store.InitializeOrGetAsync(
+        var fromNow = await ResultBox.WrapTry(() => store.InitializeOrGetAsync(
             new DurableSubscriptionIdentity("default", "empty-now"),
             DurableSubscriptionStartPolicy.FromNow,
-            SortableUniqueId.Generate(DateTime.UtcNow, Guid.Empty));
-        var fromBeginning = await store.InitializeOrGetAsync(
+            SortableUniqueId.Generate(DateTime.UtcNow, Guid.Empty)));
+        var fromBeginning = await ResultBox.WrapTry(() => store.InitializeOrGetAsync(
             new DurableSubscriptionIdentity("default", "empty-beginning"),
             DurableSubscriptionStartPolicy.FromBeginning,
-            SortableUniqueId.Generate(DateTime.UtcNow, Guid.Empty));
+            SortableUniqueId.Generate(DateTime.UtcNow, Guid.Empty)));
 
         Assert.True(fromNow.IsSuccess, fromNow.IsSuccess ? string.Empty : fromNow.GetException().ToString());
         Assert.True(fromBeginning.IsSuccess, fromBeginning.IsSuccess ? string.Empty : fromBeginning.GetException().ToString());
@@ -118,7 +118,7 @@ public sealed class PostgresDurableSubscriptionTests : PostgresTestBase
 
         try
         {
-            var missing = await store.ReadAsync(identity);
+            var missing = await ResultBox.WrapTry(() => store.ReadAsync(identity));
             Assert.False(missing.IsSuccess);
             var failure = Assert.IsType<PostgresException>(missing.GetException());
             Assert.Equal(PostgresErrorCodes.UndefinedTable, failure.SqlState);
@@ -128,10 +128,10 @@ public sealed class PostgresDurableSubscriptionTests : PostgresTestBase
             await Fixture.DbContextFactory.ProvisionDurableSubscriptionSchemaAsync();
         }
 
-        var initialized = await store.InitializeOrGetAsync(
+        var initialized = await ResultBox.WrapTry(() => store.InitializeOrGetAsync(
             identity,
             DurableSubscriptionStartPolicy.FromBeginning,
-            SortableUniqueId.Generate(DateTime.UtcNow, Guid.Empty));
+            SortableUniqueId.Generate(DateTime.UtcNow, Guid.Empty)));
         Assert.True(initialized.IsSuccess, initialized.IsSuccess ? string.Empty : initialized.GetException().ToString());
     }
 
@@ -147,7 +147,7 @@ public sealed class PostgresDurableSubscriptionTests : PostgresTestBase
         try
         {
             var store = new PostgresDurableSubscriptionStore(Fixture.DbContextFactory, legacyAutoProvision: false);
-            var result = await store.ReadAsync(new DurableSubscriptionIdentity("default", "missing-column"));
+            var result = await ResultBox.WrapTry(() => store.ReadAsync(new DurableSubscriptionIdentity("default", "missing-column")));
             Assert.False(result.IsSuccess);
             var failure = Assert.IsType<PostgresException>(result.GetException());
             Assert.Equal(PostgresErrorCodes.UndefinedColumn, failure.SqlState);
@@ -167,26 +167,26 @@ public sealed class PostgresDurableSubscriptionTests : PostgresTestBase
         var eventId = await AppendEventAsync("lifecycle");
         var identity = new DurableSubscriptionIdentity("default", "lifecycle");
         var store = new PostgresDurableSubscriptionStore(Fixture.DbContextFactory, legacyAutoProvision: false);
-        var initialized = await store.InitializeOrGetAsync(
+        var initialized = await ResultBox.WrapTry(() => store.InitializeOrGetAsync(
             identity,
             DurableSubscriptionStartPolicy.FromBeginning,
-            SortableUniqueId.Generate(DateTime.UtcNow, Guid.Empty));
+            SortableUniqueId.Generate(DateTime.UtcNow, Guid.Empty)));
         Assert.True(initialized.IsSuccess, initialized.IsSuccess ? string.Empty : initialized.GetException().ToString());
 
-        var lease = await store.TryAcquireAsync(identity, "owner-a", TimeSpan.FromSeconds(30));
+        var lease = await ResultBox.WrapTry(() => store.TryAcquireAsync(identity, "owner-a", TimeSpan.FromSeconds(30)));
         Assert.True(lease.IsSuccess, lease.IsSuccess ? string.Empty : lease.GetException().ToString());
         Assert.True(lease.GetValue().Acquired);
         var generation = lease.GetValue().State.OwnerGeneration;
 
-        var renewed = await store.RenewAsync(identity, "owner-a", generation, TimeSpan.FromSeconds(30));
+        var renewed = await ResultBox.WrapTry(() => store.RenewAsync(identity, "owner-a", generation, TimeSpan.FromSeconds(30)));
         Assert.True(renewed.IsSuccess && renewed.GetValue());
 
-        var acknowledged = await store.AcknowledgeAsync(identity, "owner-a", generation, eventId);
+        var acknowledged = await ResultBox.WrapTry(() => store.AcknowledgeAsync(identity, "owner-a", generation, eventId));
         Assert.True(acknowledged.IsSuccess, acknowledged.IsSuccess ? string.Empty : acknowledged.GetException().ToString());
         Assert.Equal(eventId, acknowledged.GetValue().AcknowledgedPosition);
-        var retry = await store.RecordFailureAsync(
+        var retry = await ResultBox.WrapTry(() => store.RecordFailureAsync(
             identity, "owner-a", generation, eventId, "transient", conversionFailure: false,
-            maxHandlerAttempts: 3, retryDelay: TimeSpan.FromSeconds(1));
+            maxHandlerAttempts: 3, retryDelay: TimeSpan.FromSeconds(1)));
         Assert.True(retry.IsSuccess, retry.IsSuccess ? string.Empty : retry.GetException().ToString());
         Assert.Equal(DurableSubscriptionPhase.Retrying, retry.GetValue().Phase);
         Assert.Equal(1, retry.GetValue().ActiveFailureCount);
@@ -199,22 +199,22 @@ public sealed class PostgresDurableSubscriptionTests : PostgresTestBase
                 + "WHERE service_id = 'default' AND subscription_name = 'lifecycle'");
         }
 
-        var halted = await store.RecordFailureAsync(
+        var halted = await ResultBox.WrapTry(() => store.RecordFailureAsync(
             identity, "owner-a", generation, eventId, "poison", conversionFailure: false,
-            maxHandlerAttempts: 2, retryDelay: TimeSpan.FromSeconds(1));
+            maxHandlerAttempts: 2, retryDelay: TimeSpan.FromSeconds(1)));
         Assert.True(halted.IsSuccess, halted.IsSuccess ? string.Empty : halted.GetException().ToString());
         Assert.Equal(DurableSubscriptionPhase.Halted, halted.GetValue().Phase);
         Assert.Equal(eventId, halted.GetValue().LastHaltPosition);
         Assert.Null(halted.GetValue().OwnerId);
 
-        var resumed = await store.ResumeAsync(identity);
+        var resumed = await ResultBox.WrapTry(() => store.ResumeAsync(identity));
         Assert.True(resumed.IsSuccess, resumed.IsSuccess ? string.Empty : resumed.GetException().ToString());
         Assert.Equal(DurableSubscriptionPhase.CatchingUp, resumed.GetValue().Phase);
         Assert.Equal(eventId, resumed.GetValue().AcknowledgedPosition);
         Assert.Null(resumed.GetValue().OwnerId);
         Assert.True(resumed.GetValue().OwnerGeneration > halted.GetValue().OwnerGeneration);
 
-        var standby = await store.TryAcquireAsync(identity, "owner-b", TimeSpan.FromSeconds(30));
+        var standby = await ResultBox.WrapTry(() => store.TryAcquireAsync(identity, "owner-b", TimeSpan.FromSeconds(30)));
         Assert.True(standby.IsSuccess, standby.IsSuccess ? string.Empty : standby.GetException().ToString());
         Assert.True(standby.GetValue().Acquired);
     }
@@ -225,17 +225,17 @@ public sealed class PostgresDurableSubscriptionTests : PostgresTestBase
         var eventId = await AppendEventAsync("fence");
         var identity = new DurableSubscriptionIdentity("fence-service", "orders");
         var store = new PostgresDurableSubscriptionStore(Fixture.DbContextFactory, legacyAutoProvision: false);
-        var initialized = await store.InitializeOrGetAsync(
+        var initialized = await ResultBox.WrapTry(() => store.InitializeOrGetAsync(
             identity,
             DurableSubscriptionStartPolicy.FromBeginning,
-            SortableUniqueId.Generate(DateTime.UtcNow, Guid.Empty));
+            SortableUniqueId.Generate(DateTime.UtcNow, Guid.Empty)));
         Assert.True(initialized.IsSuccess, initialized.IsSuccess ? string.Empty : initialized.GetException().ToString());
 
-        var first = await store.TryAcquireAsync(identity, "owner-a", TimeSpan.FromSeconds(30));
+        var first = await ResultBox.WrapTry(() => store.TryAcquireAsync(identity, "owner-a", TimeSpan.FromSeconds(30)));
         Assert.True(first.IsSuccess && first.GetValue().Acquired);
         var firstGeneration = first.GetValue().State.OwnerGeneration;
 
-        var standby = await store.TryAcquireAsync(identity, "owner-b", TimeSpan.FromSeconds(30));
+        var standby = await ResultBox.WrapTry(() => store.TryAcquireAsync(identity, "owner-b", TimeSpan.FromSeconds(30)));
         Assert.True(standby.IsSuccess, standby.IsSuccess ? string.Empty : standby.GetException().ToString());
         Assert.False(standby.GetValue().Acquired);
         Assert.Equal(DurableSubscriptionRunnerStatus.Standby, standby.GetValue().Status);
@@ -249,11 +249,11 @@ public sealed class PostgresDurableSubscriptionTests : PostgresTestBase
                 + "WHERE service_id = 'fence-service' AND subscription_name = 'orders'");
         }
 
-        var takeover = await store.TryAcquireAsync(identity, "owner-b", TimeSpan.FromSeconds(30));
+        var takeover = await ResultBox.WrapTry(() => store.TryAcquireAsync(identity, "owner-b", TimeSpan.FromSeconds(30)));
         Assert.True(takeover.IsSuccess && takeover.GetValue().Acquired);
         Assert.True(takeover.GetValue().State.OwnerGeneration > firstGeneration);
 
-        var staleAck = await store.AcknowledgeAsync(identity, "owner-a", firstGeneration, eventId);
+        var staleAck = await ResultBox.WrapTry(() => store.AcknowledgeAsync(identity, "owner-a", firstGeneration, eventId));
         Assert.False(staleAck.IsSuccess);
         Assert.Contains("lease was lost", staleAck.GetException().Message, StringComparison.OrdinalIgnoreCase);
     }
@@ -262,14 +262,14 @@ public sealed class PostgresDurableSubscriptionTests : PostgresTestBase
     public async Task ServiceIdentityIsolated_DurableRegistrationRejectsOnlyInOneContainer()
     {
         var store = new PostgresDurableSubscriptionStore(Fixture.DbContextFactory, legacyAutoProvision: false);
-        var first = await store.InitializeOrGetAsync(
+        var first = await ResultBox.WrapTry(() => store.InitializeOrGetAsync(
             new DurableSubscriptionIdentity("service-a", "orders"),
             DurableSubscriptionStartPolicy.FromBeginning,
-            SortableUniqueId.Generate(DateTime.UtcNow, Guid.Empty));
-        var second = await store.InitializeOrGetAsync(
+            SortableUniqueId.Generate(DateTime.UtcNow, Guid.Empty)));
+        var second = await ResultBox.WrapTry(() => store.InitializeOrGetAsync(
             new DurableSubscriptionIdentity("service-b", "orders"),
             DurableSubscriptionStartPolicy.FromBeginning,
-            SortableUniqueId.Generate(DateTime.UtcNow, Guid.Empty));
+            SortableUniqueId.Generate(DateTime.UtcNow, Guid.Empty)));
         Assert.True(first.IsSuccess && second.IsSuccess);
 
         var firstContainer = new ServiceCollection();
@@ -337,17 +337,17 @@ public sealed class PostgresDurableSubscriptionTests : PostgresTestBase
     {
         var store = CreateStore();
         var identity = new DurableSubscriptionIdentity("clock-service", "ownership");
-        var initialized = await store.InitializeOrGetAsync(
+        var initialized = await ResultBox.WrapTry(() => store.InitializeOrGetAsync(
             identity,
             DurableSubscriptionStartPolicy.FromBeginning,
-            SortableUniqueId.Generate(DateTime.UtcNow, Guid.Empty));
+            SortableUniqueId.Generate(DateTime.UtcNow, Guid.Empty)));
         Assert.True(initialized.IsSuccess, initialized.IsSuccess ? string.Empty : initialized.GetException().ToString());
 
-        var first = await store.TryAcquireAsync(identity, "owner-a", TimeSpan.FromSeconds(30));
+        var first = await ResultBox.WrapTry(() => store.TryAcquireAsync(identity, "owner-a", TimeSpan.FromSeconds(30)));
         Assert.True(first.IsSuccess && first.GetValue().Acquired);
         Assert.Equal(DurableSubscriptionRunnerStatus.Owner, first.GetValue().Status);
 
-        var standby = await store.TryAcquireAsync(identity, "owner-b", TimeSpan.FromSeconds(30));
+        var standby = await ResultBox.WrapTry(() => store.TryAcquireAsync(identity, "owner-b", TimeSpan.FromSeconds(30)));
         Assert.True(standby.IsSuccess);
         Assert.False(standby.GetValue().Acquired);
         Assert.Equal(DurableSubscriptionRunnerStatus.Standby, standby.GetValue().Status);
@@ -361,10 +361,10 @@ public sealed class PostgresDurableSubscriptionTests : PostgresTestBase
                 + "WHERE service_id = 'clock-service' AND subscription_name = 'ownership'");
         }
 
-        var takeover = await store.TryAcquireAsync(identity, "owner-b", TimeSpan.FromSeconds(30));
+        var takeover = await ResultBox.WrapTry(() => store.TryAcquireAsync(identity, "owner-b", TimeSpan.FromSeconds(30)));
         Assert.True(takeover.IsSuccess && takeover.GetValue().Acquired);
         Assert.Equal(first.GetValue().State.OwnerGeneration + 1, takeover.GetValue().State.OwnerGeneration);
-        Assert.Equal(DurableSubscriptionPhase.CatchingUp, (await store.ReadAsync(identity)).GetValue().Phase);
+        Assert.Equal(DurableSubscriptionPhase.CatchingUp, (await ResultBox.WrapTry(() => store.ReadAsync(identity))).GetValue().Phase);
     }
 
     [Fact]
@@ -373,13 +373,13 @@ public sealed class PostgresDurableSubscriptionTests : PostgresTestBase
         var eventId = await AppendEventAsync("halt-evidence");
         var store = CreateStore();
         var identity = new DurableSubscriptionIdentity("halt-service", "orders");
-        var initialized = await store.InitializeOrGetAsync(
+        var initialized = await ResultBox.WrapTry(() => store.InitializeOrGetAsync(
             identity,
             DurableSubscriptionStartPolicy.FromBeginning,
-            SortableUniqueId.Generate(DateTime.UtcNow, Guid.Empty));
+            SortableUniqueId.Generate(DateTime.UtcNow, Guid.Empty)));
         Assert.True(initialized.IsSuccess, initialized.IsSuccess ? string.Empty : initialized.GetException().ToString());
 
-        var first = await store.TryAcquireAsync(identity, "owner-a", TimeSpan.FromSeconds(30));
+        var first = await ResultBox.WrapTry(() => store.TryAcquireAsync(identity, "owner-a", TimeSpan.FromSeconds(30)));
         Assert.True(first.IsSuccess && first.GetValue().Acquired);
         var firstGeneration = first.GetValue().State.OwnerGeneration;
         await using (var connection = new NpgsqlConnection(Fixture.ConnectionString))
@@ -390,26 +390,26 @@ public sealed class PostgresDurableSubscriptionTests : PostgresTestBase
                 + "WHERE service_id = 'halt-service' AND subscription_name = 'orders'");
         }
 
-        var second = await store.TryAcquireAsync(identity, "owner-b", TimeSpan.FromSeconds(30));
+        var second = await ResultBox.WrapTry(() => store.TryAcquireAsync(identity, "owner-b", TimeSpan.FromSeconds(30)));
         Assert.True(second.IsSuccess && second.GetValue().Acquired);
         var secondGeneration = second.GetValue().State.OwnerGeneration;
 
-        var staleHalt = await store.HaltAsync(identity, "owner-a", firstGeneration, "stale-halt");
+        var staleHalt = await ResultBox.WrapTry(() => store.HaltAsync(identity, "owner-a", firstGeneration, "stale-halt"));
         Assert.False(staleHalt.IsSuccess);
-        var stillOwned = await store.ReadAsync(identity);
+        var stillOwned = await ResultBox.WrapTry(() => store.ReadAsync(identity));
         Assert.True(stillOwned.IsSuccess);
         Assert.Equal("owner-b", stillOwned.GetValue().OwnerId);
         Assert.Equal(DurableSubscriptionPhase.CatchingUp, stillOwned.GetValue().Phase);
 
-        var acknowledged = await store.AcknowledgeAsync(identity, "owner-b", secondGeneration, eventId);
+        var acknowledged = await ResultBox.WrapTry(() => store.AcknowledgeAsync(identity, "owner-b", secondGeneration, eventId));
         Assert.True(acknowledged.IsSuccess, acknowledged.IsSuccess ? string.Empty : acknowledged.GetException().ToString());
-        var halted = await store.HaltAsync(identity, "owner-b", secondGeneration, "first-halt");
+        var halted = await ResultBox.WrapTry(() => store.HaltAsync(identity, "owner-b", secondGeneration, "first-halt"));
         Assert.True(halted.IsSuccess, halted.IsSuccess ? string.Empty : halted.GetException().ToString());
         Assert.Equal(eventId, halted.GetValue().LastHaltPosition);
 
-        var repeated = await store.HaltAsync(identity, "owner-b", secondGeneration, "second-halt");
+        var repeated = await ResultBox.WrapTry(() => store.HaltAsync(identity, "owner-b", secondGeneration, "second-halt"));
         Assert.False(repeated.IsSuccess);
-        var final = await store.ReadAsync(identity);
+        var final = await ResultBox.WrapTry(() => store.ReadAsync(identity));
         Assert.True(final.IsSuccess);
         Assert.Equal(DurableSubscriptionPhase.Halted, final.GetValue().Phase);
         Assert.Equal("first-halt", final.GetValue().LastHaltReason);
@@ -423,17 +423,17 @@ public sealed class PostgresDurableSubscriptionTests : PostgresTestBase
         var secondPosition = await AppendEventAsync("retry-second", "retry-service");
         var store = CreateStore();
         var identity = new DurableSubscriptionIdentity("retry-service", "orders");
-        var initialized = await store.InitializeOrGetAsync(
+        var initialized = await ResultBox.WrapTry(() => store.InitializeOrGetAsync(
             identity,
             DurableSubscriptionStartPolicy.FromBeginning,
-            SortableUniqueId.Generate(DateTime.UtcNow, Guid.Empty));
+            SortableUniqueId.Generate(DateTime.UtcNow, Guid.Empty)));
         Assert.True(initialized.IsSuccess, initialized.IsSuccess ? string.Empty : initialized.GetException().ToString());
 
-        var first = await store.TryAcquireAsync(identity, "owner-a", TimeSpan.FromSeconds(30));
+        var first = await ResultBox.WrapTry(() => store.TryAcquireAsync(identity, "owner-a", TimeSpan.FromSeconds(30)));
         Assert.True(first.IsSuccess && first.GetValue().Acquired);
-        var firstFailure = await store.RecordFailureAsync(
+        var firstFailure = await ResultBox.WrapTry(() => store.RecordFailureAsync(
             identity, "owner-a", first.GetValue().State.OwnerGeneration, firstPosition, "transient",
-            conversionFailure: false, maxHandlerAttempts: 4, retryDelay: TimeSpan.FromMinutes(1));
+            conversionFailure: false, maxHandlerAttempts: 4, retryDelay: TimeSpan.FromMinutes(1)));
         Assert.True(firstFailure.IsSuccess, firstFailure.IsSuccess ? string.Empty : firstFailure.GetException().ToString());
         Assert.Equal(1, firstFailure.GetValue().ActiveFailureCount);
         Assert.Equal(DurableSubscriptionPhase.Retrying, firstFailure.GetValue().Phase);
@@ -446,18 +446,18 @@ public sealed class PostgresDurableSubscriptionTests : PostgresTestBase
                 + "WHERE service_id = 'retry-service' AND subscription_name = 'orders'");
         }
 
-        var takeover = await store.TryAcquireAsync(identity, "owner-b", TimeSpan.FromSeconds(30));
+        var takeover = await ResultBox.WrapTry(() => store.TryAcquireAsync(identity, "owner-b", TimeSpan.FromSeconds(30)));
         Assert.True(takeover.IsSuccess && takeover.GetValue().Acquired);
         Assert.Equal(DurableSubscriptionPhase.Retrying, takeover.GetValue().State.Phase);
-        Assert.False((await store.IsRetryDueAsync(
-            identity, "owner-b", takeover.GetValue().State.OwnerGeneration)).GetValue());
+        Assert.False(await store.IsRetryDueAsync(
+            identity, "owner-b", takeover.GetValue().State.OwnerGeneration));
 
-        var earlyFailure = await store.RecordFailureAsync(
+        var earlyFailure = await ResultBox.WrapTry(() => store.RecordFailureAsync(
             identity, "owner-b", takeover.GetValue().State.OwnerGeneration, firstPosition, "too-early",
-            conversionFailure: false, maxHandlerAttempts: 4, retryDelay: TimeSpan.FromMinutes(1));
+            conversionFailure: false, maxHandlerAttempts: 4, retryDelay: TimeSpan.FromMinutes(1)));
         Assert.False(earlyFailure.IsSuccess);
-        var earlyAck = await store.AcknowledgeAsync(
-            identity, "owner-b", takeover.GetValue().State.OwnerGeneration, secondPosition);
+        var earlyAck = await ResultBox.WrapTry(() => store.AcknowledgeAsync(
+            identity, "owner-b", takeover.GetValue().State.OwnerGeneration, secondPosition));
         Assert.False(earlyAck.IsSuccess);
 
         await using (var connection = new NpgsqlConnection(Fixture.ConnectionString))
@@ -468,9 +468,9 @@ public sealed class PostgresDurableSubscriptionTests : PostgresTestBase
                 + "WHERE service_id = 'retry-service' AND subscription_name = 'orders'");
         }
 
-        var differentPosition = await store.RecordFailureAsync(
+        var differentPosition = await ResultBox.WrapTry(() => store.RecordFailureAsync(
             identity, "owner-b", takeover.GetValue().State.OwnerGeneration, secondPosition, "new-position",
-            conversionFailure: false, maxHandlerAttempts: 4, retryDelay: TimeSpan.FromMinutes(1));
+            conversionFailure: false, maxHandlerAttempts: 4, retryDelay: TimeSpan.FromMinutes(1)));
         Assert.True(differentPosition.IsSuccess, differentPosition.IsSuccess ? string.Empty : differentPosition.GetException().ToString());
         Assert.Equal(1, differentPosition.GetValue().ActiveFailureCount);
         Assert.Equal(secondPosition, differentPosition.GetValue().ActiveFailurePosition);
@@ -512,19 +512,19 @@ public sealed class PostgresDurableSubscriptionTests : PostgresTestBase
         var eventId = await AppendEventAsync("restart", "restart-service");
         var identity = new DurableSubscriptionIdentity("restart-service", "orders");
         var firstStore = CreateStore();
-        var initialized = await firstStore.InitializeOrGetAsync(
+        var initialized = await ResultBox.WrapTry(() => firstStore.InitializeOrGetAsync(
             identity,
             DurableSubscriptionStartPolicy.FromBeginning,
-            SortableUniqueId.Generate(DateTime.UtcNow, Guid.Empty));
+            SortableUniqueId.Generate(DateTime.UtcNow, Guid.Empty)));
         Assert.True(initialized.IsSuccess, initialized.IsSuccess ? string.Empty : initialized.GetException().ToString());
-        var first = await firstStore.TryAcquireAsync(identity, "owner-a", TimeSpan.FromSeconds(30));
+        var first = await ResultBox.WrapTry(() => firstStore.TryAcquireAsync(identity, "owner-a", TimeSpan.FromSeconds(30)));
         Assert.True(first.IsSuccess && first.GetValue().Acquired);
-        var acknowledged = await firstStore.AcknowledgeAsync(
-            identity, "owner-a", first.GetValue().State.OwnerGeneration, eventId);
+        var acknowledged = await ResultBox.WrapTry(() => firstStore.AcknowledgeAsync(
+            identity, "owner-a", first.GetValue().State.OwnerGeneration, eventId));
         Assert.True(acknowledged.IsSuccess);
 
         var restartedStore = CreateStore();
-        var afterRestart = await restartedStore.ReadAsync(identity);
+        var afterRestart = await ResultBox.WrapTry(() => restartedStore.ReadAsync(identity));
         Assert.True(afterRestart.IsSuccess);
         Assert.Equal(eventId, afterRestart.GetValue().AcknowledgedPosition);
 
@@ -536,10 +536,10 @@ public sealed class PostgresDurableSubscriptionTests : PostgresTestBase
                 + "WHERE service_id = 'restart-service' AND subscription_name = 'orders'");
         }
 
-        var takeover = await restartedStore.TryAcquireAsync(identity, "owner-b", TimeSpan.FromSeconds(30));
+        var takeover = await ResultBox.WrapTry(() => restartedStore.TryAcquireAsync(identity, "owner-b", TimeSpan.FromSeconds(30)));
         Assert.True(takeover.IsSuccess && takeover.GetValue().Acquired);
         var generation = takeover.GetValue().State.OwnerGeneration;
-        var reentrant = await restartedStore.TryAcquireAsync(identity, "owner-b", TimeSpan.FromSeconds(30));
+        var reentrant = await ResultBox.WrapTry(() => restartedStore.TryAcquireAsync(identity, "owner-b", TimeSpan.FromSeconds(30)));
         Assert.True(reentrant.IsSuccess && reentrant.GetValue().Acquired);
         Assert.Equal(generation, reentrant.GetValue().State.OwnerGeneration);
         Assert.Equal(eventId, reentrant.GetValue().State.AcknowledgedPosition);
@@ -551,21 +551,21 @@ public sealed class PostgresDurableSubscriptionTests : PostgresTestBase
         var position = await AppendEventAsync("poison", "poison-service");
         var store = CreateStore();
         var identity = new DurableSubscriptionIdentity("poison-service", "orders");
-        var initialized = await store.InitializeOrGetAsync(
+        var initialized = await ResultBox.WrapTry(() => store.InitializeOrGetAsync(
             identity,
             DurableSubscriptionStartPolicy.FromBeginning,
-            SortableUniqueId.Generate(DateTime.UtcNow, Guid.Empty));
+            SortableUniqueId.Generate(DateTime.UtcNow, Guid.Empty)));
         Assert.True(initialized.IsSuccess, initialized.IsSuccess ? string.Empty : initialized.GetException().ToString());
-        var lease = await store.TryAcquireAsync(identity, "owner-a", TimeSpan.FromSeconds(30));
+        var lease = await ResultBox.WrapTry(() => store.TryAcquireAsync(identity, "owner-a", TimeSpan.FromSeconds(30)));
         Assert.True(lease.IsSuccess && lease.GetValue().Acquired);
-        var halted = await store.RecordFailureAsync(
+        var halted = await ResultBox.WrapTry(() => store.RecordFailureAsync(
             identity, "owner-a", lease.GetValue().State.OwnerGeneration, position, "conversion-poison",
-            conversionFailure: true, maxHandlerAttempts: 4, retryDelay: TimeSpan.FromSeconds(1));
+            conversionFailure: true, maxHandlerAttempts: 4, retryDelay: TimeSpan.FromSeconds(1)));
         Assert.True(halted.IsSuccess, halted.IsSuccess ? string.Empty : halted.GetException().ToString());
         Assert.Equal(DurableSubscriptionPhase.Halted, halted.GetValue().Phase);
         Assert.Null(halted.GetValue().AcknowledgedPosition);
 
-        var reacquire = await store.TryAcquireAsync(identity, "owner-b", TimeSpan.FromSeconds(30));
+        var reacquire = await ResultBox.WrapTry(() => store.TryAcquireAsync(identity, "owner-b", TimeSpan.FromSeconds(30)));
         Assert.True(reacquire.IsSuccess);
         Assert.False(reacquire.GetValue().Acquired);
         Assert.Equal(DurableSubscriptionRunnerStatus.Halted, reacquire.GetValue().Status);
@@ -586,7 +586,7 @@ public sealed class PostgresDurableSubscriptionTests : PostgresTestBase
         await WaitUntilAsync(() => Task.FromResult(runner.Status == DurableSubscriptionRunnerStatus.Halted));
         await nudge.TriggerAsync();
         Assert.Equal(0, handlerCalls);
-        var final = await store.ReadAsync(identity);
+        var final = await ResultBox.WrapTry(() => store.ReadAsync(identity));
         Assert.Equal(DurableSubscriptionPhase.Halted, final.GetValue().Phase);
         cancellation.Cancel();
         await runner.StopAsync(CancellationToken.None);
@@ -625,14 +625,14 @@ public sealed class PostgresDurableSubscriptionTests : PostgresTestBase
         using var cancellation = new CancellationTokenSource();
         await runner.StartAsync(cancellation.Token);
         Assert.Equal(firstPosition, await firstHandled.Task.WaitAsync(TimeSpan.FromSeconds(5)));
-        await WaitUntilAsync(async () => (await store.ReadAsync(identity)).GetValue().Phase == DurableSubscriptionPhase.Idle);
-        var before = (await store.ReadAsync(identity)).GetValue();
+        await WaitUntilAsync(async () => (await ResultBox.WrapTry(() => store.ReadAsync(identity))).GetValue().Phase == DurableSubscriptionPhase.Idle);
+        var before = (await ResultBox.WrapTry(() => store.ReadAsync(identity))).GetValue();
 
         await nudge.TriggerAsync();
         await nudge.TriggerAsync();
         await WaitUntilAsync(async () =>
         {
-            var observed = await store.ReadAsync(identity);
+            var observed = await ResultBox.WrapTry(() => store.ReadAsync(identity));
             return observed.IsSuccess
                 && observed.GetValue().Phase == DurableSubscriptionPhase.Idle
                 && observed.GetValue().UpdatedAtUtc > before.UpdatedAtUtc;
@@ -644,10 +644,10 @@ public sealed class PostgresDurableSubscriptionTests : PostgresTestBase
         Assert.Equal(secondPosition, await secondHandled.Task.WaitAsync(TimeSpan.FromSeconds(3)));
         await WaitUntilAsync(async () =>
         {
-            var observed = await store.ReadAsync(identity);
+            var observed = await ResultBox.WrapTry(() => store.ReadAsync(identity));
             return observed.IsSuccess && observed.GetValue().AcknowledgedPosition == secondPosition;
         });
-        var after = await store.ReadAsync(identity);
+        var after = await ResultBox.WrapTry(() => store.ReadAsync(identity));
         Assert.True(after.IsSuccess);
         Assert.Equal(before.OwnerGeneration, after.GetValue().OwnerGeneration);
         Assert.Equal(secondPosition, after.GetValue().AcknowledgedPosition);
@@ -680,7 +680,7 @@ public sealed class PostgresDurableSubscriptionTests : PostgresTestBase
             await runner.StartAsync(cancellation.Token);
             await WaitUntilAsync(async () =>
             {
-                var state = await store.ReadAsync(identity);
+                var state = await ResultBox.WrapTry(() => store.ReadAsync(identity));
                 return state.IsSuccess && state.GetValue().Phase == DurableSubscriptionPhase.Idle;
             });
 
@@ -688,7 +688,7 @@ public sealed class PostgresDurableSubscriptionTests : PostgresTestBase
             Assert.Equal(position, await handled.Task.WaitAsync(TimeSpan.FromSeconds(5)));
             await WaitUntilAsync(async () =>
             {
-                var state = await store.ReadAsync(identity);
+                var state = await ResultBox.WrapTry(() => store.ReadAsync(identity));
                 return state.IsSuccess && state.GetValue().AcknowledgedPosition == position;
             });
             Assert.Equal(0, nudge.TriggerCount);
@@ -723,7 +723,7 @@ public sealed class PostgresDurableSubscriptionTests : PostgresTestBase
             await firstRunner.StartAsync(firstCancellation.Token);
             Assert.Equal(position, await firstHandled.Task.WaitAsync(TimeSpan.FromSeconds(5)));
             await crashStore.FirstAcknowledgeStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
-            var beforeCancellation = await store.ReadAsync(identity);
+            var beforeCancellation = await ResultBox.WrapTry(() => store.ReadAsync(identity));
             Assert.True(beforeCancellation.IsSuccess);
             Assert.Null(beforeCancellation.GetValue().AcknowledgedPosition);
         }
@@ -733,7 +733,7 @@ public sealed class PostgresDurableSubscriptionTests : PostgresTestBase
             await firstRunner.StopAsync(CancellationToken.None);
         }
 
-        var afterCrash = await store.ReadAsync(identity);
+        var afterCrash = await ResultBox.WrapTry(() => store.ReadAsync(identity));
         Assert.True(afterCrash.IsSuccess);
         Assert.Null(afterCrash.GetValue().AcknowledgedPosition);
 
@@ -762,11 +762,11 @@ public sealed class PostgresDurableSubscriptionTests : PostgresTestBase
             Assert.Equal(position, await secondHandled.Task.WaitAsync(TimeSpan.FromSeconds(5)));
             await WaitUntilAsync(async () =>
             {
-                var state = await store.ReadAsync(identity);
+                var state = await ResultBox.WrapTry(() => store.ReadAsync(identity));
                 return state.IsSuccess && state.GetValue().AcknowledgedPosition == position;
             });
 
-            var final = await store.ReadAsync(identity);
+            var final = await ResultBox.WrapTry(() => store.ReadAsync(identity));
             Assert.True(final.IsSuccess);
             Assert.Equal(position, final.GetValue().AcknowledgedPosition);
             Assert.Equal(1, crashStore.SuccessfulAcknowledgementCount);
@@ -807,7 +807,7 @@ public sealed class PostgresDurableSubscriptionTests : PostgresTestBase
         using var cancellation = new CancellationTokenSource();
         await runner.StartAsync(cancellation.Token);
         await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
-        var owned = await store.ReadAsync(identity);
+        var owned = await ResultBox.WrapTry(() => store.ReadAsync(identity));
         Assert.Null(owned.GetValue().AcknowledgedPosition);
         Assert.NotNull(owned.GetValue().OwnerId);
 
@@ -821,7 +821,7 @@ public sealed class PostgresDurableSubscriptionTests : PostgresTestBase
         }
 
         await cancelled.Task.WaitAsync(TimeSpan.FromSeconds(5));
-        var after = await store.ReadAsync(identity);
+        var after = await ResultBox.WrapTry(() => store.ReadAsync(identity));
         Assert.True(after.IsSuccess);
         Assert.Null(after.GetValue().AcknowledgedPosition);
         cancellation.Cancel();
@@ -934,26 +934,26 @@ public sealed class PostgresDurableSubscriptionTests : PostgresTestBase
 
         public int SuccessfulAcknowledgementCount => Volatile.Read(ref _successfulAcknowledgementCount);
 
-        public Task<ResultBox<DurableSubscriptionState>> InitializeOrGetAsync(
+        public Task<DurableSubscriptionState> InitializeOrGetAsync(
             DurableSubscriptionIdentity identity,
             DurableSubscriptionStartPolicy startPolicy,
             string safeTail,
             CancellationToken cancellationToken = default) =>
             _inner.InitializeOrGetAsync(identity, startPolicy, safeTail, cancellationToken);
 
-        public Task<ResultBox<DurableSubscriptionState>> ReadAsync(
+        public Task<DurableSubscriptionState> ReadAsync(
             DurableSubscriptionIdentity identity,
             CancellationToken cancellationToken = default) =>
             _inner.ReadAsync(identity, cancellationToken);
 
-        public Task<ResultBox<DurableSubscriptionLease>> TryAcquireAsync(
+        public Task<DurableSubscriptionLease> TryAcquireAsync(
             DurableSubscriptionIdentity identity,
             string ownerId,
             TimeSpan leaseDuration,
             CancellationToken cancellationToken = default) =>
             _inner.TryAcquireAsync(identity, ownerId, leaseDuration, cancellationToken);
 
-        public Task<ResultBox<bool>> RenewAsync(
+        public Task<bool> RenewAsync(
             DurableSubscriptionIdentity identity,
             string ownerId,
             long ownerGeneration,
@@ -961,14 +961,14 @@ public sealed class PostgresDurableSubscriptionTests : PostgresTestBase
             CancellationToken cancellationToken = default) =>
             _inner.RenewAsync(identity, ownerId, ownerGeneration, leaseDuration, cancellationToken);
 
-        public Task<ResultBox<bool>> IsRetryDueAsync(
+        public Task<bool> IsRetryDueAsync(
             DurableSubscriptionIdentity identity,
             string ownerId,
             long ownerGeneration,
             CancellationToken cancellationToken = default) =>
             _inner.IsRetryDueAsync(identity, ownerId, ownerGeneration, cancellationToken);
 
-        public async Task<ResultBox<DurableSubscriptionState>> AcknowledgeAsync(
+        public async Task<DurableSubscriptionState> AcknowledgeAsync(
             DurableSubscriptionIdentity identity,
             string ownerId,
             long ownerGeneration,
@@ -984,8 +984,7 @@ public sealed class PostgresDurableSubscriptionTests : PostgresTestBase
                 }
                 catch (OperationCanceledException)
                 {
-                    return ResultBox.Error<DurableSubscriptionState>(
-                        new OperationCanceledException("The test stopped before the first acknowledgement.", cancellationToken));
+                    throw new OperationCanceledException("The test stopped before the first acknowledgement.", cancellationToken);
                 }
             }
 
@@ -995,15 +994,11 @@ public sealed class PostgresDurableSubscriptionTests : PostgresTestBase
                 ownerGeneration,
                 position,
                 cancellationToken);
-            if (result.IsSuccess)
-            {
-                Interlocked.Increment(ref _successfulAcknowledgementCount);
-            }
-
+            Interlocked.Increment(ref _successfulAcknowledgementCount);
             return result;
         }
 
-        public Task<ResultBox<DurableSubscriptionState>> RecordFailureAsync(
+        public Task<DurableSubscriptionState> RecordFailureAsync(
             DurableSubscriptionIdentity identity,
             string ownerId,
             long ownerGeneration,
@@ -1024,12 +1019,12 @@ public sealed class PostgresDurableSubscriptionTests : PostgresTestBase
                 retryDelay,
                 cancellationToken);
 
-        public Task<ResultBox<DurableSubscriptionState>> ResumeAsync(
+        public Task<DurableSubscriptionState> ResumeAsync(
             DurableSubscriptionIdentity identity,
             CancellationToken cancellationToken = default) =>
             _inner.ResumeAsync(identity, cancellationToken);
 
-        public Task<ResultBox<DurableSubscriptionState>> HaltAsync(
+        public Task<DurableSubscriptionState> HaltAsync(
             DurableSubscriptionIdentity identity,
             string ownerId,
             long ownerGeneration,
@@ -1037,7 +1032,7 @@ public sealed class PostgresDurableSubscriptionTests : PostgresTestBase
             CancellationToken cancellationToken = default) =>
             _inner.HaltAsync(identity, ownerId, ownerGeneration, reason, cancellationToken);
 
-        public Task<ResultBox<DurableSubscriptionState>> MarkIdleAsync(
+        public Task<DurableSubscriptionState> MarkIdleAsync(
             DurableSubscriptionIdentity identity,
             string ownerId,
             long ownerGeneration,

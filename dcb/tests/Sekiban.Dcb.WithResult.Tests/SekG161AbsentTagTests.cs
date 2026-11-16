@@ -4,6 +4,7 @@ using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Tags;
 using CoreInMemoryEventStore = Sekiban.Dcb.Testing.InMemoryEventStore;
 using Sekiban.Dcb.TestSupport;
+using ResultBoxes;
 
 namespace Sekiban.Dcb.Tests;
 
@@ -35,10 +36,10 @@ public class SekG161AbsentTagTests
         var store = new CoreInMemoryEventStore(domain.EventTypes);
         ITag tag = new StudentTag(Guid.NewGuid());
         var actor = new GeneralTagConsistentActor(tag.GetTag(), store, new TagConsistentActorOptions(), domain.TagTypes);
-        var first = await actor.MakeReservationAsync(string.Empty);
+        var first = await ResultBox.WrapTry(() => actor.MakeReservationAsync(string.Empty));
         Assert.True(first.IsSuccess);
         Assert.True(await actor.ConfirmReservationAsync(first.GetValue()));
-        var second = await actor.MakeReservationAsync(string.Empty);
+        var second = await ResultBox.WrapTry(() => actor.MakeReservationAsync(string.Empty));
         Assert.True(second.IsSuccess, second.IsSuccess ? null : second.GetException().Message);
         Assert.Single(await actor.GetActiveReservationsAsync());
     }

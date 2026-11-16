@@ -42,7 +42,7 @@ public class ProjectionFaultFacadeParityTests
     {
         var accessor = new InMemoryObjectAccessor(new PoisonReadEventStore(), Domain());
 
-        var actorResult = await accessor.GetActorAsync<GeneralMultiProjectionActor>(StudentSummaries.MultiProjectorName);
+        var actorResult = await ResultBox.WrapTry(() => accessor.GetActorAsync<GeneralMultiProjectionActor>(StudentSummaries.MultiProjectorName));
 
         Assert.False(actorResult.IsSuccess);
     }
@@ -53,7 +53,7 @@ public class ProjectionFaultFacadeParityTests
         var actor = new GeneralMultiProjectionActor(Domain(), StudentSummaries.MultiProjectorName);
         await Assert.ThrowsAnyAsync<Exception>(() => actor.AddSerializableEventsAsync([Poison()]));
 
-        var state = await actor.GetStateAsync();
+        var state = await ResultBox.WrapTry(() => actor.GetStateAsync());
         Assert.False(state.IsSuccess);
         Assert.IsType<SekibanProjectionFaultException>(state.GetException());
     }

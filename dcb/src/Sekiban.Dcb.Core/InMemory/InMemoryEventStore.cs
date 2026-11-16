@@ -551,7 +551,7 @@ public class InMemoryEventStore : IEventStore, ISerializableEventStreamReader, I
                 Event evt;
                 try
                 {
-                    evt = se.ToEventOrThrow(_eventTypes);
+                    evt = se.ToEvent(_eventTypes);
                 }
                 catch (Exception ex)
                 {

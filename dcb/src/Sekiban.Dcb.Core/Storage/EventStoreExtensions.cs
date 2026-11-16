@@ -50,7 +50,7 @@ public static class EventStoreExtensions
         this IEventStore eventStore,
         Guid eventId,
         IEventTypes eventTypes) =>
-        (await eventStore.ReadSerializableEventAsync(eventId))?.ToEventOrThrow(eventTypes);
+        (await eventStore.ReadSerializableEventAsync(eventId))?.ToEvent(eventTypes);
 
     public static Task<(IReadOnlyList<Event> Events, IReadOnlyList<TagWriteResult> TagWrites)> WriteEventsAsync(
         this IEventStore eventStore,
@@ -90,7 +90,7 @@ public static class EventStoreExtensions
         var materialized = new List<Event>();
         foreach (var serializableEvent in events)
         {
-            materialized.Add(serializableEvent.ToEventOrThrow(eventTypes));
+            materialized.Add(serializableEvent.ToEvent(eventTypes));
         }
 
         return materialized;

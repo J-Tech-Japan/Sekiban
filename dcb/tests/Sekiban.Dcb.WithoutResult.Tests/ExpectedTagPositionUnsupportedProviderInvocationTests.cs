@@ -71,23 +71,27 @@ public sealed class ExpectedTagPositionUnsupportedProviderInvocationTests
         Assert.Equal(0, handlerCalls);
         Assert.Equal(0, observed.ProviderWriteCalls);
 
-        var directV2 = await Assert.IsAssignableFrom<ISerializedExpectedTagPositionSekibanDcbExecutor>(executor)
-            .CommitSerializableEventsWithExpectedTagPositionsAsync(ExpectedV2Request());
+        var directV2 = await Assert.ThrowsAsync<ConditionNotSupportedException>(() =>
+            Assert.IsAssignableFrom<ISerializedExpectedTagPositionSekibanDcbExecutor>(executor)
+                .CommitSerializableEventsWithExpectedTagPositionsAsync(ExpectedV2Request()));
         AssertUnsupported(directV2);
         Assert.Equal(0, observed.ProviderWriteCalls);
 
-        var wire = await new SerializedCommitAcceptor(executor).AcceptAsync(ExpectedV2Wire());
+        var wire = await Assert.ThrowsAsync<ConditionNotSupportedException>(() =>
+            new SerializedCommitAcceptor(executor).AcceptAsync(ExpectedV2Wire()));
         AssertUnsupported(wire);
         Assert.Equal(0, observed.ProviderWriteCalls);
 
         var cluster = DispatchProxy.Create<IClusterClient, UnreachableClusterClient>();
         var orleans = new Sekiban.Dcb.Orleans.OrleansDcbExecutor(cluster, observed, domain);
-        var orleansDirectV2 = await Assert.IsAssignableFrom<ISerializedExpectedTagPositionSekibanDcbExecutor>(orleans)
-            .CommitSerializableEventsWithExpectedTagPositionsAsync(ExpectedV2Request());
+        var orleansDirectV2 = await Assert.ThrowsAsync<ConditionNotSupportedException>(() =>
+            Assert.IsAssignableFrom<ISerializedExpectedTagPositionSekibanDcbExecutor>(orleans)
+                .CommitSerializableEventsWithExpectedTagPositionsAsync(ExpectedV2Request()));
         AssertUnsupported(orleansDirectV2);
         Assert.Equal(0, observed.ProviderWriteCalls);
 
-        var orleansWire = await new SerializedCommitAcceptor(orleans).AcceptAsync(ExpectedV2Wire());
+        var orleansWire = await Assert.ThrowsAsync<ConditionNotSupportedException>(() =>
+            new SerializedCommitAcceptor(orleans).AcceptAsync(ExpectedV2Wire()));
         AssertUnsupported(orleansWire);
         Assert.Equal(0, observed.ProviderWriteCalls);
     }
@@ -144,12 +148,6 @@ public sealed class ExpectedTagPositionUnsupportedProviderInvocationTests
             WriteShardCount = 1
         });
         return new DynamoDbEventStore(new DynamoDbContext(client, options), domain.EventTypes, new DefaultServiceIdProvider());
-    }
-
-    private static void AssertUnsupported(ResultBox<SerializedCommitResult> result)
-    {
-        Assert.False(result.IsSuccess);
-        AssertUnsupported(result.GetException());
     }
 
     private static void AssertUnsupported(Exception exception)

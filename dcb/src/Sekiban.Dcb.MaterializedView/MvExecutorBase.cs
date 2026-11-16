@@ -2,7 +2,6 @@ using System.Data;
 using System.Data.Common;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using ResultBoxes;
 using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.ServiceId;
@@ -680,14 +679,26 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvOrleansCatch
             var currentPosition = currentStatus.CurrentCheckpointTruth.IsKnown
                 ? currentStatus.CurrentCheckpointTruth.PositionValue
                 : null;
-            var readResult = await ResultBox.WrapTry(() => selectedEventStore.ReadAllSerializableEventsAsync(
-                    SortableUniqueId.NullableValue(currentPosition),
-                    _options.BatchSize))
-                .ConfigureAwait(false);
+            // A failed read is classified by the catch-up below, after the lifecycle checks, as it always was.
+            IEnumerable<SerializableEvent>? readEvents = null;
+            Exception? readFailure = null;
+            try
+            {
+                readEvents = await selectedEventStore.ReadAllSerializableEventsAsync(
+                        SortableUniqueId.NullableValue(currentPosition),
+                        _options.BatchSize)
+                    .ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                readFailure = ex;
+            }
+
             var result = await CompleteCatchUpInternalAsync(
                     host,
                     serviceId,
-                    readResult,
+                    readEvents,
+                    readFailure,
                     currentStatus,
                     cancellationToken,
                     classifyFailures,
@@ -1013,7 +1024,7 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvOrleansCatch
     protected Task<MvCatchUpResult> CompleteCatchUpAsync(
         IMvApplyHost host,
         string serviceId,
-        ResultBox<IEnumerable<SerializableEvent>> readResult,
+        IEnumerable<SerializableEvent> readResult,
         MvProjectionStatusSnapshot currentStatus,
         CancellationToken cancellationToken) =>
         CompleteCatchUpAsync(
@@ -1029,11 +1040,11 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvOrleansCatch
     protected async Task<MvCatchUpResult> CompleteCatchUpAsync(
         IMvApplyHost host,
         string serviceId,
-        ResultBox<IEnumerable<SerializableEvent>> readResult,
+        IEnumerable<SerializableEvent> readResult,
         MvProjectionStatusSnapshot currentStatus,
         CancellationToken cancellationToken,
         bool classifyFailures) => await CompleteCatchUpInternalAsync(
-            host, serviceId, readResult, currentStatus, cancellationToken, classifyFailures,
+            host, serviceId, readResult, null, currentStatus, cancellationToken, classifyFailures,
             currentStatus.OriginalEntries ?? [new MvRegistryEntry
             {
                 ServiceId = serviceId, ViewName = host.ViewName, ViewVersion = host.ViewVersion,
@@ -1041,12 +1052,13 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvOrleansCatch
                 CurrentCheckpointTruth = currentStatus.CurrentCheckpointTruth
             }]).ConfigureAwait(false);
 
+    // Exactly one of readEvents and readFailure is set: the events read for this catch-up, or why the read failed.
     internal async Task<MvCatchUpResult> CompleteCatchUpInternalAsync(
-        IMvApplyHost host, string serviceId, ResultBox<IEnumerable<SerializableEvent>> readResult,
+        IMvApplyHost host, string serviceId, IEnumerable<SerializableEvent>? readEvents, Exception? readFailure,
         MvProjectionStatusSnapshot currentStatus, CancellationToken cancellationToken,
         bool classifyFailures, IReadOnlyList<MvRegistryEntry>? originalEntries)
     {
-        var result = await CompleteCatchUpCoreAsync(host, serviceId, readResult, currentStatus,
+        var result = await CompleteCatchUpCoreAsync(host, serviceId, readEvents, readFailure, currentStatus,
             cancellationToken, classifyFailures, originalEntries).ConfigureAwait(false);
         if (result.Outcome != MvCatchUpOutcome.Superseded && result.ErrorCode != "apply-superseded-without-progress")
         {
@@ -1056,7 +1068,7 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvOrleansCatch
     }
 
     private async Task<MvCatchUpResult> CompleteCatchUpCoreAsync(
-        IMvApplyHost host, string serviceId, ResultBox<IEnumerable<SerializableEvent>> readResult,
+        IMvApplyHost host, string serviceId, IEnumerable<SerializableEvent>? readEvents, Exception? readFailure,
         MvProjectionStatusSnapshot currentStatus, CancellationToken cancellationToken,
         bool classifyFailures, IReadOnlyList<MvRegistryEntry>? originalEntries)
     {
@@ -1066,16 +1078,16 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvOrleansCatch
             _options.InitializationMode,
             MvTransition.CatchUp,
             new MvTransitionIdentity(serviceId, host.ViewName, host.ViewVersion));
-        if (!readResult.IsSuccess)
+        if (readFailure is not null)
         {
-            return HandleCatchUpReadFailure(host, readResult.GetException(), currentStatus, classifyFailures);
+            return HandleCatchUpReadFailure(host, readFailure, currentStatus, classifyFailures);
         }
 
         var safeThreshold = CreateSafeThreshold(_options.SafeWindowMs);
         var currentPosition = currentStatus.CurrentCheckpointTruth.IsKnown
             ? currentStatus.CurrentCheckpointTruth.PositionValue
             : null;
-        var batch = readResult.GetValue()
+        var batch = readEvents!
             .Where(serializable =>
                 string.IsNullOrWhiteSpace(currentPosition) ||
                 string.Compare(serializable.SortableUniqueIdValue, currentPosition, StringComparison.Ordinal) > 0)

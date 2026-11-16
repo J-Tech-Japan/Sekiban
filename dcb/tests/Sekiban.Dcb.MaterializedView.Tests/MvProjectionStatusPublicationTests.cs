@@ -87,7 +87,7 @@ public class MvProjectionStatusPublicationTests
             serviceProvider,
             StatusOptions());
         var request = new ProjectionStatusReadRequest(ServiceId, identity.ProjectorName, identity.ProjectorVersion);
-        var typed = await reader.ReadAsync(request);
+        var typed = await ResultBox.WrapTry(() => reader.ReadAsync(request));
         Assert.True(typed.IsSuccess, typed.IsSuccess ? null : typed.GetException().Message);
         var snapshot = Assert.Single(typed.GetValue());
         Assert.Equal(expectedPhase, snapshot.Phase);
@@ -98,9 +98,9 @@ public class MvProjectionStatusPublicationTests
         Assert.DoesNotContain("Password", snapshot.FaultMessage ?? string.Empty, StringComparison.OrdinalIgnoreCase);
 
         var serializedReader = new SerializedProjectionStatusReader(reader, serviceProvider);
-        var serialized = await serializedReader.AcceptAsync(SerializedProjectionStatusReader.SerializeRequest(request));
+        var serialized = await ResultBox.WrapTry(() => serializedReader.AcceptAsync(SerializedProjectionStatusReader.SerializeRequest(request)));
         Assert.True(serialized.IsSuccess, serialized.IsSuccess ? null : serialized.GetException().Message);
-        var envelope = SerializedProjectionStatusReader.Deserialize(serialized.GetValue());
+        var envelope = ResultBox.WrapTry(() => SerializedProjectionStatusReader.Deserialize(serialized.GetValue()));
         Assert.True(envelope.IsSuccess, envelope.IsSuccess ? null : envelope.GetException().Message);
         var wireSnapshot = Assert.Single(envelope.GetValue().Snapshots);
         Assert.Equal(expectedPhase, wireSnapshot.Phase);
@@ -327,9 +327,9 @@ public class MvProjectionStatusPublicationTests
             StatusOptions());
         var identity = MvProjectionStatusIdentity.Create(ViewName, ViewVersion);
         var request = new ProjectionStatusReadRequest(ServiceId, identity.ProjectorName, identity.ProjectorVersion);
-        Assert.Single((await reader.ReadAsync(request)).GetValue());
+        Assert.Single((await ResultBox.WrapTry(() => reader.ReadAsync(request))).GetValue());
         var serialized = new SerializedProjectionStatusReader(reader, serviceIdProvider);
-        Assert.True((await serialized.AcceptAsync(SerializedProjectionStatusReader.SerializeRequest(request))).IsSuccess);
+        Assert.True((await ResultBox.WrapTry(() => serialized.AcceptAsync(SerializedProjectionStatusReader.SerializeRequest(request)))).IsSuccess);
         Assert.Equal(0, targetIo.FactoryResolutions);
         Assert.Equal(0, targetIo.OpenCalls);
         Assert.Equal(0, targetIo.QueryCalls);

@@ -286,15 +286,15 @@ public abstract class MvStatusTargetIsolationTests(MultiProviderFixtureBase fixt
             MultiProviderFixtureBase.ServiceId,
             identity.ProjectorName,
             identity.ProjectorVersion);
-        var typed = await reader.ReadAsync(request).ConfigureAwait(false);
+        var typed = await ResultBox.WrapTry(() => reader.ReadAsync(request));
         Assert.True(typed.IsSuccess, typed.IsSuccess ? null : typed.GetException().Message);
         Assert.Single(typed.GetValue());
 
         var serialized = new SerializedProjectionStatusReader(reader, serviceIdProvider);
-        var response = await serialized.AcceptAsync(SerializedProjectionStatusReader.SerializeRequest(request))
-            .ConfigureAwait(false);
+        var response = await ResultBox.WrapTry(() => serialized.AcceptAsync(SerializedProjectionStatusReader.SerializeRequest(request))
+            );
         Assert.True(response.IsSuccess, response.IsSuccess ? null : response.GetException().Message);
-        Assert.True(SerializedProjectionStatusReader.Deserialize(response.GetValue()).IsSuccess);
+        Assert.NotNull(SerializedProjectionStatusReader.Deserialize(response.GetValue()));
     }
 
     internal static ProjectionStatusOptions StatusOptionsForSilo() => new()

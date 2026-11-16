@@ -8,6 +8,7 @@ using Sekiban.Dcb.Commands;
 using Sekiban.Dcb.LegacyConsumerFixture;
 using Sekiban.Dcb.Testing;
 using Xunit;
+using ResultBoxes;
 namespace Sekiban.Dcb.Tests.SerializedCommitWire;
 
 /// <summary>
@@ -77,7 +78,7 @@ public class SerializedCommitAcceptanceE2ETests
         string Name(int i) => cands[i].GetProperty("eventPayloadName").GetString()!;
 
         var domainTypes = DomainType.GetDomainTypes();
-        var result = await new SerializedCommitAcceptor(CreateRealExecutor(domainTypes)).AcceptAsync(frozen);
+        var result = await ResultBox.WrapTry(() => new SerializedCommitAcceptor(CreateRealExecutor(domainTypes)).AcceptAsync(frozen));
 
         Assert.True(result.IsSuccess, result.IsSuccess ? "" : result.GetException().ToString());
         var commit = result.GetValue();
@@ -94,8 +95,8 @@ public class SerializedCommitAcceptanceE2ETests
     public async Task FrozenEmptyRequestBytes_ThroughAcceptor_AreAcceptedAsEmptyCommit()
     {
         var domainTypes = DomainType.GetDomainTypes();
-        var result = await new SerializedCommitAcceptor(CreateRealExecutor(domainTypes))
-            .AcceptAsync(LoadFrozen("legacy_1017_empty.json"));
+        var result = await ResultBox.WrapTry(() => new SerializedCommitAcceptor(CreateRealExecutor(domainTypes))
+            .AcceptAsync(LoadFrozen("legacy_1017_empty.json")));
 
         Assert.True(result.IsSuccess, result.IsSuccess ? "" : result.GetException().ToString());
         Assert.Empty(result.GetValue().WrittenEvents);
@@ -118,8 +119,8 @@ public class SerializedCommitAcceptanceE2ETests
         var frozen = LoadFrozen("legacy_1017_unversioned.json");
         var versioned = Encoding.UTF8.GetBytes("{\"version\":1," + Encoding.UTF8.GetString(frozen).Substring(1));
 
-        var legacy = (await new SerializedCommitAcceptor(CreateRealExecutor(domainTypes)).AcceptAsync(frozen)).GetValue();
-        var envelope = (await new SerializedCommitAcceptor(CreateRealExecutor(domainTypes)).AcceptAsync(versioned)).GetValue();
+        var legacy = (await ResultBox.WrapTry(() => new SerializedCommitAcceptor(CreateRealExecutor(domainTypes)).AcceptAsync(frozen))).GetValue();
+        var envelope = (await ResultBox.WrapTry(() => new SerializedCommitAcceptor(CreateRealExecutor(domainTypes)).AcceptAsync(versioned))).GetValue();
 
         static object[] Shape(SerializedCommitResult r) =>
             r.WrittenEvents

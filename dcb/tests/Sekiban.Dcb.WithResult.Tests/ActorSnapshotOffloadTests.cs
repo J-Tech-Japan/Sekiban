@@ -47,7 +47,7 @@ public class ActorSnapshotOffloadTests
         var small = new Created("small");
         await actor.AddEventsAsync(new[] { Ev(small) });
 
-        var envelope = await actor.GetSnapshotAsync(false);
+        var envelope = await ResultBox.WrapTry(() => actor.GetSnapshotAsync(false));
 
         Assert.True(envelope.IsSuccess);
         var env = envelope.GetValue();
@@ -69,7 +69,7 @@ public class ActorSnapshotOffloadTests
             await actor.AddEventsAsync(new[] { Ev(created) });
         }
 
-        var envelope = await actor.GetSnapshotAsync(true);
+        var envelope = await ResultBox.WrapTry(() => actor.GetSnapshotAsync(true));
 
         Assert.True(envelope.IsSuccess);
         var env = envelope.GetValue();
@@ -92,10 +92,10 @@ public class ActorSnapshotOffloadTests
             await actor.AddEventsAsync(new[] { Ev(created) });
         }
 
-        var envelopeResult = await actor.BuildSnapshotEnvelopeAsync(
+        var envelopeResult = await ResultBox.WrapTry(() => actor.BuildSnapshotEnvelopeAsync(
             canGetUnsafeState: true,
             blobAccessor: blobAccessor,
-            offloadThresholdBytes: 512);
+            offloadThresholdBytes: 512));
 
         Assert.True(envelopeResult.IsSuccess);
         var envelope = envelopeResult.GetValue();
@@ -113,7 +113,7 @@ public class ActorSnapshotOffloadTests
             new GeneralMultiProjectionActorOptions { SafeWindowMs = 1000 });
         await restoredActor.SetSnapshotAsync(resolved);
 
-        var stateResult = await restoredActor.GetStateAsync(canGetUnsafeState: true);
+        var stateResult = await ResultBox.WrapTry(() => restoredActor.GetStateAsync(canGetUnsafeState: true));
         Assert.True(stateResult.IsSuccess);
         var restoredPayload = Assert.IsType<BigPayloadProjector>(stateResult.GetValue().Payload);
         Assert.Equal(6, restoredPayload.Items.Count);
@@ -136,11 +136,11 @@ public class ActorSnapshotOffloadTests
             await actor.AddEventsAsync(new[] { Ev(created) });
         }
 
-        var envelopeResult = await actor.BuildSnapshotEnvelopeStreamFirstAsync(
+        var envelopeResult = await ResultBox.WrapTry(() => actor.BuildSnapshotEnvelopeStreamFirstAsync(
             bufferProvider,
             canGetUnsafeState: true,
             blobAccessor: blobAccessor,
-            offloadThresholdBytes: 512);
+            offloadThresholdBytes: 512));
 
         Assert.True(envelopeResult.IsSuccess);
         var envelope = envelopeResult.GetValue();
@@ -161,7 +161,7 @@ public class ActorSnapshotOffloadTests
             new GeneralMultiProjectionActorOptions { SafeWindowMs = 1000 });
         await restoredActor.SetSnapshotAsync(resolved);
 
-        var stateResult = await restoredActor.GetStateAsync(canGetUnsafeState: true);
+        var stateResult = await ResultBox.WrapTry(() => restoredActor.GetStateAsync(canGetUnsafeState: true));
         Assert.True(stateResult.IsSuccess);
         var restoredPayload = Assert.IsType<BigPayloadProjector>(stateResult.GetValue().Payload);
         Assert.Equal(6, restoredPayload.Items.Count);
@@ -181,11 +181,11 @@ public class ActorSnapshotOffloadTests
         // Small payload, well under the offload threshold.
         await actor.AddEventsAsync(new[] { Ev(new Created("tiny")) });
 
-        var envelopeResult = await actor.BuildSnapshotEnvelopeStreamFirstAsync(
+        var envelopeResult = await ResultBox.WrapTry(() => actor.BuildSnapshotEnvelopeStreamFirstAsync(
             bufferProvider,
             canGetUnsafeState: true,
             blobAccessor: blobAccessor,
-            offloadThresholdBytes: 1024 * 1024);
+            offloadThresholdBytes: 1024 * 1024));
 
         Assert.True(envelopeResult.IsSuccess);
         var envelope = envelopeResult.GetValue();
@@ -201,7 +201,7 @@ public class ActorSnapshotOffloadTests
             new GeneralMultiProjectionActorOptions { SafeWindowMs = 1000 });
         await restoredActor.SetSnapshotAsync(envelope);
 
-        var stateResult = await restoredActor.GetStateAsync(canGetUnsafeState: true);
+        var stateResult = await ResultBox.WrapTry(() => restoredActor.GetStateAsync(canGetUnsafeState: true));
         Assert.True(stateResult.IsSuccess);
         var restoredPayload = Assert.IsType<BigPayloadProjector>(stateResult.GetValue().Payload);
         Assert.Single(restoredPayload.Items);
@@ -235,11 +235,11 @@ public class ActorSnapshotOffloadTests
                 await actor.AddEventsAsync(new[] { Ev(created) });
             }
 
-            var envelopeResult = await actor.BuildSnapshotEnvelopeStreamFirstAsync(
+            var envelopeResult = await ResultBox.WrapTry(() => actor.BuildSnapshotEnvelopeStreamFirstAsync(
                 bufferProvider,
                 canGetUnsafeState: true,
                 blobAccessor: blobAccessor,
-                offloadThresholdBytes: 512);
+                offloadThresholdBytes: 512));
 
             Assert.True(envelopeResult.IsSuccess);
             var envelope = envelopeResult.GetValue();

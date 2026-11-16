@@ -1,4 +1,3 @@
-using ResultBoxes;
 using Sekiban.Dcb.Domains;
 using System.Text;
 namespace Sekiban.Dcb.Events;
@@ -26,25 +25,10 @@ public static class EventSerializationExtensions
     }
 
     /// <summary>
-    ///     Convert SerializableEvent to Event using the provided domain types for deserialization
+    ///     Convert SerializableEvent to Event using the provided domain types for deserialization.
+    ///     Throws when the payload cannot be deserialized (for example an unregistered event type).
     /// </summary>
-    public static ResultBox<Event> ToEvent(this SerializableEvent serializable, IEventTypes eventTypes)
-    {
-        try
-        {
-            return ResultBox.FromValue(serializable.ToEventOrThrow(eventTypes));
-        }
-        catch (Exception ex)
-        {
-            return ResultBox.Error<Event>(ex);
-        }
-    }
-
-    /// <summary>
-    ///     Exception-based form of <see cref="ToEvent" />: returns the event or throws the same exception
-    ///     <see cref="ToEvent" /> would carry in its failed box.
-    /// </summary>
-    internal static Event ToEventOrThrow(this SerializableEvent serializable, IEventTypes eventTypes)
+    public static Event ToEvent(this SerializableEvent serializable, IEventTypes eventTypes)
     {
         var payloadJson = Encoding.UTF8.GetString(serializable.Payload);
         var payload = eventTypes.DeserializeEventPayload(serializable.EventPayloadName, payloadJson)

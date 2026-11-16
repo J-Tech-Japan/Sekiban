@@ -44,7 +44,7 @@ class Failure(RuntimeError):
 
 def resultboxes_allowed(source):
     # The ResultBoxes ratchet list as compiled into the validator; fixture packages that are in it
-    # declare ResultBoxes directly, as the real packs reach it (directly or through Core).
+    # declare ResultBoxes directly, as the real packs reach it (directly or through another listed package).
     text=(source/REL/'PackageArtifactValidator.cs').read_text()
     block=re.search(r'ResultBoxesAllowedPackageIds =\s*\[(.*?)\];', text, re.S)
     assert block, 'ResultBoxesAllowedPackageIds not found'
@@ -839,8 +839,9 @@ def resultboxes_ratchet_cases(f, feed, command):
             print(f'PASS rejects {case}: {reason}', flush=True)
         else:
             raise Failure(case+' unexpectedly passed')
-    target = 'Sekiban.Dcb.MaterializedView.Postgres'
-    assert target in f.resultboxes and 'Sekiban.Dcb.Core' in f.resultboxes
+    target = 'Sekiban.Dcb.Orleans.AzureQueue'
+    via = 'Sekiban.Dcb.Orleans.Core'
+    assert target in f.resultboxes and via in f.resultboxes
     direct = b'<dependency id="ResultBoxes" version="0.4.0" />'
     path = feed/f'{target}.{f.version}.nupkg'
     original = path.read_bytes()
@@ -854,18 +855,18 @@ def resultboxes_ratchet_cases(f, feed, command):
         rejected('resultboxes-allowed-package-lost-dependency', 'no longer reaches ResultBoxes in net10.0; remove it from ResultBoxesAllowedPackageIds')
         path.write_bytes(original)
         rejected('resultboxes-direct-outside-allowed-set', f'{target} reaches ResultBoxes in net10.0 ({target} -> ResultBoxes) but is outside the ResultBoxes allowed set', narrowed)
-        rewrite(target, direct, f'<dependency id="Sekiban.Dcb.Core" version="{f.version}" />'.encode())
-        rejected('resultboxes-transitive-outside-allowed-set', f'{target} reaches ResultBoxes in net10.0 ({target} -> Sekiban.Dcb.Core -> ResultBoxes) but is outside the ResultBoxes allowed set', narrowed)
+        rewrite(target, direct, f'<dependency id="{via}" version="{f.version}" />'.encode())
+        rejected('resultboxes-transitive-outside-allowed-set', f'{target} reaches ResultBoxes in net10.0 ({target} -> {via} -> ResultBoxes) but is outside the ResultBoxes allowed set', narrowed)
         # NuGet IDs are case-insensitive; a nuspec keeps the csproj's spelling.
         path.write_bytes(original)
         rewrite(target, direct, b'<dependency id="resultboxes" version="0.4.0" />')
         rejected('resultboxes-lowercase-direct-outside-allowed-set', f'{target} reaches ResultBoxes in net10.0 ({target} -> resultboxes) but is outside the ResultBoxes allowed set', narrowed)
         path.write_bytes(original)
-        rewrite(target, direct, f'<dependency id="sekiban.dcb.core" version="{f.version}" />'.encode())
+        rewrite(target, direct, f'<dependency id="{via.lower()}" version="{f.version}" />'.encode())
         rejected('resultboxes-lowercase-transitive-outside-allowed-set', f'{target} reaches ResultBoxes in net10.0 ({target} -> ', narrowed,
                  also=['-> ResultBoxes) but is outside the ResultBoxes allowed set'])
         rejected('resultboxes-subset-widens-list', 'may only narrow ResultBoxesAllowedPackageIds',
-                 ['--resultboxes-allowed-subset', 'Sekiban.Dcb.Core,Sekiban.Dcb.Unlisted'])
+                 ['--resultboxes-allowed-subset', f'{via},Sekiban.Dcb.Unlisted'])
     finally:
         path.write_bytes(original)
     run(command, f.repo, f.env)

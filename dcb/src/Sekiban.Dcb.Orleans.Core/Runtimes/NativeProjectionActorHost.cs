@@ -6,6 +6,7 @@ using Sekiban.Dcb.Events;
 using Sekiban.Dcb.MultiProjections;
 using Sekiban.Dcb.Orleans.Serialization;
 using Sekiban.Dcb.Snapshots;
+using Sekiban.Dcb.Common;
 
 namespace Sekiban.Dcb.Runtime.Native;
 
@@ -83,8 +84,8 @@ public class NativeProjectionActorHost : IProjectionActorHost, IRebuildSignaling
 
     public async Task<ResultBox<ProjectionStateMetadata>> GetStateMetadataAsync(bool includeUnsafe = true)
     {
-        var unsafeResult = await _actor.GetStateAsync(canGetUnsafeState: true);
-        var safeResult = await _actor.GetStateAsync(canGetUnsafeState: false);
+        var unsafeResult = await _actor.GetStateAsync(canGetUnsafeState: true).ToResultBoxAsync();
+        var safeResult = await _actor.GetStateAsync(canGetUnsafeState: false).ToResultBoxAsync();
 
         if (!safeResult.IsSuccess)
         {
@@ -120,7 +121,7 @@ public class NativeProjectionActorHost : IProjectionActorHost, IRebuildSignaling
 
     public Task<ResultBox<MultiProjectionState>> GetStateAsync(bool canGetUnsafeState = true)
     {
-        return _actor.GetStateAsync(canGetUnsafeState);
+        return _actor.GetStateAsync(canGetUnsafeState).ToResultBoxAsync();
     }
 
     public Task<ProjectionHeadStatus> GetProjectionHeadStatusAsync()

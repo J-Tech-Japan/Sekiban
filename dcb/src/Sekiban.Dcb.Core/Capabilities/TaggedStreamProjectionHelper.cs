@@ -1,4 +1,3 @@
-using ResultBoxes;
 using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Events;
@@ -22,7 +21,12 @@ internal sealed record TaggedStreamProjectionState(
 /// </summary>
 internal static class TaggedStreamProjectionHelper
 {
-    internal static async Task<ResultBox<TaggedStreamProjectionState>> ProjectAsync(
+    /// <summary>
+    ///     Projects the tag's native stream. Cancellation propagates; any other failure of the stream call (a store
+    ///     failure or one thrown by the projection callback) is rethrown as itself after the caller's token has been
+    ///     observed.
+    /// </summary>
+    internal static async Task<TaggedStreamProjectionState> ProjectAsync(
         IStreamingTaggedSerializableEventStore streamStore,
         ITag tag,
         SortableUniqueId? since,
@@ -39,7 +43,7 @@ internal static class TaggedStreamProjectionHelper
         var eventCount = 0;
         var lastSortableUniqueId = initialLastSortableUniqueId;
         var previousId = initialPreviousId;
-        var streamResult = await streamStore.StreamSerializableEventsByTagAsync(
+        var stream = streamStore.StreamSerializableEventsByTagAsync(
             tag,
             since,
             until,
@@ -73,30 +77,45 @@ internal static class TaggedStreamProjectionHelper
                         $"Tagged stream for {tag.GetTag()} exceeded captured head {capturedHead.Value}.");
                 }
 
-                var eventResult = serializableEvent.ToEvent(eventTypes);
-                cancellationToken.ThrowIfCancellationRequested();
-                if (!eventResult.IsSuccess)
+                Event? domainEvent = null;
+                Exception? deserializeFailure = null;
+                try
                 {
-                    throw new InvalidOperationException(
-                        $"Failed to deserialize event for tag {tag.GetTag()}: {eventResult.GetException().Message}",
-                        eventResult.GetException());
+                    domainEvent = serializableEvent.ToEvent(eventTypes);
+                }
+                catch (Exception ex)
+                {
+                    deserializeFailure = ex;
                 }
 
-                state = projector(state, eventResult.GetValue());
+                cancellationToken.ThrowIfCancellationRequested();
+                if (deserializeFailure is not null)
+                {
+                    throw new InvalidOperationException(
+                        $"Failed to deserialize event for tag {tag.GetTag()}: {deserializeFailure.Message}",
+                        deserializeFailure);
+                }
+
+                state = projector(state, domainEvent!);
                 cancellationToken.ThrowIfCancellationRequested();
                 eventCount++;
                 lastSortableUniqueId = serializableEvent.SortableUniqueIdValue;
                 previousId = serializableEvent.SortableUniqueIdValue;
                 return ValueTask.CompletedTask;
             },
-            cancellationToken).ToResultBoxPropagatingCancellationAsync();
+            cancellationToken);
 
-        cancellationToken.ThrowIfCancellationRequested();
-        if (!streamResult.IsSuccess)
+        try
         {
-            return ResultBox.Error<TaggedStreamProjectionState>(streamResult.GetException());
+            await stream;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            throw;
         }
 
-        return ResultBox.FromValue(new TaggedStreamProjectionState(state, eventCount, lastSortableUniqueId));
+        cancellationToken.ThrowIfCancellationRequested();
+        return new TaggedStreamProjectionState(state, eventCount, lastSortableUniqueId);
     }
 }

@@ -1,5 +1,4 @@
 using System.Text.Json;
-using ResultBoxes;
 using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.Storage;
@@ -32,7 +31,7 @@ public sealed class SerializedCommitAcceptor : ISerializedCommitAcceptor
 
     public SerializedCommitAcceptor(ISerializedSekibanDcbExecutor executor) => _executor = executor;
 
-    public Task<ResultBox<SerializedCommitResult>> AcceptAsync(
+    public Task<SerializedCommitResult> AcceptAsync(
         ReadOnlyMemory<byte> utf8Json,
         CancellationToken cancellationToken = default)
     {
@@ -44,10 +43,9 @@ public sealed class SerializedCommitAcceptor : ISerializedCommitAcceptor
                 return Malformed(discrimination.ShapeError ?? SerializedCommitShapeError.UnreadableJson);
 
             case SerializedCommitVersionKind.UnsupportedVersion:
-                return Task.FromResult(
-                    ResultBox.Error<SerializedCommitResult>(
-                        new UnsupportedSerializedCommitEnvelopeVersionException(
-                            discrimination.Version!.Value, VersionedExpectedTagPositionSerializedCommitRequest.CurrentVersion)));
+                return Task.FromException<SerializedCommitResult>(
+                    new UnsupportedSerializedCommitEnvelopeVersionException(
+                        discrimination.Version!.Value, VersionedExpectedTagPositionSerializedCommitRequest.CurrentVersion));
 
             case SerializedCommitVersionKind.LegacyUnversioned:
                 return BindLegacyThenExecuteAsync(utf8Json, cancellationToken);
@@ -62,7 +60,7 @@ public sealed class SerializedCommitAcceptor : ISerializedCommitAcceptor
         }
     }
 
-    private Task<ResultBox<SerializedCommitResult>> BindLegacyThenExecuteAsync(
+    private Task<SerializedCommitResult> BindLegacyThenExecuteAsync(
         ReadOnlyMemory<byte> utf8Json,
         CancellationToken cancellationToken)
     {
@@ -91,7 +89,7 @@ public sealed class SerializedCommitAcceptor : ISerializedCommitAcceptor
         return ExecuteAsync(envelope, cancellationToken);
     }
 
-    private Task<ResultBox<SerializedCommitResult>> BindVersionedThenExecuteAsync(
+    private Task<SerializedCommitResult> BindVersionedThenExecuteAsync(
         ReadOnlyMemory<byte> utf8Json,
         CancellationToken cancellationToken)
     {
@@ -118,7 +116,7 @@ public sealed class SerializedCommitAcceptor : ISerializedCommitAcceptor
         return ExecuteAsync(envelope, cancellationToken);
     }
 
-    private Task<ResultBox<SerializedCommitResult>> BindExpectedTagPositionThenExecuteAsync(
+    private Task<SerializedCommitResult> BindExpectedTagPositionThenExecuteAsync(
         ReadOnlyMemory<byte> utf8Json,
         CancellationToken cancellationToken)
     {
@@ -144,14 +142,14 @@ public sealed class SerializedCommitAcceptor : ISerializedCommitAcceptor
         // gets an opportunity to interpret V2 as an unconditional V1 write.
         if (_executor is not ISerializedExpectedTagPositionSekibanDcbExecutor expectedPositionExecutor)
         {
-            return Task.FromResult(ResultBox.Error<SerializedCommitResult>(
-                new ConditionNotSupportedException(Sekiban.Dcb.Capabilities.WriteConditionKind.ExpectedTagPosition, "resolved serialized executor")));
+            return Task.FromException<SerializedCommitResult>(
+                new ConditionNotSupportedException(Sekiban.Dcb.Capabilities.WriteConditionKind.ExpectedTagPosition, "resolved serialized executor"));
         }
 
         return expectedPositionExecutor.CommitSerializableEventsWithExpectedTagPositionsAsync(envelope, cancellationToken);
     }
 
-    private Task<ResultBox<SerializedCommitResult>> ExecuteAsync(
+    private Task<SerializedCommitResult> ExecuteAsync(
         VersionedSerializedCommitRequest envelope,
         CancellationToken cancellationToken)
     {
@@ -163,6 +161,6 @@ public sealed class SerializedCommitAcceptor : ISerializedCommitAcceptor
         return _executor.CommitSerializableEventsAsync(request, cancellationToken);
     }
 
-    private static Task<ResultBox<SerializedCommitResult>> Malformed(SerializedCommitShapeError reason) =>
-        Task.FromResult(ResultBox.Error<SerializedCommitResult>(new MalformedSerializedCommitException(reason)));
+    private static Task<SerializedCommitResult> Malformed(SerializedCommitShapeError reason) =>
+        Task.FromException<SerializedCommitResult>(new MalformedSerializedCommitException(reason));
 }

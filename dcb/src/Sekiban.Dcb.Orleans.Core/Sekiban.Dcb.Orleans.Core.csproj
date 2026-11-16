@@ -41,6 +41,8 @@
         <PackageReference Include="Microsoft.Orleans.Server" Version="$(MicrosoftOrleansVersion)" />
         <PackageReference Include="Microsoft.Orleans.Streaming" Version="$(MicrosoftOrleansVersion)" />
         <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
+        <!-- The grain interfaces still carry ResultBox until the Orleans slice of 11.0 converts them. -->
+        <PackageReference Include="ResultBoxes" Version="0.4.0"/>
         <PackageReference Include="Microsoft.Sbom.Targets" Version="4.1.5">
             <PrivateAssets>all</PrivateAssets>
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>

@@ -16,6 +16,7 @@ using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Testing;
 using Xunit;
 using Sekiban.Dcb.TestSupport;
+using ResultBoxes;
 
 namespace Sekiban.Dcb.MaterializedView.Tests;
 
@@ -154,8 +155,8 @@ public sealed class MvActivationEligibilityTests
             },
             expectedSequence: 0).AsResultBoxAsync();
         Assert.True(write.IsSuccess);
-        var statusResult = await provider.GetRequiredService<IProjectionStatusReader>()
-            .ReadAsync(new ProjectionStatusReadRequest(serviceId, "Weather", "2"));
+        var statusResult = await ResultBox.WrapTry(() => provider.GetRequiredService<IProjectionStatusReader>()
+            .ReadAsync(new ProjectionStatusReadRequest(serviceId, "Weather", "2")));
         Assert.True(statusResult.IsSuccess);
         var g24Observation = Assert.Single(statusResult.GetValue());
         Assert.True(g24Observation.IsCaughtUp);

@@ -3,7 +3,6 @@ using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Text;
 using Microsoft.Extensions.Logging;
-using ResultBoxes;
 using Sekiban.Dcb.ServiceId;
 using Sekiban.Dcb.Storage;
 
@@ -258,16 +257,17 @@ public sealed class MvProjectionStatusPublisher
         using var writeCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         var timeout = PositiveOrDefault(_options.HeartbeatWriteTimeout, TimeSpan.FromSeconds(5));
         writeCts.CancelAfter(timeout);
-        var result = await ResultBox.WrapTry(() => _statusStore!.UpsertAsync(heartbeat, expected, writeCts.Token))
+        // A failed write (the store's own failure) is rate-limit logged; the wait's timeout and the caller's
+        // cancellation still propagate, as before.
+        var write = await TryUpsertAsync(heartbeat, expected, writeCts.Token)
             .WaitAsync(timeout, cancellationToken)
             .ConfigureAwait(false);
-        if (!result.IsSuccess)
+        if (write is null)
         {
             LogFailureRateLimited(key, now);
             return;
         }
 
-        var write = result.GetValue();
         if (write.Committed)
         {
             fence.Sequence = write.Current?.Sequence ?? next;
@@ -288,6 +288,21 @@ public sealed class MvProjectionStatusPublisher
         }
 
         LogFailureRateLimited(key, now);
+    }
+
+    private async Task<ProjectionStatusWriteResult?> TryUpsertAsync(
+        ProjectionStatusHeartbeat heartbeat,
+        long expected,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await _statusStore!.UpsertAsync(heartbeat, expected, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception)
+        {
+            return null;
+        }
     }
 
     private void LogFailureRateLimited(string key, DateTimeOffset now)

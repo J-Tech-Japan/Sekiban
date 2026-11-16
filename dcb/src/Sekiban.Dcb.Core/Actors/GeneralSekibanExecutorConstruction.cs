@@ -10,7 +10,7 @@ using Sekiban.Dcb.TagConsistencyFence;
 namespace Sekiban.Dcb.Actors;
 
 /// <summary>
-///     Internal construction state shared by the ResultBox and exception facade assemblies.
+///     Internal construction state shared by the WithResult and WithoutResult facade assemblies.
 ///     Keeping the state transfer here lets both public facades retain their historical constructors without
 ///     duplicating the size-gate construction bodies.
 /// </summary>

@@ -8,6 +8,7 @@ using Sekiban.Dcb.MultiProjections;
 using Sekiban.Dcb.Tags;
 using Xunit;
 using Xunit.Abstractions;
+using ResultBoxes;
 
 namespace Sekiban.Dcb.Tests;
 
@@ -58,7 +59,7 @@ public class StudentActorSimpleTest
         await actor.AddEventsAsync(new[] { ev });
 
         // Get state from actor
-        var stateResult = await actor.GetStateAsync();
+        var stateResult = await ResultBox.WrapTry(() => actor.GetStateAsync());
         Assert.True(stateResult.IsSuccess);
         var state = stateResult.GetValue();
 
@@ -137,7 +138,7 @@ public class StudentActorSimpleTest
         await actor.AddEventsAsync(events);
 
         // Get state
-        var stateResult = await actor.GetStateAsync();
+        var stateResult = await ResultBox.WrapTry(() => actor.GetStateAsync());
         Assert.True(stateResult.IsSuccess);
         var state = stateResult.GetValue();
 
@@ -193,7 +194,7 @@ public class StudentActorSimpleTest
         await actor.AddEventsAsync(new[] { event1 });
 
         // Check state after first student
-        var state1 = await actor.GetStateAsync();
+        var state1 = await ResultBox.WrapTry(() => actor.GetStateAsync());
         Assert.True(state1.IsSuccess);
 
         if (state1.GetValue().Payload is GenericTagMultiProjector<StudentProjector, StudentTag> proj1)
@@ -219,7 +220,7 @@ public class StudentActorSimpleTest
         await actor.AddEventsAsync(new[] { event2 });
 
         // Check state after second student
-        var state2 = await actor.GetStateAsync();
+        var state2 = await ResultBox.WrapTry(() => actor.GetStateAsync());
         Assert.True(state2.IsSuccess);
 
         if (state2.GetValue().Payload is GenericTagMultiProjector<StudentProjector, StudentTag> proj2)

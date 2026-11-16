@@ -144,7 +144,7 @@ public sealed class DurableSubscriptionRunnerTests
         internal int AcknowledgementCount { get; private set; }
         internal Exception? AcknowledgementError { get; private set; }
 
-        public Task<ResultBox<DurableSubscriptionState>> InitializeOrGetAsync(
+        public Task<DurableSubscriptionState> InitializeOrGetAsync(
             DurableSubscriptionIdentity identity,
             DurableSubscriptionStartPolicy startPolicy,
             string safeTail,
@@ -157,19 +157,19 @@ public sealed class DurableSubscriptionRunnerTests
                 Phase = DurableSubscriptionPhase.CatchingUp,
                 UpdatedAtUtc = DateTimeOffset.UtcNow
             };
-            return Task.FromResult(ResultBox.FromValue(State));
+            return Task.FromResult(State);
         }
 
-        public Task<ResultBox<DurableSubscriptionState>> ReadAsync(
+        public Task<DurableSubscriptionState> ReadAsync(
             DurableSubscriptionIdentity identity,
             CancellationToken cancellationToken = default)
         {
             ReadCount++;
             _nudge.FirstReadObserved = true;
-            return Task.FromResult(ResultBox.FromValue(State));
+            return Task.FromResult(State);
         }
 
-        public Task<ResultBox<DurableSubscriptionLease>> TryAcquireAsync(
+        public Task<DurableSubscriptionLease> TryAcquireAsync(
             DurableSubscriptionIdentity identity,
             string ownerId,
             TimeSpan leaseDuration,
@@ -185,26 +185,26 @@ public sealed class DurableSubscriptionRunnerTests
                 Phase = DurableSubscriptionPhase.CatchingUp,
                 UpdatedAtUtc = DateTimeOffset.UtcNow
             };
-            return Task.FromResult(ResultBox.FromValue(new DurableSubscriptionLease(true, State)));
+            return Task.FromResult(new DurableSubscriptionLease(true, State));
         }
 
-        public Task<ResultBox<bool>> RenewAsync(
+        public Task<bool> RenewAsync(
             DurableSubscriptionIdentity identity,
             string ownerId,
             long ownerGeneration,
             TimeSpan leaseDuration,
             CancellationToken cancellationToken = default) =>
-            Task.FromResult(ResultBox.FromValue(
-                string.Equals(ownerId, _owner, StringComparison.Ordinal) && ownerGeneration == _generation));
+            Task.FromResult(
+                string.Equals(ownerId, _owner, StringComparison.Ordinal) && ownerGeneration == _generation);
 
-        public Task<ResultBox<bool>> IsRetryDueAsync(
+        public Task<bool> IsRetryDueAsync(
             DurableSubscriptionIdentity identity,
             string ownerId,
             long ownerGeneration,
             CancellationToken cancellationToken = default) =>
-            Task.FromResult(ResultBox.FromValue(true));
+            Task.FromResult(true);
 
-        public Task<ResultBox<DurableSubscriptionState>> AcknowledgeAsync(
+        public Task<DurableSubscriptionState> AcknowledgeAsync(
             DurableSubscriptionIdentity identity,
             string ownerId,
             long ownerGeneration,
@@ -217,7 +217,7 @@ public sealed class DurableSubscriptionRunnerTests
                 Assert.Equal(_generation, ownerGeneration);
                 AcknowledgementCount++;
                 State = State with { AcknowledgedPosition = position, UpdatedAtUtc = DateTimeOffset.UtcNow };
-                return Task.FromResult(ResultBox.FromValue(State));
+                return Task.FromResult(State);
             }
             catch (Exception ex)
             {
@@ -226,7 +226,7 @@ public sealed class DurableSubscriptionRunnerTests
             }
         }
 
-        public Task<ResultBox<DurableSubscriptionState>> RecordFailureAsync(
+        public Task<DurableSubscriptionState> RecordFailureAsync(
             DurableSubscriptionIdentity identity,
             string ownerId,
             long ownerGeneration,
@@ -236,29 +236,29 @@ public sealed class DurableSubscriptionRunnerTests
             int maxHandlerAttempts,
             TimeSpan retryDelay,
             CancellationToken cancellationToken = default) =>
-            Task.FromResult(ResultBox.FromValue(State));
+            Task.FromResult(State);
 
-        public Task<ResultBox<DurableSubscriptionState>> ResumeAsync(
+        public Task<DurableSubscriptionState> ResumeAsync(
             DurableSubscriptionIdentity identity,
             CancellationToken cancellationToken = default) =>
-            Task.FromResult(ResultBox.FromValue(State));
+            Task.FromResult(State);
 
-        public Task<ResultBox<DurableSubscriptionState>> HaltAsync(
+        public Task<DurableSubscriptionState> HaltAsync(
             DurableSubscriptionIdentity identity,
             string ownerId,
             long ownerGeneration,
             string reason,
             CancellationToken cancellationToken = default) =>
-            Task.FromResult(ResultBox.FromValue(State with { Phase = DurableSubscriptionPhase.Halted }));
+            Task.FromResult(State with { Phase = DurableSubscriptionPhase.Halted });
 
-        public Task<ResultBox<DurableSubscriptionState>> MarkIdleAsync(
+        public Task<DurableSubscriptionState> MarkIdleAsync(
             DurableSubscriptionIdentity identity,
             string ownerId,
             long ownerGeneration,
             CancellationToken cancellationToken = default)
         {
             State = State with { Phase = DurableSubscriptionPhase.Idle, UpdatedAtUtc = DateTimeOffset.UtcNow };
-            return Task.FromResult(ResultBox.FromValue(State));
+            return Task.FromResult(State);
         }
     }
 }
