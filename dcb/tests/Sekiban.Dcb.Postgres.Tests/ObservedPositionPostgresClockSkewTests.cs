@@ -12,6 +12,7 @@ using Sekiban.Dcb.Tags;
 using Sekiban.Dcb.Testing;
 using Xunit;
 using Xunit.Abstractions;
+using Sekiban.Dcb.TestSupport;
 
 namespace Sekiban.Dcb.Postgres.Tests;
 
@@ -99,7 +100,7 @@ public sealed class ObservedPositionPostgresClockSkewTests(PostgresTestFixture f
         var c2 = await EnrollAsync(slow, "cmd2 SLOW enroll");
         var c3 = await EnrollAsync(thirdSlow ? slow : fast, "cmd3 enroll");
 
-        var rows = (await store.ReadSerializableEventsByTagAsync(tag)).GetValue().ToList();
+        var rows = (await store.ReadSerializableEventsByTagAsync(tag).AsResultBoxAsync()).GetValue().ToList();
         var enrollments = rows.Count(e => e.EventPayloadName == nameof(StudentEnrolledInClassRoom));
         output.WriteLine($"[{mode}] committed enrollments for a student with MaxClassCount=1: {enrollments}; " +
             $"ids in store order: {string.Join(" ", rows.Select(e => e.SortableUniqueIdValue[..19] + ":" + e.EventPayloadName))}");

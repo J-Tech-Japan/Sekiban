@@ -19,6 +19,7 @@ using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
 using Sekiban.Dcb.Testing;
 using Xunit;
+using Sekiban.Dcb.TestSupport;
 namespace Sekiban.Dcb.Orleans.Tests;
 
 /// <summary>
@@ -57,11 +58,11 @@ public class DurableRebuildMarkerAndRestartTests : IAsyncLifetime
 
         // One event, well outside the safe window (immediately safe). Seed + refresh + persist a checkpoint.
         var evt = ToSerializable(CreateEvent(new Counted("a"), DateTime.UtcNow.AddSeconds(-30)));
-        await Shared.EventStore.WriteSerializableEventsAsync(new[] { evt });
+        await Shared.EventStore.WriteSerializableEventsAsync(new[] { evt }).AsResultBoxAsync();
         await grain.RefreshAsync();
         Assert.True((await grain.PersistStateAsync()).IsSuccess);
 
-        var afterFirst = await Shared.StateStore.GetLatestForVersionAsync(CountProjector.MultiProjectorName, "1.0.0");
+        var afterFirst = await Shared.StateStore.GetLatestForVersionAsync(CountProjector.MultiProjectorName, "1.0.0").AsOptionalResultBoxAsync();
         Assert.True(afterFirst.GetValue().HasValue);
         var recordA = afterFirst.GetValue().GetValue();
 
@@ -79,7 +80,7 @@ public class DurableRebuildMarkerAndRestartTests : IAsyncLifetime
         Assert.Equal(0, Shared.StateStore.WriteCount);
 
         // And the durable row is byte-identical: same SafeWindowThreshold and same EventsProcessed as before the restart.
-        var afterRestore = await Shared.StateStore.GetLatestForVersionAsync(CountProjector.MultiProjectorName, "1.0.0");
+        var afterRestore = await Shared.StateStore.GetLatestForVersionAsync(CountProjector.MultiProjectorName, "1.0.0").AsOptionalResultBoxAsync();
         var recordB = afterRestore.GetValue().GetValue();
         Assert.Equal(recordA.SafeWindowThreshold, recordB.SafeWindowThreshold);
         Assert.Equal(recordA.EventsProcessed, recordB.EventsProcessed);
@@ -95,13 +96,13 @@ public class DurableRebuildMarkerAndRestartTests : IAsyncLifetime
         // The grain processes BOTH (total = 2), but the safe checkpoint folds only the old one (safe count = 1).
         var safeEvt = ToSerializable(CreateEvent(new Counted("safe"), DateTime.UtcNow.AddSeconds(-30)));
         var recentEvt = ToSerializable(CreateEvent(new Counted("recent"), DateTime.UtcNow));
-        await Shared.EventStore.WriteSerializableEventsAsync(new[] { safeEvt, recentEvt });
+        await Shared.EventStore.WriteSerializableEventsAsync(new[] { safeEvt, recentEvt }).AsResultBoxAsync();
         await grain.RefreshAsync();
 
         // Persist (the persist path does NOT go through the first-query barrier). The external record must carry the SAFE
         // count (1), not the total processed (2), paired with the safe position. The pre-fix bug persisted the total.
         Assert.True((await grain.PersistStateAsync()).IsSuccess);
-        var recordA = (await Shared.StateStore.GetLatestForVersionAsync(CountProjector.MultiProjectorName, "1.0.0")).GetValue().GetValue();
+        var recordA = (await Shared.StateStore.GetLatestForVersionAsync(CountProjector.MultiProjectorName, "1.0.0").AsOptionalResultBoxAsync()).GetValue().GetValue();
         Assert.Equal(1, recordA.EventsProcessed);                             // SAFE count, not the total processed (2)
         Assert.Equal(safeEvt.SortableUniqueIdValue, recordA.LastSortableUniqueId);
 
@@ -117,7 +118,7 @@ public class DurableRebuildMarkerAndRestartTests : IAsyncLifetime
         Assert.Equal(2, ((CountProjector)recovered.GetValue().Payload).Count);
 
         _ = await grain2.PersistStateAsync();
-        var recordB = (await Shared.StateStore.GetLatestForVersionAsync(CountProjector.MultiProjectorName, "1.0.0")).GetValue().GetValue();
+        var recordB = (await Shared.StateStore.GetLatestForVersionAsync(CountProjector.MultiProjectorName, "1.0.0").AsOptionalResultBoxAsync()).GetValue().GetValue();
         Assert.Equal(2, recordB.EventsProcessed);                            // both events now safe, re-folded ONCE (not 3)
         Assert.Equal(recentEvt.SortableUniqueIdValue, recordB.LastSortableUniqueId);
     }
@@ -157,23 +158,23 @@ public class DurableRebuildMarkerAndRestartTests : IAsyncLifetime
         public int WriteCount => _writeCount;
         public void ResetWriteCount() => Interlocked.Exchange(ref _writeCount, 0);
 
-        public Task<ResultBox<OptionalValue<MultiProjectionStateRecord>>> GetLatestForVersionAsync(
+        public Task<MultiProjectionStateRecord?> GetLatestForVersionAsync(
             string projectorName, string projectorVersion, CancellationToken ct = default) =>
             _inner.GetLatestForVersionAsync(projectorName, projectorVersion, ct);
-        public Task<ResultBox<OptionalValue<MultiProjectionStateRecord>>> GetLatestAnyVersionAsync(
+        public Task<MultiProjectionStateRecord?> GetLatestAnyVersionAsync(
             string projectorName, CancellationToken ct = default) => _inner.GetLatestAnyVersionAsync(projectorName, ct);
-        public Task<ResultBox<bool>> UpsertAsync(MultiProjectionStateRecord record, int offloadThresholdBytes = 1_000_000, CancellationToken ct = default)
+        public Task<bool> UpsertAsync(MultiProjectionStateRecord record, int offloadThresholdBytes = 1_000_000, CancellationToken ct = default)
         {
             Interlocked.Increment(ref _writeCount);
             return _inner.UpsertAsync(record, offloadThresholdBytes, ct);
         }
-        public Task<ResultBox<IReadOnlyList<ProjectorStateInfo>>> ListAllAsync(CancellationToken ct = default) => _inner.ListAllAsync(ct);
-        public Task<ResultBox<bool>> DeleteAsync(string projectorName, string projectorVersion, CancellationToken ct = default) =>
+        public Task<IReadOnlyList<ProjectorStateInfo>> ListAllAsync(CancellationToken ct = default) => _inner.ListAllAsync(ct);
+        public Task<bool> DeleteAsync(string projectorName, string projectorVersion, CancellationToken ct = default) =>
             _inner.DeleteAsync(projectorName, projectorVersion, ct);
-        public Task<ResultBox<int>> DeleteAllAsync(string? projectorName = null, CancellationToken ct = default) => _inner.DeleteAllAsync(projectorName, ct);
-        public Task<ResultBox<Stream>> OpenStateDataReadStreamAsync(MultiProjectionStateRecord record, CancellationToken ct = default) =>
+        public Task<int> DeleteAllAsync(string? projectorName = null, CancellationToken ct = default) => _inner.DeleteAllAsync(projectorName, ct);
+        public Task<Stream> OpenStateDataReadStreamAsync(MultiProjectionStateRecord record, CancellationToken ct = default) =>
             _inner.OpenStateDataReadStreamAsync(record, ct);
-        public Task<ResultBox<bool>> UpsertFromStreamAsync(MultiProjectionStateWriteRequest request, Stream stream, int offloadThresholdBytes, CancellationToken ct = default)
+        public Task<bool> UpsertFromStreamAsync(MultiProjectionStateWriteRequest request, Stream stream, int offloadThresholdBytes, CancellationToken ct = default)
         {
             Interlocked.Increment(ref _writeCount);
             return _inner.UpsertFromStreamAsync(request, stream, offloadThresholdBytes, ct);

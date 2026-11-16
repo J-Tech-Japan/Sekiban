@@ -7,6 +7,7 @@ using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
 using Xunit;
 using Xunit.Abstractions;
+using Sekiban.Dcb.TestSupport;
 namespace Sekiban.Dcb.Postgres.Tests;
 
 public class DebugDatabaseContentTest : PostgresTestBase
@@ -45,7 +46,7 @@ public class DebugDatabaseContentTest : PostgresTestBase
         };
 
         // Act - Write events
-        var writeResult = await Fixture.EventStore.WriteEventsAsync(events);
+        var writeResult = await Fixture.EventStore.WriteEventsAsync(events).AsResultBoxAsync();
         Assert.True(writeResult.IsSuccess);
 
         // Debug - Check database content directly

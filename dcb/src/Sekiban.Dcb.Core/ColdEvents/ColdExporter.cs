@@ -49,21 +49,24 @@ public sealed class ColdExporter : IColdEventExporter, IColdEventProgressReader
             IsEnabled: _options.Enabled,
             Reason: _options.Enabled ? "Cold event store is active" : "Cold event store is disabled"));
 
-    public async Task<ResultBox<ColdStoreProgress>> GetProgressAsync(string serviceId, CancellationToken ct)
+    public async Task<ColdStoreProgress> GetProgressAsync(string serviceId, CancellationToken ct)
     {
         var manifest = await ColdControlFileHelper.LoadManifestAsync(_storage, serviceId, ct);
         var checkpoint = await ColdControlFileHelper.LoadCheckpointAsync(_storage, serviceId, ct);
 
-        return ResultBox.FromValue(new ColdStoreProgress(
+        return new ColdStoreProgress(
             ServiceId: serviceId,
             LatestSafeSortableUniqueId: manifest?.LatestSafeSortableUniqueId,
             LatestExportedSortableUniqueId: GetLatestExportedId(manifest),
             NextSinceSortableUniqueId: checkpoint?.NextSinceSortableUniqueId,
             LastExportedAtUtc: manifest?.UpdatedAtUtc,
-            ManifestVersion: manifest?.ManifestVersion ?? InitialManifestVersion));
+            ManifestVersion: manifest?.ManifestVersion ?? InitialManifestVersion);
     }
 
-    public async Task<ResultBox<ExportResult>> ExportIncrementalAsync(string serviceId, CancellationToken ct)
+    public Task<ExportResult> ExportIncrementalAsync(string serviceId, CancellationToken ct)
+        => ExportIncrementalBoxAsync(serviceId, ct).GetValueOrRethrowAsync();
+
+    private async Task<ResultBox<ExportResult>> ExportIncrementalBoxAsync(string serviceId, CancellationToken ct)
     {
         if (!_options.Enabled)
         {
@@ -73,7 +76,7 @@ public sealed class ColdExporter : IColdEventExporter, IColdEventProgressReader
 
         var leaseDuration = _options.PullInterval < MaxLeaseDuration ? _options.PullInterval : MaxLeaseDuration;
         var leaseResult = await _leaseManager.AcquireAsync(
-            $"cold-export-{serviceId}", leaseDuration, ct);
+            $"cold-export-{serviceId}", leaseDuration, ct).ToResultBoxAsync();
         if (!leaseResult.IsSuccess)
         {
             var leaseException = leaseResult.GetException();
@@ -115,7 +118,7 @@ public sealed class ColdExporter : IColdEventExporter, IColdEventProgressReader
         }
         finally
         {
-            var releaseResult = await _leaseManager.ReleaseAsync(lease, CancellationToken.None);
+            var releaseResult = await _leaseManager.ReleaseAsync(lease, CancellationToken.None).ToResultBoxAsync();
             if (!releaseResult.IsSuccess)
             {
                 _logger.LogWarning(
@@ -127,7 +130,7 @@ public sealed class ColdExporter : IColdEventExporter, IColdEventProgressReader
                 var expireResult = await _leaseManager.RenewAsync(
                     lease,
                     TimeSpan.Zero,
-                    CancellationToken.None);
+                    CancellationToken.None).ToResultBoxAsync();
 
                 if (!expireResult.IsSuccess)
                 {
@@ -335,7 +338,7 @@ public sealed class ColdExporter : IColdEventExporter, IColdEventProgressReader
         var manifestData = JsonSerializer.SerializeToUtf8Bytes(manifest, ColdEventJsonOptions.Default);
         var manifestPath = ColdStoragePaths.ManifestPath(serviceId);
         var manifestResult = await _storage.PutAsync(
-            manifestPath, manifestData, existingManifest?.ETag, ct);
+            manifestPath, manifestData, existingManifest?.ETag, ct).ToResultBoxAsync();
         if (!manifestResult.IsSuccess)
         {
             await CleanupUploadedSegmentsAsync(uploadedPaths, ct);
@@ -352,7 +355,7 @@ public sealed class ColdExporter : IColdEventExporter, IColdEventProgressReader
             checkpointPath,
             checkpointData,
             expectedETag: existingCheckpoint?.ETag,
-            ct);
+            ct).ToResultBoxAsync();
         if (!checkpointResult.IsSuccess)
         {
             return ResultBox.Error<ExportResult>(checkpointResult.GetException());
@@ -637,7 +640,7 @@ public sealed class ColdExporter : IColdEventExporter, IColdEventProgressReader
         CancellationToken ct)
     {
         IColdSegmentFileBuilder? builder = null;
-        var streamResult = await _storage.OpenReadAsync(existingTail.Path, ct);
+        var streamResult = await _storage.OpenReadAsync(existingTail.Path, ct).ToResultBoxAsync();
         if (!streamResult.IsSuccess)
         {
             return ResultBox.Error<IColdSegmentFileBuilder>(streamResult.GetException());
@@ -658,7 +661,7 @@ public sealed class ColdExporter : IColdEventExporter, IColdEventProgressReader
 
                 await builder.AppendAsync(evt, ct);
             },
-            ct);
+            ct).ToResultBoxAsync();
         if (!readResult.IsSuccess)
         {
             if (builder is not null)
@@ -690,7 +693,7 @@ public sealed class ColdExporter : IColdEventExporter, IColdEventProgressReader
 
         try
         {
-            var readResult = await _segmentFormatHandler.StreamSegmentAsync(
+            await _segmentFormatHandler.StreamSegmentAsync(
                 stream,
                 since: null,
                 maxCount: null,
@@ -704,14 +707,15 @@ public sealed class ColdExporter : IColdEventExporter, IColdEventProgressReader
                     await builder.AppendAsync(evt, ct);
                 },
                 ct);
-
-            return !readResult.IsSuccess
-                ? ResultBox.Error<bool>(readResult.GetException())
-                : ResultBox.FromValue(true);
+            return ResultBox.FromValue(true);
         }
         catch (MergeCapacityExceededException)
         {
             return ResultBox.FromValue(false);
+        }
+        catch (Exception ex)
+        {
+            return ResultBox.Error<bool>(ex);
         }
     }
 
@@ -737,7 +741,7 @@ public sealed class ColdExporter : IColdEventExporter, IColdEventProgressReader
                 events.Add(evt);
                 return ValueTask.CompletedTask;
             },
-            ct);
+            ct).ToResultBoxAsync();
 
         return !readResult.IsSuccess
             ? ResultBox.Error<List<SerializableEvent>>(readResult.GetException())
@@ -784,7 +788,7 @@ public sealed class ColdExporter : IColdEventExporter, IColdEventProgressReader
     {
         foreach (var path in uploadedPaths)
         {
-            var deleteResult = await _storage.DeleteAsync(path, ct);
+            var deleteResult = await _storage.DeleteAsync(path, ct).ToResultBoxAsync();
             if (!deleteResult.IsSuccess)
             {
                 _logger.LogWarning(deleteResult.GetException(), "Failed to delete uploaded cold segment {Path}", path);
@@ -798,7 +802,7 @@ public sealed class ColdExporter : IColdEventExporter, IColdEventProgressReader
     {
         foreach (var path in segmentPaths)
         {
-            var deleteResult = await _storage.DeleteAsync(path, ct);
+            var deleteResult = await _storage.DeleteAsync(path, ct).ToResultBoxAsync();
             if (!deleteResult.IsSuccess)
             {
                 _logger.LogWarning(deleteResult.GetException(), "Failed to delete replaced cold segment {Path}", path);
@@ -845,7 +849,7 @@ public sealed class ColdExporter : IColdEventExporter, IColdEventProgressReader
         var limit = _options.ExportMaxEventsPerRun;
         if (limit > 0)
         {
-            var limited = await _hotStore.ReadAllSerializableEventsAsync(since, limit);
+            var limited = await _hotStore.ReadAllSerializableEventsAsync(since, limit).ToResultBoxAsync();
             if (limited.IsSuccess)
             {
                 return limited;
@@ -862,7 +866,7 @@ public sealed class ColdExporter : IColdEventExporter, IColdEventProgressReader
                 _hotStore.GetType().Name);
         }
 
-        return await _hotStore.ReadAllSerializableEventsAsync(since);
+        return await _hotStore.ReadAllSerializableEventsAsync(since).ToResultBoxAsync();
     }
 
     private static bool IsSafe(SerializableEvent evt, DateTime cutoffUtc)
@@ -916,7 +920,7 @@ public sealed class ColdExporter : IColdEventExporter, IColdEventProgressReader
                 FileShare.Read,
                 bufferSize: 81920,
                 FileOptions.Asynchronous | FileOptions.SequentialScan);
-            return await storage.PutAsync(Info.Path, stream, expectedETag: null, ct);
+            return await storage.PutAsync(Info.Path, stream, expectedETag: null, ct).ToResultBoxAsync();
         }
 
         public ValueTask DisposeAsync()

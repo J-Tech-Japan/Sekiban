@@ -5,6 +5,7 @@ using Sekiban.Dcb.Postgres;
 using Sekiban.Dcb.ServiceId;
 using Sekiban.Dcb.Storage.Checkpoints;
 using Xunit;
+using Sekiban.Dcb.TestSupport;
 namespace Sekiban.Dcb.Postgres.Tests;
 
 /// <summary>
@@ -46,7 +47,7 @@ public class PostgresCheckpointGenerationCasTests : IAsyncLifetime
 
     private static Stream Payload(string s) => new MemoryStream(Encoding.UTF8.GetBytes(s));
     private static async Task<CheckpointSlot> ReadAsync(IGenerationAwareCheckpointStore s) =>
-        (await s.ReadCheckpointSlotAsync(Projector, Version)).GetValue();
+        (await s.ReadCheckpointSlotAsync(Projector, Version).AsResultBoxAsync()).GetValue();
 
     [Fact]
     public async Task Capability_advertised()
@@ -354,7 +355,7 @@ public class PostgresCheckpointGenerationCasTests : IAsyncLifetime
         try
         {
             var store = NewStore();
-            var read = await store.ReadCheckpointSlotAsync(Projector, Version);
+            var read = await store.ReadCheckpointSlotAsync(Projector, Version).AsResultBoxAsync();
             Assert.False(read.IsSuccess);   // read fails closed (column does not exist)
 
             var create = await store.ConditionalUpsertAsync(Req(1), Payload("a"), CheckpointExpectation.Absent, 1_000_000);
@@ -378,7 +379,7 @@ public class PostgresCheckpointGenerationCasTests : IAsyncLifetime
         // A legacy write (UpsertFromStreamAsync) does not touch the new control columns; the additive migration defaults
         // them to 0/0/0. The slot must read as generation 0, Active — the accepted baseline for existing rows.
         var store = NewStore();
-        Assert.True((await store.UpsertFromStreamAsync(Req(7), Payload("legacy"), 1_000_000)).GetValue());
+        Assert.True((await store.UpsertFromStreamAsync(Req(7), Payload("legacy"), 1_000_000).AsResultBoxAsync()).GetValue());
 
         var slot = await ReadAsync(store);
         Assert.True(slot.IsActive);

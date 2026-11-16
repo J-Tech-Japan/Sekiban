@@ -1,4 +1,3 @@
-using ResultBoxes;
 using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Events;
@@ -11,7 +10,7 @@ namespace Sekiban.Dcb.Storage;
 /// </summary>
 public static class EventStoreExtensions
 {
-    public static Task<ResultBox<IEnumerable<Event>>> ReadAllEventsAsync(
+    public static Task<IEnumerable<Event>> ReadAllEventsAsync(
         this IEventStore eventStore,
         SortableUniqueId? since = null,
         int? maxCount = null) =>
@@ -20,70 +19,45 @@ public static class EventStoreExtensions
     /// <summary>
     ///     Explicitly deserialize serializable events after reading them from the store.
     /// </summary>
-    public static async Task<ResultBox<IEnumerable<Event>>> ReadAllEventsAsync(
+    public static async Task<IEnumerable<Event>> ReadAllEventsAsync(
         this IEventStore eventStore,
         IEventTypes eventTypes,
         SortableUniqueId? since = null,
-        int? maxCount = null)
-    {
-        var result = await eventStore.ReadAllSerializableEventsAsync(since, maxCount);
-        if (!result.IsSuccess)
-        {
-            return ResultBox.Error<IEnumerable<Event>>(result.GetException());
-        }
+        int? maxCount = null) =>
+        DeserializeEvents(await eventStore.ReadAllSerializableEventsAsync(since, maxCount), eventTypes);
 
-        return DeserializeEvents(result.GetValue(), eventTypes);
-    }
-
-    public static Task<ResultBox<IEnumerable<Event>>> ReadEventsByTagAsync(
+    public static Task<IEnumerable<Event>> ReadEventsByTagAsync(
         this IEventStore eventStore,
         ITag tag,
         SortableUniqueId? since = null) =>
         ReadEventsByTagAsync(eventStore, tag, ResolveEventTypes(eventStore), since);
 
-    public static async Task<ResultBox<IEnumerable<Event>>> ReadEventsByTagAsync(
+    public static async Task<IEnumerable<Event>> ReadEventsByTagAsync(
         this IEventStore eventStore,
         ITag tag,
         IEventTypes eventTypes,
-        SortableUniqueId? since = null)
-    {
-        var result = await eventStore.ReadSerializableEventsByTagAsync(tag, since);
-        if (!result.IsSuccess)
-        {
-            return ResultBox.Error<IEnumerable<Event>>(result.GetException());
-        }
+        SortableUniqueId? since = null) =>
+        DeserializeEvents(await eventStore.ReadSerializableEventsByTagAsync(tag, since), eventTypes);
 
-        return DeserializeEvents(result.GetValue(), eventTypes);
-    }
-
-    public static Task<ResultBox<Event>> ReadEventAsync(
+    /// <summary>Reads and deserializes one event; returns <c>null</c> when no event with the id exists.</summary>
+    public static Task<Event?> ReadEventAsync(
         this IEventStore eventStore,
         Guid eventId) =>
         ReadEventAsync(eventStore, eventId, ResolveEventTypes(eventStore));
 
-    public static async Task<ResultBox<Event>> ReadEventAsync(
+    /// <summary>Reads and deserializes one event; returns <c>null</c> when no event with the id exists.</summary>
+    public static async Task<Event?> ReadEventAsync(
         this IEventStore eventStore,
         Guid eventId,
-        IEventTypes eventTypes)
-    {
-        var result = await eventStore.ReadSerializableEventAsync(eventId);
-        if (!result.IsSuccess)
-        {
-            return ResultBox.Error<Event>(result.GetException());
-        }
+        IEventTypes eventTypes) =>
+        (await eventStore.ReadSerializableEventAsync(eventId))?.ToEventOrThrow(eventTypes);
 
-        var eventResult = result.GetValue().ToEvent(eventTypes);
-        return eventResult.IsSuccess
-            ? eventResult
-            : ResultBox.Error<Event>(eventResult.GetException());
-    }
-
-    public static Task<ResultBox<(IReadOnlyList<Event> Events, IReadOnlyList<TagWriteResult> TagWrites)>> WriteEventsAsync(
+    public static Task<(IReadOnlyList<Event> Events, IReadOnlyList<TagWriteResult> TagWrites)> WriteEventsAsync(
         this IEventStore eventStore,
         IEnumerable<Event> events) =>
         WriteEventsAsync(eventStore, events, ResolveEventTypes(eventStore));
 
-    public static async Task<ResultBox<(IReadOnlyList<Event> Events, IReadOnlyList<TagWriteResult> TagWrites)>> WriteEventsAsync(
+    public static async Task<(IReadOnlyList<Event> Events, IReadOnlyList<TagWriteResult> TagWrites)> WriteEventsAsync(
         this IEventStore eventStore,
         IEnumerable<Event> events,
         IEventTypes eventTypes)
@@ -91,25 +65,11 @@ public static class EventStoreExtensions
         var serializableEvents = events
             .Select(evt => evt.ToSerializableEvent(eventTypes))
             .ToList();
-        var result = await eventStore.WriteSerializableEventsAsync(serializableEvents);
-        if (!result.IsSuccess)
-        {
-            return ResultBox.Error<(IReadOnlyList<Event> Events, IReadOnlyList<TagWriteResult> TagWrites)>(result.GetException());
-        }
-
-        var writtenEventsResult = DeserializeEvents(result.GetValue().Events, eventTypes);
-        if (!writtenEventsResult.IsSuccess)
-        {
-            return ResultBox.Error<(IReadOnlyList<Event> Events, IReadOnlyList<TagWriteResult> TagWrites)>(
-                writtenEventsResult.GetException());
-        }
-
-        return ResultBox.FromValue((
-            (IReadOnlyList<Event>)writtenEventsResult.GetValue().ToList(),
-            result.GetValue().TagWrites));
+        var written = await eventStore.WriteSerializableEventsAsync(serializableEvents);
+        return ((IReadOnlyList<Event>)DeserializeEvents(written.Events, eventTypes), written.TagWrites);
     }
 
-    public static Task<ResultBox<Event>> WriteEventAsync(
+    public static Task<Event> WriteEventAsync(
         this IEventStore eventStore,
         Event evt) =>
         WriteEventAsync(eventStore, evt, ResolveEventTypes(eventStore));
@@ -117,37 +77,23 @@ public static class EventStoreExtensions
     /// <summary>
     ///     Helper method to write a single typed event through the serializable-only store interface.
     /// </summary>
-    public static async Task<ResultBox<Event>> WriteEventAsync(
+    public static async Task<Event> WriteEventAsync(
         this IEventStore eventStore,
         Event evt,
-        IEventTypes eventTypes)
-    {
-        var result = await eventStore.WriteEventsAsync(new[] { evt }, eventTypes);
-        if (!result.IsSuccess)
-        {
-            return ResultBox.Error<Event>(result.GetException());
-        }
+        IEventTypes eventTypes) =>
+        (await eventStore.WriteEventsAsync(new[] { evt }, eventTypes)).Events[0];
 
-        return ResultBox.FromValue(result.GetValue().Events[0]);
-    }
-
-    private static ResultBox<IEnumerable<Event>> DeserializeEvents(
+    private static List<Event> DeserializeEvents(
         IEnumerable<SerializableEvent> events,
         IEventTypes eventTypes)
     {
         var materialized = new List<Event>();
         foreach (var serializableEvent in events)
         {
-            var eventResult = serializableEvent.ToEvent(eventTypes);
-            if (!eventResult.IsSuccess)
-            {
-                return ResultBox.Error<IEnumerable<Event>>(eventResult.GetException());
-            }
-
-            materialized.Add(eventResult.GetValue());
+            materialized.Add(serializableEvent.ToEventOrThrow(eventTypes));
         }
 
-        return ResultBox.FromValue<IEnumerable<Event>>(materialized);
+        return materialized;
     }
 
     private static IEventTypes ResolveEventTypes(IEventStore eventStore)

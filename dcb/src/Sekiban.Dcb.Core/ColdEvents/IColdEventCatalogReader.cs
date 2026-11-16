@@ -1,9 +1,8 @@
-using ResultBoxes;
 namespace Sekiban.Dcb.ColdEvents;
 
 public interface IColdEventCatalogReader : IColdEventStoreFeature
 {
-    Task<ResultBox<ColdDataRangeSummary>> GetDataRangeSummaryAsync(
+    Task<ColdDataRangeSummary> GetDataRangeSummaryAsync(
         string serviceId,
         CancellationToken ct);
 }

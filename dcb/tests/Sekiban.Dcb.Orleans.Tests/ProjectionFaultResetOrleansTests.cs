@@ -23,6 +23,7 @@ using System.IO;
 using System.Text;
 using System.Text.Json;
 using Xunit;
+using Sekiban.Dcb.TestSupport;
 
 namespace Sekiban.Dcb.Orleans.Tests;
 
@@ -68,7 +69,7 @@ public class ProjectionFaultResetOrleansTests : IAsyncLifetime
     {
         SharedEventStore.Clear();
         PoisonActive = true;
-        await SharedStateStore.DeleteAllAsync(ResettableProjector.MultiProjectorName);
+        await SharedStateStore.DeleteAllAsync(ResettableProjector.MultiProjectorName).AsResultBoxAsync();
         TogglableGrainStorage.Reset();
         StateStore.ResetForTest();
         ResettableProjector.ResetApplicationObservation();
@@ -126,7 +127,7 @@ public class ProjectionFaultResetOrleansTests : IAsyncLifetime
             BuildSource: "test",
             BuildHost: null);
         using var payload = new MemoryStream(new byte[] { 1, 2, 3, 4 });
-        Assert.True((await SharedStateStore.UpsertFromStreamAsync(request, payload, 1_000_000)).IsSuccess);
+        Assert.True((await SharedStateStore.UpsertFromStreamAsync(request, payload, 1_000_000).AsResultBoxAsync()).IsSuccess);
     }
 
     private static async Task PollUntilAsync(Func<Task<bool>> condition)
@@ -555,7 +556,7 @@ public class ProjectionFaultResetOrleansTests : IAsyncLifetime
     {
         var (grain, token, _) = await FaultAndTokenAsync(1_400 + field + (useNull ? 100 : 0));
         var writesBefore = TogglableGrainStorage.WriteCount;
-        var snapshotBefore = (await SharedStateStore.GetLatestForVersionAsync(ResettableProjector.MultiProjectorName, ResettableProjector.MultiProjectorVersion)).GetValue().HasValue;
+        var snapshotBefore = (await SharedStateStore.GetLatestForVersionAsync(ResettableProjector.MultiProjectorName, ResettableProjector.MultiProjectorVersion).AsOptionalResultBoxAsync()).GetValue().HasValue;
 
         // Only the field under test is missing (null or empty); the other two carry the real token value.
         var missing = useNull ? null! : "";
@@ -568,7 +569,7 @@ public class ProjectionFaultResetOrleansTests : IAsyncLifetime
 
         Assert.False(result.IsSuccess);                                   // rejected
         Assert.Equal(writesBefore, TogglableGrainStorage.WriteCount);     // zero provider write
-        Assert.Equal(snapshotBefore, (await SharedStateStore.GetLatestForVersionAsync(ResettableProjector.MultiProjectorName, ResettableProjector.MultiProjectorVersion)).GetValue().HasValue); // zero external delete
+        Assert.Equal(snapshotBefore, (await SharedStateStore.GetLatestForVersionAsync(ResettableProjector.MultiProjectorName, ResettableProjector.MultiProjectorVersion).AsOptionalResultBoxAsync()).GetValue().HasValue); // zero external delete
         Assert.False((await grain.GetSnapshotJsonAsync()).IsSuccess);     // fault retained
     }
 
@@ -586,7 +587,7 @@ public class ProjectionFaultResetOrleansTests : IAsyncLifetime
 
         // A GENUINE derived snapshot is persisted by the product (not synthetic bytes).
         Assert.True((await grain.PersistStateAsync()).IsSuccess);
-        var snap = (await SharedStateStore.GetLatestForVersionAsync(ResettableProjector.MultiProjectorName, ResettableProjector.MultiProjectorVersion)).GetValue();
+        var snap = (await SharedStateStore.GetLatestForVersionAsync(ResettableProjector.MultiProjectorName, ResettableProjector.MultiProjectorVersion).AsOptionalResultBoxAsync()).GetValue();
         Assert.True(snap.HasValue);
         Assert.Equal(healthy.SortableUniqueIdValue, snap.GetValue().LastSortableUniqueId); // pre-poison position
 
@@ -607,7 +608,7 @@ public class ProjectionFaultResetOrleansTests : IAsyncLifetime
         Assert.True((await faulted.ResetProjectionFaultAsync(token)).IsSuccess); // token validated against the PERSISTED descriptor
 
         // The genuine pre-poison snapshot is invalidated — a stale restore is now impossible.
-        Assert.False((await SharedStateStore.GetLatestForVersionAsync(ResettableProjector.MultiProjectorName, ResettableProjector.MultiProjectorVersion)).GetValue().HasValue);
+        Assert.False((await SharedStateStore.GetLatestForVersionAsync(ResettableProjector.MultiProjectorName, ResettableProjector.MultiProjectorVersion).AsOptionalResultBoxAsync()).GetValue().HasValue);
 
         // Exact rebuild from the beginning: both events fold now (Count 2), position advanced to the poison.
         var count = await _executor.QueryAsync(new ResetCountQuery());
@@ -628,7 +629,7 @@ public class ProjectionFaultResetOrleansTests : IAsyncLifetime
     {
         var (grain, token, _) = await FaultAndTokenAsync(7_000);
         await InjectExternalSnapshotAsync("000000000000000700000000000000"); // a snapshot exists to observe retention
-        var snapshotBefore = (await SharedStateStore.GetLatestForVersionAsync(ResettableProjector.MultiProjectorName, ResettableProjector.MultiProjectorVersion)).GetValue().HasValue;
+        var snapshotBefore = (await SharedStateStore.GetLatestForVersionAsync(ResettableProjector.MultiProjectorName, ResettableProjector.MultiProjectorVersion).AsOptionalResultBoxAsync()).GetValue().HasValue;
         var writesBefore = TogglableGrainStorage.WriteCount;
 
         // The external invalidation runs first, under the gate, before the grain write. If it fails, the grain write is
@@ -636,13 +637,13 @@ public class ProjectionFaultResetOrleansTests : IAsyncLifetime
         StateStore.FailNextDelete = true;
         Assert.False((await grain.ResetProjectionFaultAsync(token)).IsSuccess);
         Assert.Equal(writesBefore, TogglableGrainStorage.WriteCount);                 // zero grain write
-        Assert.Equal(snapshotBefore, (await SharedStateStore.GetLatestForVersionAsync(ResettableProjector.MultiProjectorName, ResettableProjector.MultiProjectorVersion)).GetValue().HasValue); // snapshot retained
+        Assert.Equal(snapshotBefore, (await SharedStateStore.GetLatestForVersionAsync(ResettableProjector.MultiProjectorName, ResettableProjector.MultiProjectorVersion).AsOptionalResultBoxAsync()).GetValue().HasValue); // snapshot retained
         Assert.False((await grain.GetSnapshotJsonAsync()).IsSuccess);                 // still faulted
 
         // Storage recovers: the same token retries and completes (poison fixed so the rebuild recovers).
         PoisonActive = false;
         Assert.True((await grain.ResetProjectionFaultAsync(token)).IsSuccess);
-        Assert.False((await SharedStateStore.GetLatestForVersionAsync(ResettableProjector.MultiProjectorName, ResettableProjector.MultiProjectorVersion)).GetValue().HasValue);
+        Assert.False((await SharedStateStore.GetLatestForVersionAsync(ResettableProjector.MultiProjectorName, ResettableProjector.MultiProjectorVersion).AsOptionalResultBoxAsync()).GetValue().HasValue);
     }
 
     [Fact]
@@ -650,14 +651,14 @@ public class ProjectionFaultResetOrleansTests : IAsyncLifetime
     {
         var (grain, token, _) = await FaultAndTokenAsync(7_100);
         await InjectExternalSnapshotAsync("000000000000000710000000000000");
-        Assert.True((await SharedStateStore.GetLatestForVersionAsync(ResettableProjector.MultiProjectorName, ResettableProjector.MultiProjectorVersion)).GetValue().HasValue);
+        Assert.True((await SharedStateStore.GetLatestForVersionAsync(ResettableProjector.MultiProjectorName, ResettableProjector.MultiProjectorVersion).AsOptionalResultBoxAsync()).GetValue().HasValue);
 
         // The external delete succeeds, then the grain-state clear write fails: the grain state rolls back (descriptor
         // and live fault retained, queries stay faulted), but the external snapshot is already gone. Coherent — a
         // rebuild would regenerate the snapshot; the retained descriptor keeps the projection fail-closed until retry.
         TogglableGrainStorage.FailNextWrite = true;
         Assert.False((await grain.ResetProjectionFaultAsync(token)).IsSuccess);
-        Assert.False((await SharedStateStore.GetLatestForVersionAsync(ResettableProjector.MultiProjectorName, ResettableProjector.MultiProjectorVersion)).GetValue().HasValue); // snapshot deleted
+        Assert.False((await SharedStateStore.GetLatestForVersionAsync(ResettableProjector.MultiProjectorName, ResettableProjector.MultiProjectorVersion).AsOptionalResultBoxAsync()).GetValue().HasValue); // snapshot deleted
         Assert.False((await grain.GetSnapshotJsonAsync()).IsSuccess);                 // descriptor retained -> still faulted
 
         // Retry the same token: the reset completes and rebuilds.
@@ -678,7 +679,7 @@ public class ProjectionFaultResetOrleansTests : IAsyncLifetime
         var upsertsBefore = StateStore.UpsertCount;
         Assert.True((await grain.PersistStateAsync()).IsSuccess);         // succeeds by skip, not by writing
         Assert.Equal(upsertsBefore, StateStore.UpsertCount);             // no external upsert reached the store
-        Assert.False((await SharedStateStore.GetLatestForVersionAsync(ResettableProjector.MultiProjectorName, ResettableProjector.MultiProjectorVersion)).GetValue().HasValue);
+        Assert.False((await SharedStateStore.GetLatestForVersionAsync(ResettableProjector.MultiProjectorName, ResettableProjector.MultiProjectorVersion).AsOptionalResultBoxAsync()).GetValue().HasValue);
         Assert.False((await grain.GetSnapshotJsonAsync()).IsSuccess);     // still faulted
     }
 
@@ -694,7 +695,7 @@ public class ProjectionFaultResetOrleansTests : IAsyncLifetime
         await grain.RefreshAsync();
         Assert.True((await grain.PersistStateAsync()).IsSuccess);
         await PollUntilAsync(async () =>
-            (await SharedStateStore.GetLatestForVersionAsync(ResettableProjector.MultiProjectorName, "1.0")).GetValue().HasValue);
+            (await SharedStateStore.GetLatestForVersionAsync(ResettableProjector.MultiProjectorName, "1.0").AsOptionalResultBoxAsync()).GetValue().HasValue);
 
         // Now fault the projection with a poison event.
         await grain.SeedEventsAsync(new List<SerializableEvent> { Event(poison: true, 8_150, Guid.CreateVersion7()) });
@@ -712,8 +713,8 @@ public class ProjectionFaultResetOrleansTests : IAsyncLifetime
         Assert.False(updated);
         Assert.Equal(upsertsBefore, StateStore.UpsertCount);          // upsert never reached the store
         Assert.Equal(writesBefore, TogglableGrainStorage.WriteCount); // no projector-version write
-        Assert.False((await SharedStateStore.GetLatestForVersionAsync(ResettableProjector.MultiProjectorName, "2.0")).GetValue().HasValue); // no new-version snapshot
-        Assert.True((await SharedStateStore.GetLatestForVersionAsync(ResettableProjector.MultiProjectorName, "1.0")).GetValue().HasValue);  // original retained
+        Assert.False((await SharedStateStore.GetLatestForVersionAsync(ResettableProjector.MultiProjectorName, "2.0").AsOptionalResultBoxAsync()).GetValue().HasValue); // no new-version snapshot
+        Assert.True((await SharedStateStore.GetLatestForVersionAsync(ResettableProjector.MultiProjectorName, "1.0").AsOptionalResultBoxAsync()).GetValue().HasValue);  // original retained
     }
 
     [Fact]
@@ -729,12 +730,12 @@ public class ProjectionFaultResetOrleansTests : IAsyncLifetime
         await grain.SeedEventsAsync(new List<SerializableEvent> { Event(poison: false, 8_200, Guid.CreateVersion7()) });
         await grain.RefreshAsync(); // initialise host so DeleteExternalStateAsync has projector name + version
         await InjectExternalSnapshotAsync("000000000000000820000000000000");
-        Assert.True((await SharedStateStore.GetLatestForVersionAsync(ResettableProjector.MultiProjectorName, ResettableProjector.MultiProjectorVersion)).GetValue().HasValue);
+        Assert.True((await SharedStateStore.GetLatestForVersionAsync(ResettableProjector.MultiProjectorName, ResettableProjector.MultiProjectorVersion).AsOptionalResultBoxAsync()).GetValue().HasValue);
 
         var deleted = await grain.DeleteExternalStateAsync();
 
         Assert.True(deleted);
-        Assert.False((await SharedStateStore.GetLatestForVersionAsync(ResettableProjector.MultiProjectorName, ResettableProjector.MultiProjectorVersion)).GetValue().HasValue);
+        Assert.False((await SharedStateStore.GetLatestForVersionAsync(ResettableProjector.MultiProjectorName, ResettableProjector.MultiProjectorVersion).AsOptionalResultBoxAsync()).GetValue().HasValue);
     }
 
     // Genuinely persist a well-formed descriptor (the grain is already faulted), then deactivate, wait for the
@@ -791,7 +792,7 @@ public class ProjectionFaultResetOrleansTests : IAsyncLifetime
 
         var upsertsBefore = StateStore.UpsertCount;
         var writesBefore = TogglableGrainStorage.WriteCount;
-        var snapshotBefore = (await SharedStateStore.GetLatestForVersionAsync(ResettableProjector.MultiProjectorName, ResettableProjector.MultiProjectorVersion)).GetValue().HasValue;
+        var snapshotBefore = (await SharedStateStore.GetLatestForVersionAsync(ResettableProjector.MultiProjectorName, ResettableProjector.MultiProjectorVersion).AsOptionalResultBoxAsync()).GetValue().HasValue;
 
         // The well-formed token cannot match a descriptor whose persisted field is null/empty.
         var reset = await reactivated.ResetProjectionFaultAsync(token);
@@ -799,7 +800,7 @@ public class ProjectionFaultResetOrleansTests : IAsyncLifetime
         Assert.False(reset.IsSuccess);                                                            // rejected
         Assert.Equal(writesBefore, TogglableGrainStorage.WriteCount);                             // zero grain/provider write, zero version change
         Assert.Equal(upsertsBefore, StateStore.UpsertCount);                                      // zero external upsert
-        Assert.Equal(snapshotBefore, (await SharedStateStore.GetLatestForVersionAsync(ResettableProjector.MultiProjectorName, ResettableProjector.MultiProjectorVersion)).GetValue().HasValue); // zero external delete (snapshot retained)
+        Assert.Equal(snapshotBefore, (await SharedStateStore.GetLatestForVersionAsync(ResettableProjector.MultiProjectorName, ResettableProjector.MultiProjectorVersion).AsOptionalResultBoxAsync()).GetValue().HasValue); // zero external delete (snapshot retained)
         // No live clear / no deactivation: state, scalar and list all continue to fail closed.
         Assert.False((await reactivated.GetSnapshotJsonAsync()).IsSuccess);
         Assert.False((await _executor.QueryAsync(new ResetCountQuery())).IsSuccess);
@@ -905,14 +906,14 @@ public class ProjectionFaultResetOrleansTests : IAsyncLifetime
 
         var upsertsBefore = StateStore.UpsertCount;
         var writesBefore = TogglableGrainStorage.WriteCount;
-        var snapshotBefore = (await SharedStateStore.GetLatestForVersionAsync(ResettableProjector.MultiProjectorName, ResettableProjector.MultiProjectorVersion)).GetValue().HasValue;
+        var snapshotBefore = (await SharedStateStore.GetLatestForVersionAsync(ResettableProjector.MultiProjectorName, ResettableProjector.MultiProjectorVersion).AsOptionalResultBoxAsync()).GetValue().HasValue;
 
         var reset = await reactivated.ResetProjectionFaultAsync(emptyToken);
 
         Assert.False(reset.IsSuccess);                                                            // no empty-identity false match
         Assert.Equal(writesBefore, TogglableGrainStorage.WriteCount);                             // zero grain/provider write
         Assert.Equal(upsertsBefore, StateStore.UpsertCount);                                      // zero external upsert
-        Assert.Equal(snapshotBefore, (await SharedStateStore.GetLatestForVersionAsync(ResettableProjector.MultiProjectorName, ResettableProjector.MultiProjectorVersion)).GetValue().HasValue); // zero external delete
+        Assert.Equal(snapshotBefore, (await SharedStateStore.GetLatestForVersionAsync(ResettableProjector.MultiProjectorName, ResettableProjector.MultiProjectorVersion).AsOptionalResultBoxAsync()).GetValue().HasValue); // zero external delete
     }
 
     private sealed class SiloConfigurator : ISiloConfigurator
@@ -963,31 +964,31 @@ public class ProjectionFaultResetOrleansTests : IAsyncLifetime
             Interlocked.Exchange(ref _deleteCount, 0);
         }
 
-        public Task<ResultBox<bool>> DeleteAsync(string projectorName, string projectorVersion, CancellationToken cancellationToken = default)
+        public Task<bool> DeleteAsync(string projectorName, string projectorVersion, CancellationToken cancellationToken = default)
         {
             if (FailNextDelete)
             {
                 FailNextDelete = false;
-                return Task.FromResult(ResultBox.Error<bool>(new InvalidOperationException("injected: external snapshot delete failure")));
+                return Task.FromException<bool>(new InvalidOperationException("injected: external snapshot delete failure"));
             }
 
             Interlocked.Increment(ref _deleteCount);
             return _inner.DeleteAsync(projectorName, projectorVersion, cancellationToken);
         }
 
-        public Task<ResultBox<OptionalValue<MultiProjectionStateRecord>>> GetLatestForVersionAsync(string projectorName, string projectorVersion, CancellationToken cancellationToken = default) =>
+        public Task<MultiProjectionStateRecord?> GetLatestForVersionAsync(string projectorName, string projectorVersion, CancellationToken cancellationToken = default) =>
             _inner.GetLatestForVersionAsync(projectorName, projectorVersion, cancellationToken);
-        public Task<ResultBox<OptionalValue<MultiProjectionStateRecord>>> GetLatestAnyVersionAsync(string projectorName, CancellationToken cancellationToken = default) =>
+        public Task<MultiProjectionStateRecord?> GetLatestAnyVersionAsync(string projectorName, CancellationToken cancellationToken = default) =>
             _inner.GetLatestAnyVersionAsync(projectorName, cancellationToken);
-        public Task<ResultBox<bool>> UpsertAsync(MultiProjectionStateRecord record, int offloadThresholdBytes = 1_000_000, CancellationToken cancellationToken = default) =>
+        public Task<bool> UpsertAsync(MultiProjectionStateRecord record, int offloadThresholdBytes = 1_000_000, CancellationToken cancellationToken = default) =>
             _inner.UpsertAsync(record, offloadThresholdBytes, cancellationToken);
-        public Task<ResultBox<IReadOnlyList<ProjectorStateInfo>>> ListAllAsync(CancellationToken cancellationToken = default) =>
+        public Task<IReadOnlyList<ProjectorStateInfo>> ListAllAsync(CancellationToken cancellationToken = default) =>
             _inner.ListAllAsync(cancellationToken);
-        public Task<ResultBox<int>> DeleteAllAsync(string? projectorName = null, CancellationToken cancellationToken = default) =>
+        public Task<int> DeleteAllAsync(string? projectorName = null, CancellationToken cancellationToken = default) =>
             _inner.DeleteAllAsync(projectorName, cancellationToken);
-        public Task<ResultBox<Stream>> OpenStateDataReadStreamAsync(MultiProjectionStateRecord record, CancellationToken cancellationToken = default) =>
+        public Task<Stream> OpenStateDataReadStreamAsync(MultiProjectionStateRecord record, CancellationToken cancellationToken = default) =>
             _inner.OpenStateDataReadStreamAsync(record, cancellationToken);
-        public Task<ResultBox<bool>> UpsertFromStreamAsync(MultiProjectionStateWriteRequest request, Stream stream, int offloadThresholdBytes, CancellationToken cancellationToken = default)
+        public Task<bool> UpsertFromStreamAsync(MultiProjectionStateWriteRequest request, Stream stream, int offloadThresholdBytes, CancellationToken cancellationToken = default)
         {
             Interlocked.Increment(ref _upsertCount);
             return _inner.UpsertFromStreamAsync(request, stream, offloadThresholdBytes, cancellationToken);

@@ -13,6 +13,7 @@ using Sekiban.Dcb.TagConsistencyFence;
 using Sekiban.Dcb.Tags;
 using Sekiban.Dcb.Testing;
 using Xunit;
+using Sekiban.Dcb.TestSupport;
 
 namespace Sekiban.Dcb.Postgres.Tests;
 
@@ -162,8 +163,8 @@ public sealed class PostgresDerivedTagConsistencyFenceTests(PostgresTestFixture 
         Assert.Equal(fenced ? 1 : 0, parked.FencedArrivals);
         Assert.Equal(fenced ? 0 : 1, parked.LegacyArrivals);
         await VerifyRowsAsync(Service, shared.GetTag(), fenced ? 1 : 2);
-        Assert.Equal(fenced ? 0 : 1, (await store.ReadSerializableEventsByTagAsync(lowTag)).GetValue().Count());
-        Assert.Single((await store.ReadSerializableEventsByTagAsync(highTag)).GetValue());
+        Assert.Equal(fenced ? 0 : 1, (await store.ReadSerializableEventsByTagAsync(lowTag).AsResultBoxAsync()).GetValue().Count());
+        Assert.Single((await store.ReadSerializableEventsByTagAsync(highTag).AsResultBoxAsync()).GetValue());
     }
 
     private async Task ProvisionEpochAsync(string serviceId)
@@ -225,30 +226,30 @@ public sealed class PostgresDerivedTagConsistencyFenceTests(PostgresTestFixture 
         }
         public string? ExpectedTagPositionServiceId => inner.ExpectedTagPositionServiceId;
         public WriteConditionCapabilityDescriptor DescribeWriteConditions() => inner.DescribeWriteConditions();
-        public Task<ResultBox<bool>> EnsureExpectedTagPositionEnforcementEnabledAsync(CancellationToken ct = default) =>
+        public Task<bool> EnsureExpectedTagPositionEnforcementEnabledAsync(CancellationToken ct = default) =>
             inner.EnsureExpectedTagPositionEnforcementEnabledAsync(ct);
-        public async Task<ResultBox<ExpectedTagPositionWriteResult>> WriteSerializableEventsWithExpectedTagPositionsAsync(
+        public async Task<ExpectedTagPositionWriteResult> WriteSerializableEventsWithExpectedTagPositionsAsync(
             IReadOnlyList<SerializableEvent> events, ExpectedTagPositionSpecification specification, CancellationToken ct = default)
         {
             Interlocked.Increment(ref _fenced);
             await ArriveAsync();
             return await inner.WriteSerializableEventsWithExpectedTagPositionsAsync(events, specification, ct);
         }
-        public async Task<ResultBox<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>> WriteSerializableEventsAsync(IEnumerable<SerializableEvent> events)
+        public async Task<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)> WriteSerializableEventsAsync(IEnumerable<SerializableEvent> events)
         {
             Interlocked.Increment(ref _legacy);
             await ArriveAsync();
             return await inner.WriteSerializableEventsAsync(events);
         }
-        public Task<ResultBox<IEnumerable<TagStream>>> ReadTagsAsync(ITag tag) => inner.ReadTagsAsync(tag);
-        public Task<ResultBox<TagState>> GetLatestTagAsync(ITag tag) => inner.GetLatestTagAsync(tag);
-        public Task<ResultBox<bool>> TagExistsAsync(ITag tag) => inner.TagExistsAsync(tag);
-        public Task<ResultBox<long>> GetEventCountAsync(SortableUniqueId? since = null) => inner.GetEventCountAsync(since);
-        public Task<ResultBox<IEnumerable<TagInfo>>> GetAllTagsAsync(string? group = null) => inner.GetAllTagsAsync(group);
-        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null) => inner.ReadAllSerializableEventsAsync(since);
-        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(SortableUniqueId? since, int? count) => inner.ReadAllSerializableEventsAsync(since, count);
-        public Task<ResultBox<SerializableEvent>> ReadSerializableEventAsync(Guid id) => inner.ReadSerializableEventAsync(id);
-        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadSerializableEventsByTagAsync(ITag tag, SortableUniqueId? since = null) => inner.ReadSerializableEventsByTagAsync(tag, since);
-        public Task<ResultBox<string>> GetLatestSortableUniqueIdAsync() => inner.GetLatestSortableUniqueIdAsync();
+        public Task<IEnumerable<TagStream>> ReadTagsAsync(ITag tag) => inner.ReadTagsAsync(tag);
+        public Task<TagState> GetLatestTagAsync(ITag tag) => inner.GetLatestTagAsync(tag);
+        public Task<bool> TagExistsAsync(ITag tag) => inner.TagExistsAsync(tag);
+        public Task<long> GetEventCountAsync(SortableUniqueId? since = null) => inner.GetEventCountAsync(since);
+        public Task<IEnumerable<TagInfo>> GetAllTagsAsync(string? group = null) => inner.GetAllTagsAsync(group);
+        public Task<IEnumerable<SerializableEvent>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null) => inner.ReadAllSerializableEventsAsync(since);
+        public Task<IEnumerable<SerializableEvent>> ReadAllSerializableEventsAsync(SortableUniqueId? since, int? count) => inner.ReadAllSerializableEventsAsync(since, count);
+        public Task<SerializableEvent?> ReadSerializableEventAsync(Guid id) => inner.ReadSerializableEventAsync(id);
+        public Task<IEnumerable<SerializableEvent>> ReadSerializableEventsByTagAsync(ITag tag, SortableUniqueId? since = null) => inner.ReadSerializableEventsByTagAsync(tag, since);
+        public Task<string> GetLatestSortableUniqueIdAsync() => inner.GetLatestSortableUniqueIdAsync();
     }
 }

@@ -16,6 +16,7 @@ using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
 using System.Text;
 using Xunit;
+using Sekiban.Dcb.TestSupport;
 
 namespace Sekiban.Dcb.Orleans.Tests;
 
@@ -32,7 +33,7 @@ public class StreamingPersistIntegrationTests : IAsyncLifetime
     public async Task InitializeAsync()
     {
         StreamingPersistSiloConfigurator.SharedBlobAccessor.Clear();
-        await StreamingPersistSiloConfigurator.SharedStateStore.DeleteAllAsync(FaultingStreamingProjector.MultiProjectorName);
+        await StreamingPersistSiloConfigurator.SharedStateStore.DeleteAllAsync(FaultingStreamingProjector.MultiProjectorName).AsResultBoxAsync();
         var builder = new TestClusterBuilder();
         builder.Options.InitialSilosCount = 1;
         var uniqueId = Guid.NewGuid().ToString("N")[..8];
@@ -214,7 +215,7 @@ public class StreamingPersistIntegrationTests : IAsyncLifetime
         // No external snapshot was written for the projector, and the projection is still faulted.
         var snapshot = await StreamingPersistSiloConfigurator.SharedStateStore.GetLatestForVersionAsync(
             FaultingStreamingProjector.MultiProjectorName,
-            FaultingStreamingProjector.MultiProjectorVersion);
+            FaultingStreamingProjector.MultiProjectorVersion).AsOptionalResultBoxAsync();
         Assert.False(snapshot.GetValue().HasValue);
         Assert.False((await grain.GetSnapshotJsonAsync(canGetUnsafeState: false)).IsSuccess); // still faulted
     }

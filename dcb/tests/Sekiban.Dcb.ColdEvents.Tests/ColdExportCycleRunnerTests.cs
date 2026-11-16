@@ -76,16 +76,19 @@ public class ColdExportCycleRunnerTests
         public Task<ColdFeatureStatus> GetStatusAsync(CancellationToken ct)
             => Task.FromResult(new ColdFeatureStatus(true, true, "test"));
 
-        public Task<ResultBox<ExportResult>> ExportIncrementalAsync(string serviceId, CancellationToken ct)
+        public Task<ExportResult> ExportIncrementalAsync(string serviceId, CancellationToken ct)
         {
             CallCount++;
             if (_results.Count == 0)
             {
-                return Task.FromResult(ResultBox.FromValue(
-                    new ExportResult(0, [], "done", "no_events_since_checkpoint")));
+                return Task.FromResult(
+                    new ExportResult(0, [], "done", "no_events_since_checkpoint"));
             }
 
-            return Task.FromResult(_results.Dequeue());
+            var next = _results.Dequeue();
+            return next.IsSuccess
+                ? Task.FromResult(next.GetValue())
+                : Task.FromException<ExportResult>(next.GetException());
         }
     }
 

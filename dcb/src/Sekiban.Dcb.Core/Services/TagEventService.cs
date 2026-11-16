@@ -43,7 +43,7 @@ public class TagEventService
     /// <param name="since">Optional: Only return events after this ID</param>
     /// <returns>List of events for the tag</returns>
     public Task<ResultBox<IEnumerable<Event>>> GetEventsByTagAsync(ITag tag, SortableUniqueId? since = null)
-        => _eventStore.ReadEventsByTagAsync(tag, _eventTypes, since);
+        => _eventStore.ReadEventsByTagAsync(tag, _eventTypes, since).ToResultBoxAsync();
 
     /// <summary>
     ///     Fetch all events for a tag specified by string

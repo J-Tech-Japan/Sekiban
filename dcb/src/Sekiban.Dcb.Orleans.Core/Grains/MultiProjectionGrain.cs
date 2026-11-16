@@ -996,7 +996,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         }
 
         if (IsStaleCheckpointHost(snapshotHost)) return false;
-        var latestResult = await _multiProjectionStateStore.GetLatestForVersionAsync(projectorName, projectorVersion);
+        var latestResult = await _multiProjectionStateStore.GetLatestForVersionAsync(projectorName, projectorVersion).ToOptionalResultBoxAsync();
         // A concurrent persist can mark this host while the read is in flight. This is a deliberate skip,
         // not a store-ahead/read-failure Warning, and must not build or upload another stale snapshot.
         if (IsStaleCheckpointHost(snapshotHost)) return false;
@@ -2913,7 +2913,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                     var stateStoreResult = await _multiProjectionStateStore.GetLatestForVersionAsync(
                         projectorName,
                         projectorVersion,
-                        cancellationToken);
+                        cancellationToken).ToOptionalResultBoxAsync();
 
                     ThrowIfRestoreCancelled(cancellationToken, stateStoreResult.IsSuccess ? null : stateStoreResult.GetException());
                     if (!stateStoreResult.IsSuccess)
@@ -2935,7 +2935,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                         knownRecordObtained = true;
                         var stateStreamResult = await _multiProjectionStateStore.OpenStateDataReadStreamAsync(
                             record,
-                            cancellationToken);
+                            cancellationToken).ToResultBoxAsync();
 
                         if (!stateStreamResult.IsSuccess)
                         {
@@ -3755,7 +3755,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             var writeResult = await _projectionStatusStore.UpsertAsync(
                 heartbeat,
                 expectedSequence,
-                writeTimeoutCts.Token).ConfigureAwait(false);
+                writeTimeoutCts.Token).ToResultBoxAsync().ConfigureAwait(false);
             if (!writeResult.IsSuccess)
             {
                 ScheduleProjectionStatusRetry(now);
@@ -4249,7 +4249,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         // Read the AUTHORITATIVE event-store head. If we cannot read it, we cannot prove there is no poison in the
         // un-caught-up tail, so we must fail the query closed with the original exception rather than answer empty.
         var catchUpStore = GetCatchUpEventStore();
-        var headResult = await catchUpStore.GetLatestSortableUniqueIdAsync();
+        var headResult = await catchUpStore.GetLatestSortableUniqueIdAsync().ToResultBoxAsync();
         if (!headResult.IsSuccess)
         {
             ExceptionDispatchInfo.Capture(headResult.GetException()).Throw();
@@ -4646,7 +4646,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             if (_multiProjectionStateStore != null && !string.IsNullOrEmpty(currentVersion) && _host != null)
             {
                 var stateResult = await _multiProjectionStateStore.GetLatestForVersionAsync(
-                    projectorName, currentVersion);
+                    projectorName, currentVersion).ToOptionalResultBoxAsync();
 
                 if (stateResult.IsSuccess && stateResult.GetValue().HasValue)
                 {
@@ -4661,7 +4661,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
                     var stateStreamResult = await _multiProjectionStateStore.OpenStateDataReadStreamAsync(
                         record,
-                        CancellationToken.None);
+                        CancellationToken.None).ToResultBoxAsync();
                     if (!stateStreamResult.IsSuccess)
                     {
                         throw stateStreamResult.GetException();
@@ -4753,7 +4753,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     public async Task SeedEventsAsync(IReadOnlyList<SerializableEvent> events)
     {
         if (_eventStore == null) return;
-        var result = await _eventStore.WriteSerializableEventsAsync(events);
+        var result = await _eventStore.WriteSerializableEventsAsync(events).ToResultBoxAsync();
         if (!result.IsSuccess)
         {
             throw result.GetException();
@@ -5119,7 +5119,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             using var projectionContext = HybridReadProjectionContext.Push(projectorName);
             eventsResult = await catchUpStore.ReadAllSerializableEventsAsync(
                 _catchUpProgress.CurrentPosition,
-                batchSize);
+                batchSize).ToResultBoxAsync();
             hybridReadBatchMetadata = HybridReadProjectionContext.BatchMetadata;
         }
         catch (NotSupportedException)
@@ -5346,35 +5346,55 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         {
             var readStartedAt = System.Diagnostics.Stopwatch.GetTimestamp();
             using var projectionContext = HybridReadProjectionContext.Push(projectorName);
-            var streamResult = await streamingCatchUpStore.StreamAllSerializableEventsAsync(
-                _catchUpProgress.CurrentPosition,
-                batchSize,
-                async ev =>
-                {
-                    if (!IsCurrentCatchUpBatch(run, host)) return;
-                    fetchedCount++;
-                    lastFetchedSortableUniqueId = ev.SortableUniqueIdValue;
-                    UpdateTargetPosition(ev.SortableUniqueIdValue);
-                    MarkProjectionStatusDirty(ev.SortableUniqueIdValue);
-
-                    if (_processedEventIds.Contains(ev.Id))
+            // Only a failure of the store read is a stream read failure. An exception thrown by this grain's own
+            // callback (for example an event the host cannot apply) propagates to the batch failure handling, as it
+            // did when the store reported read failures as a failed ResultBox and let callback exceptions through.
+            Exception? callbackFailure = null;
+            ResultBox<SerializableEventStreamReadResult> streamResult;
+            try
+            {
+                streamResult = ResultBox.FromValue(await streamingCatchUpStore.StreamAllSerializableEventsAsync(
+                    _catchUpProgress.CurrentPosition,
+                    batchSize,
+                    async ev =>
                     {
-                        return;
-                    }
+                        try
+                        {
+                            if (!IsCurrentCatchUpBatch(run, host)) return;
+                            fetchedCount++;
+                            lastFetchedSortableUniqueId = ev.SortableUniqueIdValue;
+                            UpdateTargetPosition(ev.SortableUniqueIdValue);
+                            MarkProjectionStatusDirty(ev.SortableUniqueIdValue);
 
-                    if (_catchUpProgress.CurrentPosition != null &&
-                        string.Compare(ev.SortableUniqueIdValue, _catchUpProgress.CurrentPosition.Value, StringComparison.Ordinal) <= 0)
-                    {
-                        return;
-                    }
+                            if (_processedEventIds.Contains(ev.Id))
+                            {
+                                return;
+                            }
 
-                    buffer.Add(ev);
-                    eventTypeNames.Add(ev.EventPayloadName);
-                    if (buffer.Count >= StreamingCatchUpApplyChunkSize)
-                    {
-                        await FlushBufferAsync();
-                    }
-                });
+                            if (_catchUpProgress.CurrentPosition != null &&
+                                string.Compare(ev.SortableUniqueIdValue, _catchUpProgress.CurrentPosition.Value, StringComparison.Ordinal) <= 0)
+                            {
+                                return;
+                            }
+
+                            buffer.Add(ev);
+                            eventTypeNames.Add(ev.EventPayloadName);
+                            if (buffer.Count >= StreamingCatchUpApplyChunkSize)
+                            {
+                                await FlushBufferAsync();
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            callbackFailure = ex;
+                            throw;
+                        }
+                    }));
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException && !ReferenceEquals(ex, callbackFailure))
+            {
+                streamResult = ResultBox.Error<SerializableEventStreamReadResult>(ex);
+            }
             if (!IsCurrentCatchUpBatch(run, host)) return new CatchUpBatchResult(0, 0, null, null);
             hybridReadBatchMetadata = HybridReadProjectionContext.BatchMetadata;
             var streamElapsedMs = (long)System.Diagnostics.Stopwatch.GetElapsedTime(readStartedAt).TotalMilliseconds;

@@ -7,6 +7,7 @@ using Sekiban.Dcb.ServiceId;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
 using Xunit;
+using Sekiban.Dcb.TestSupport;
 namespace Sekiban.Dcb.Postgres.Tests;
 
 public class PostgresWithActorsTests : PostgresTestBase
@@ -49,7 +50,7 @@ public class PostgresWithActorsTests : PostgresTestBase
 
         Assert.True(string.CompareOrdinal(afterRestart.GetValue().SortableUniqueId, first.GetValue().SortableUniqueId) > 0);
         var catchUp = (await Fixture.EventStore.ReadAllSerializableEventsAsync(
-            new SortableUniqueId(first.GetValue().SortableUniqueId!))).GetValue().ToArray();
+            new SortableUniqueId(first.GetValue().SortableUniqueId!)).AsResultBoxAsync()).GetValue().ToArray();
         Assert.Contains(catchUp, item => item.SortableUniqueIdValue == afterRestart.GetValue().SortableUniqueId);
     }
 
@@ -97,7 +98,7 @@ public class PostgresWithActorsTests : PostgresTestBase
 
         // Verify events are persisted in PostgreSQL
         var studentTag = new StudentTag(studentId);
-        var eventsResult = await Fixture.EventStore.ReadEventsByTagAsync(studentTag);
+        var eventsResult = await Fixture.EventStore.ReadEventsByTagAsync(studentTag).AsResultBoxAsync();
 
         Assert.True(eventsResult.IsSuccess);
         var events = eventsResult.GetValue().ToList();
@@ -160,7 +161,7 @@ public class PostgresWithActorsTests : PostgresTestBase
 
         // Verify in database - the number of events should match the success count
         var classRoomTag = new ClassRoomTag(classRoomId);
-        var eventsResult = await Fixture.EventStore.ReadEventsByTagAsync(classRoomTag);
+        var eventsResult = await Fixture.EventStore.ReadEventsByTagAsync(classRoomTag).AsResultBoxAsync();
 
         Assert.True(eventsResult.IsSuccess);
         var events = eventsResult.GetValue().ToList();
@@ -225,7 +226,7 @@ public class PostgresWithActorsTests : PostgresTestBase
 
         // Verify in database
         var classRoomTag = new ClassRoomTag(classRoomId);
-        var eventsResult = await Fixture.EventStore.ReadEventsByTagAsync(classRoomTag);
+        var eventsResult = await Fixture.EventStore.ReadEventsByTagAsync(classRoomTag).AsResultBoxAsync();
 
         Assert.True(eventsResult.IsSuccess);
         var events = eventsResult.GetValue().ToList();
@@ -262,11 +263,11 @@ public class PostgresWithActorsTests : PostgresTestBase
         Assert.NotEmpty(latestIdResult.GetValue());
 
         // Verify the same data is in database
-        var tagExistsResult = await Fixture.EventStore.TagExistsAsync(studentTag);
+        var tagExistsResult = await Fixture.EventStore.TagExistsAsync(studentTag).AsResultBoxAsync();
         Assert.True(tagExistsResult.IsSuccess);
         Assert.True(tagExistsResult.GetValue());
 
-        var latestTagResult = await Fixture.EventStore.GetLatestTagAsync(studentTag);
+        var latestTagResult = await Fixture.EventStore.GetLatestTagAsync(studentTag).AsResultBoxAsync();
         Assert.True(latestTagResult.IsSuccess);
         Assert.Equal(latestIdResult.GetValue(), latestTagResult.GetValue().LastSortedUniqueId);
     }

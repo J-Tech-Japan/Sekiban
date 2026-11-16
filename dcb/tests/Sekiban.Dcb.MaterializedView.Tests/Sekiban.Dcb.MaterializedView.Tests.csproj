@@ -43,4 +43,9 @@
         <ProjectReference Include="..\..\internalUsages\Dcb.Domain.WithoutResult\Dcb.Domain.WithoutResult.csproj"/>
     </ItemGroup>
 
+    <ItemGroup>
+        <!-- Test-only bridge from the exception-based storage contracts back to ResultBox assertions. -->
+        <Compile Include="../Sekiban.Dcb.TestSupport/StorageResultBoxExtensions.cs" Link="StorageResultBoxExtensions.cs" />
+    </ItemGroup>
+
 </Project>

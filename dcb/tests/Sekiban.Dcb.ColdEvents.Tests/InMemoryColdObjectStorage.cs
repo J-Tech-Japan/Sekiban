@@ -1,6 +1,5 @@
 using System.Collections.Concurrent;
 using System.Security.Cryptography;
-using ResultBoxes;
 using Sekiban.Dcb.ColdEvents;
 namespace Sekiban.Dcb.ColdEvents.Tests;
 
@@ -10,30 +9,24 @@ public sealed class InMemoryColdObjectStorage : IColdObjectStorage
 
     private sealed record StoredBlob(byte[] Data, string ETag);
 
-    public Task<ResultBox<ColdStorageObject>> GetAsync(string path, CancellationToken ct)
+    public Task<ColdStorageObject?> GetAsync(string path, CancellationToken ct)
     {
-        if (!_blobs.TryGetValue(path, out var blob))
-        {
-            return Task.FromResult(
-                ResultBox.Error<ColdStorageObject>(new KeyNotFoundException($"Object not found: {path}")));
-        }
         return Task.FromResult(
-            ResultBox.FromValue(new ColdStorageObject(blob.Data, blob.ETag)));
+            _blobs.TryGetValue(path, out var blob) ? new ColdStorageObject(blob.Data, blob.ETag) : null);
     }
 
-    public Task<ResultBox<Stream>> OpenReadAsync(string path, CancellationToken ct)
+    public Task<Stream> OpenReadAsync(string path, CancellationToken ct)
     {
         if (!_blobs.TryGetValue(path, out var blob))
         {
-            return Task.FromResult(
-                ResultBox.Error<Stream>(new KeyNotFoundException($"Object not found: {path}")));
+            return Task.FromException<Stream>(new KeyNotFoundException($"Object not found: {path}"));
         }
 
         Stream stream = new MemoryStream(blob.Data, writable: false);
-        return Task.FromResult(ResultBox.FromValue(stream));
+        return Task.FromResult(stream);
     }
 
-    public Task<ResultBox<bool>> PutAsync(
+    public Task<bool> PutAsync(
         string path,
         byte[] data,
         string? expectedETag,
@@ -43,24 +36,22 @@ public sealed class InMemoryColdObjectStorage : IColdObjectStorage
         {
             if (!_blobs.TryGetValue(path, out var existing))
             {
-                return Task.FromResult(
-                    ResultBox.Error<bool>(new InvalidOperationException(
-                        $"Conditional write failed: object does not exist at {path}")));
+                return Task.FromException<bool>(new InvalidOperationException(
+                    $"Conditional write failed: object does not exist at {path}"));
             }
             if (existing.ETag != expectedETag)
             {
-                return Task.FromResult(
-                    ResultBox.Error<bool>(new InvalidOperationException(
-                        $"ETag mismatch at {path}: expected={expectedETag}, actual={existing.ETag}")));
+                return Task.FromException<bool>(new InvalidOperationException(
+                    $"ETag mismatch at {path}: expected={expectedETag}, actual={existing.ETag}"));
             }
         }
 
         var newETag = ComputeETag(data);
         _blobs[path] = new StoredBlob(data, newETag);
-        return Task.FromResult(ResultBox.FromValue(true));
+        return Task.FromResult(true);
     }
 
-    public async Task<ResultBox<bool>> PutAsync(
+    public async Task<bool> PutAsync(
         string path,
         Stream data,
         string? expectedETag,
@@ -76,20 +67,19 @@ public sealed class InMemoryColdObjectStorage : IColdObjectStorage
         return await PutAsync(path, ms.ToArray(), expectedETag, ct);
     }
 
-    public Task<ResultBox<IReadOnlyList<string>>> ListAsync(string prefix, CancellationToken ct)
+    public Task<IReadOnlyList<string>> ListAsync(string prefix, CancellationToken ct)
     {
         var keys = _blobs.Keys
             .Where(k => k.StartsWith(prefix, StringComparison.Ordinal))
             .Order()
             .ToList();
-        return Task.FromResult(
-            ResultBox.FromValue<IReadOnlyList<string>>(keys));
+        return Task.FromResult<IReadOnlyList<string>>(keys);
     }
 
-    public Task<ResultBox<bool>> DeleteAsync(string path, CancellationToken ct)
+    public Task<bool> DeleteAsync(string path, CancellationToken ct)
     {
         var removed = _blobs.TryRemove(path, out _);
-        return Task.FromResult(ResultBox.FromValue(removed));
+        return Task.FromResult(removed);
     }
 
     private static string ComputeETag(byte[] data)

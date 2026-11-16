@@ -1,6 +1,5 @@
 using Amazon.DynamoDBv2;
 using Amazon.DynamoDBv2.Model;
-using ResultBoxes;
 using Sekiban.Dcb.DynamoDB.Models;
 using Sekiban.Dcb.MultiProjections;
 using Sekiban.Dcb.ServiceId;
@@ -55,93 +54,71 @@ public partial class DynamoMultiProjectionStateStore :
     /// <summary>
     ///     Gets the latest projection state for a specific version.
     /// </summary>
-    public async Task<ResultBox<OptionalValue<MultiProjectionStateRecord>>> GetLatestForVersionAsync(
+    public async Task<MultiProjectionStateRecord?> GetLatestForVersionAsync(
         string projectorName,
         string projectorVersion,
         CancellationToken cancellationToken = default)
     {
-        try
+        await _context.EnsureTablesAsync(cancellationToken).ConfigureAwait(false);
+
+        var serviceId = CurrentServiceId;
+        var key = BuildProjectionKey(serviceId, projectorName, projectorVersion);
+        var response = await _client.GetItemAsync(new GetItemRequest
         {
-            await _context.EnsureTablesAsync(cancellationToken).ConfigureAwait(false);
+            TableName = _context.ProjectionStatesTableName,
+            Key = key,
+            ConsistentRead = _options.UseConsistentReads
+        }, cancellationToken).ConfigureAwait(false);
 
-            var serviceId = CurrentServiceId;
-            var key = BuildProjectionKey(serviceId, projectorName, projectorVersion);
-            var response = await _client.GetItemAsync(new GetItemRequest
-            {
-                TableName = _context.ProjectionStatesTableName,
-                Key = key,
-                ConsistentRead = _options.UseConsistentReads
-            }, cancellationToken).ConfigureAwait(false);
+        if (response.Item == null || response.Item.Count == 0)
+            return null;
 
-            if (response.Item == null || response.Item.Count == 0)
-                return ResultBox.FromValue(OptionalValue<MultiProjectionStateRecord>.Empty);
+        var doc = DynamoMultiProjectionState.FromAttributeValues(response.Item);
 
-            var doc = DynamoMultiProjectionState.FromAttributeValues(response.Item);
-
-            return ResultBox.FromValue(OptionalValue.FromValue(doc.ToRecord()));
-        }
-        catch (Exception ex)
-        {
-            return ResultBox.Error<OptionalValue<MultiProjectionStateRecord>>(ex);
-        }
+        return doc.ToRecord();
     }
 
     /// <summary>
     ///     Gets the latest projection state for any version of a projector.
     /// </summary>
-    public async Task<ResultBox<OptionalValue<MultiProjectionStateRecord>>> GetLatestAnyVersionAsync(
+    public async Task<MultiProjectionStateRecord?> GetLatestAnyVersionAsync(
         string projectorName,
         CancellationToken cancellationToken = default)
     {
-        try
-        {
-            await _context.EnsureTablesAsync(cancellationToken).ConfigureAwait(false);
+        await _context.EnsureTablesAsync(cancellationToken).ConfigureAwait(false);
 
-            var serviceId = CurrentServiceId;
-            var items = await QueryProjectionItemsAsync(serviceId, projectorName, cancellationToken).ConfigureAwait(false);
-            if (items.Count == 0)
-                return ResultBox.FromValue(OptionalValue<MultiProjectionStateRecord>.Empty);
+        var serviceId = CurrentServiceId;
+        var items = await QueryProjectionItemsAsync(serviceId, projectorName, cancellationToken).ConfigureAwait(false);
+        if (items.Count == 0)
+            return null;
 
-            var latest = items.OrderByDescending(i => i.EventsProcessed).First();
+        var latest = items.OrderByDescending(i => i.EventsProcessed).First();
 
-            return ResultBox.FromValue(OptionalValue.FromValue(latest.ToRecord()));
-        }
-        catch (Exception ex)
-        {
-            return ResultBox.Error<OptionalValue<MultiProjectionStateRecord>>(ex);
-        }
+        return latest.ToRecord();
     }
 
     /// <summary>
     ///     Inserts or updates a projection state record.
     /// </summary>
-    public async Task<ResultBox<bool>> UpsertAsync(
+    public async Task<bool> UpsertAsync(
         MultiProjectionStateRecord record,
         int offloadThresholdBytes = 1_000_000,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(record);
 
-        try
+        await _context.EnsureTablesAsync(cancellationToken).ConfigureAwait(false);
+
+        if (!record.IsOffloaded)
         {
-            await _context.EnsureTablesAsync(cancellationToken).ConfigureAwait(false);
-
-            if (!record.IsOffloaded)
-            {
-                return ResultBox.Error<bool>(
-                    new NotSupportedException(
-                        "UpsertAsync without payload stream is not supported for non-offloaded snapshots. Use UpsertFromStreamAsync."));
-            }
-
-            await PersistRecordToDynamoAsync(record with { UpdatedAt = DateTime.UtcNow }, stateData: null, cancellationToken)
-                .ConfigureAwait(false);
-
-            return ResultBox.FromValue(true);
+            throw new NotSupportedException(
+                "UpsertAsync without payload stream is not supported for non-offloaded snapshots. Use UpsertFromStreamAsync.");
         }
-        catch (Exception ex)
-        {
-            return ResultBox.Error<bool>(ex);
-        }
+
+        await PersistRecordToDynamoAsync(record with { UpdatedAt = DateTime.UtcNow }, stateData: null, cancellationToken)
+            .ConfigureAwait(false);
+
+        return true;
     }
 
     /// <summary>
@@ -149,7 +126,7 @@ public partial class DynamoMultiProjectionStateStore :
     /// </summary>
     /// <param name="record">Snapshot metadata record.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    public async Task<ResultBox<Stream>> OpenStateDataReadStreamAsync(
+    public async Task<Stream> OpenStateDataReadStreamAsync(
         MultiProjectionStateRecord record,
         CancellationToken cancellationToken = default)
     {
@@ -160,21 +137,19 @@ public partial class DynamoMultiProjectionStateStore :
             {
                 var stream = await _blobAccessor.OpenReadAsync(record.OffloadKey, cancellationToken)
                     .ConfigureAwait(false);
-                return ResultBox.FromValue(stream);
+                return stream;
             }
             catch (IOException ex)
             {
-                return ResultBox.Error<Stream>(
-                    new InvalidOperationException(
-                        $"Failed to open offloaded state stream. Projector: {record.ProjectorName}, Version: {record.ProjectorVersion}, BlobKey: {record.OffloadKey}",
-                        ex));
+                throw new InvalidOperationException(
+                    $"Failed to open offloaded state stream. Projector: {record.ProjectorName}, Version: {record.ProjectorVersion}, BlobKey: {record.OffloadKey}",
+                    ex);
             }
             catch (InvalidOperationException ex)
             {
-                return ResultBox.Error<Stream>(
-                    new InvalidOperationException(
-                        $"Failed to open offloaded state stream. Projector: {record.ProjectorName}, Version: {record.ProjectorVersion}, BlobKey: {record.OffloadKey}",
-                        ex));
+                throw new InvalidOperationException(
+                    $"Failed to open offloaded state stream. Projector: {record.ProjectorName}, Version: {record.ProjectorVersion}, BlobKey: {record.OffloadKey}",
+                    ex);
             }
         }
 
@@ -194,182 +169,153 @@ public partial class DynamoMultiProjectionStateStore :
             if (!string.IsNullOrWhiteSpace(doc.StateData))
             {
                 var bytes = Convert.FromBase64String(doc.StateData);
-                return ResultBox.FromValue<Stream>(new MemoryStream(bytes, writable: false));
+                return new MemoryStream(bytes, writable: false);
             }
         }
 
-        return ResultBox.Error<Stream>(
-            new InvalidOperationException(
-                $"Projection state has no inline data and no readable offload stream: {record.ProjectorName}/{record.ProjectorVersion}"));
+        throw new InvalidOperationException(
+            $"Projection state has no inline data and no readable offload stream: {record.ProjectorName}/{record.ProjectorVersion}");
     }
 
     /// <summary>
     ///     Stream-based upsert with offload via StreamOffloadHelper.
     /// </summary>
-    public async Task<ResultBox<bool>> UpsertFromStreamAsync(
+    public async Task<bool> UpsertFromStreamAsync(
         MultiProjectionStateWriteRequest request,
         Stream stream,
         int offloadThresholdBytes,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
-        try
+        await _context.EnsureTablesAsync(cancellationToken).ConfigureAwait(false);
+
+        var effectiveThreshold = GetEffectiveThreshold(offloadThresholdBytes);
+
+        var offloadResult = await StreamOffloadHelper.ProcessAsync(
+            stream,
+            $"{request.ProjectorName}/{request.ProjectorVersion}",
+            effectiveThreshold,
+            _blobAccessor,
+            cancellationToken).ConfigureAwait(false);
+
+        var record = (request with
         {
-            await _context.EnsureTablesAsync(cancellationToken).ConfigureAwait(false);
+            IsOffloaded = offloadResult.IsOffloaded,
+            OffloadKey = offloadResult.OffloadKey,
+            OffloadProvider = offloadResult.OffloadProvider,
+            UpdatedAt = DateTime.UtcNow
+        }).ToRecord();
 
-            var effectiveThreshold = GetEffectiveThreshold(offloadThresholdBytes);
+        await PersistRecordToDynamoAsync(record, offloadResult.InlineData, cancellationToken).ConfigureAwait(false);
 
-            var offloadResult = await StreamOffloadHelper.ProcessAsync(
-                stream,
-                $"{request.ProjectorName}/{request.ProjectorVersion}",
-                effectiveThreshold,
-                _blobAccessor,
-                cancellationToken).ConfigureAwait(false);
-
-            var record = (request with
-            {
-                IsOffloaded = offloadResult.IsOffloaded,
-                OffloadKey = offloadResult.OffloadKey,
-                OffloadProvider = offloadResult.OffloadProvider,
-                UpdatedAt = DateTime.UtcNow
-            }).ToRecord();
-
-            await PersistRecordToDynamoAsync(record, offloadResult.InlineData, cancellationToken).ConfigureAwait(false);
-
-            return ResultBox.FromValue(true);
-        }
-        catch (Exception ex)
-        {
-            return ResultBox.Error<bool>(ex);
-        }
+        return true;
     }
 
     /// <summary>
     ///     Lists all projection state records.
     /// </summary>
-    public async Task<ResultBox<IReadOnlyList<ProjectorStateInfo>>> ListAllAsync(
+    public async Task<IReadOnlyList<ProjectorStateInfo>> ListAllAsync(
         CancellationToken cancellationToken = default)
     {
-        try
+        await _context.EnsureTablesAsync(cancellationToken).ConfigureAwait(false);
+
+        var list = new List<ProjectorStateInfo>();
+        Dictionary<string, AttributeValue>? lastKey = null;
+        var serviceId = CurrentServiceId;
+
+        do
         {
-            await _context.EnsureTablesAsync(cancellationToken).ConfigureAwait(false);
-
-            var list = new List<ProjectorStateInfo>();
-            Dictionary<string, AttributeValue>? lastKey = null;
-            var serviceId = CurrentServiceId;
-
-            do
+            var response = await _client.ScanAsync(new ScanRequest
             {
-                var response = await _client.ScanAsync(new ScanRequest
+                TableName = _context.ProjectionStatesTableName,
+                FilterExpression = "serviceId = :serviceId AND (attribute_not_exists(documentType) OR documentType = :projectionState)",
+                ExpressionAttributeValues = new Dictionary<string, AttributeValue>
                 {
-                    TableName = _context.ProjectionStatesTableName,
-                    FilterExpression = "serviceId = :serviceId AND (attribute_not_exists(documentType) OR documentType = :projectionState)",
-                    ExpressionAttributeValues = new Dictionary<string, AttributeValue>
-                    {
-                        [":serviceId"] = new AttributeValue { S = serviceId },
-                        [":projectionState"] = new AttributeValue { S = "projectionState" }
-                    },
-                    ExclusiveStartKey = lastKey,
-                    Limit = _options.QueryPageSize
-                }, cancellationToken).ConfigureAwait(false);
+                    [":serviceId"] = new AttributeValue { S = serviceId },
+                    [":projectionState"] = new AttributeValue { S = "projectionState" }
+                },
+                ExclusiveStartKey = lastKey,
+                Limit = _options.QueryPageSize
+            }, cancellationToken).ConfigureAwait(false);
 
-                foreach (var item in response.Items)
-                {
-                    var doc = DynamoMultiProjectionState.FromAttributeValues(item);
-                    list.Add(new ProjectorStateInfo(
-                        doc.ProjectorName,
-                        doc.ProjectorVersion,
-                        doc.EventsProcessed,
-                        DateTime.TryParse(doc.UpdatedAt, out var updated) ? updated : DateTime.UtcNow,
-                        doc.OriginalSizeBytes,
-                        doc.CompressedSizeBytes,
-                        doc.LastSortableUniqueId));
-                }
+            foreach (var item in response.Items)
+            {
+                var doc = DynamoMultiProjectionState.FromAttributeValues(item);
+                list.Add(new ProjectorStateInfo(
+                    doc.ProjectorName,
+                    doc.ProjectorVersion,
+                    doc.EventsProcessed,
+                    DateTime.TryParse(doc.UpdatedAt, out var updated) ? updated : DateTime.UtcNow,
+                    doc.OriginalSizeBytes,
+                    doc.CompressedSizeBytes,
+                    doc.LastSortableUniqueId));
+            }
 
-                lastKey = response.LastEvaluatedKey;
-            } while (lastKey != null && lastKey.Count > 0);
+            lastKey = response.LastEvaluatedKey;
+        } while (lastKey != null && lastKey.Count > 0);
 
-            return ResultBox.FromValue<IReadOnlyList<ProjectorStateInfo>>(list);
-        }
-        catch (Exception ex)
-        {
-            return ResultBox.Error<IReadOnlyList<ProjectorStateInfo>>(ex);
-        }
+        return list;
     }
 
     /// <summary>
     ///     Deletes a projection state record for a specific version.
     /// </summary>
-    public async Task<ResultBox<bool>> DeleteAsync(
+    public async Task<bool> DeleteAsync(
         string projectorName,
         string projectorVersion,
         CancellationToken cancellationToken = default)
     {
-        try
+        await _context.EnsureTablesAsync(cancellationToken).ConfigureAwait(false);
+
+        var serviceId = CurrentServiceId;
+        var key = BuildProjectionKey(serviceId, projectorName, projectorVersion);
+        var response = await _client.GetItemAsync(new GetItemRequest
         {
-            await _context.EnsureTablesAsync(cancellationToken).ConfigureAwait(false);
+            TableName = _context.ProjectionStatesTableName,
+            Key = key,
+            ConsistentRead = true
+        }, cancellationToken).ConfigureAwait(false);
 
-            var serviceId = CurrentServiceId;
-            var key = BuildProjectionKey(serviceId, projectorName, projectorVersion);
-            var response = await _client.GetItemAsync(new GetItemRequest
-            {
-                TableName = _context.ProjectionStatesTableName,
-                Key = key,
-                ConsistentRead = true
-            }, cancellationToken).ConfigureAwait(false);
+        if (response.Item == null || response.Item.Count == 0)
+            return false;
 
-            if (response.Item == null || response.Item.Count == 0)
-                return ResultBox.FromValue(false);
-
-            await _client.DeleteItemAsync(new DeleteItemRequest
-            {
-                TableName = _context.ProjectionStatesTableName,
-                Key = key
-            }, cancellationToken).ConfigureAwait(false);
-
-            return ResultBox.FromValue(true);
-        }
-        catch (Exception ex)
+        await _client.DeleteItemAsync(new DeleteItemRequest
         {
-            return ResultBox.Error<bool>(ex);
-        }
+            TableName = _context.ProjectionStatesTableName,
+            Key = key
+        }, cancellationToken).ConfigureAwait(false);
+
+        return true;
     }
 
     /// <summary>
     ///     Deletes all projection state records for a projector (or all projectors if null).
     /// </summary>
-    public async Task<ResultBox<int>> DeleteAllAsync(
+    public async Task<int> DeleteAllAsync(
         string? projectorName = null,
         CancellationToken cancellationToken = default)
     {
-        try
+        await _context.EnsureTablesAsync(cancellationToken).ConfigureAwait(false);
+
+        var serviceId = CurrentServiceId;
+        var items = projectorName != null
+            ? await QueryProjectionItemsAsync(serviceId, projectorName, cancellationToken).ConfigureAwait(false)
+            : await ScanProjectionItemsAsync(serviceId, cancellationToken).ConfigureAwait(false);
+
+        foreach (var item in items)
         {
-            await _context.EnsureTablesAsync(cancellationToken).ConfigureAwait(false);
-
-            var serviceId = CurrentServiceId;
-            var items = projectorName != null
-                ? await QueryProjectionItemsAsync(serviceId, projectorName, cancellationToken).ConfigureAwait(false)
-                : await ScanProjectionItemsAsync(serviceId, cancellationToken).ConfigureAwait(false);
-
-            foreach (var item in items)
+            await _client.DeleteItemAsync(new DeleteItemRequest
             {
-                await _client.DeleteItemAsync(new DeleteItemRequest
+                TableName = _context.ProjectionStatesTableName,
+                Key = new Dictionary<string, AttributeValue>
                 {
-                    TableName = _context.ProjectionStatesTableName,
-                    Key = new Dictionary<string, AttributeValue>
-                    {
-                        ["pk"] = new AttributeValue { S = item.Pk },
-                        ["sk"] = new AttributeValue { S = item.Sk }
-                    }
-                }, cancellationToken).ConfigureAwait(false);
-            }
+                    ["pk"] = new AttributeValue { S = item.Pk },
+                    ["sk"] = new AttributeValue { S = item.Sk }
+                }
+            }, cancellationToken).ConfigureAwait(false);
+        }
 
-            return ResultBox.FromValue(items.Count);
-        }
-        catch (Exception ex)
-        {
-            return ResultBox.Error<int>(ex);
-        }
+        return items.Count;
     }
 
     /// <summary>
@@ -512,40 +458,40 @@ public partial class DynamoMultiProjectionStateStore :
         [":el"] = new AttributeValue { N = lifecycle.ToString(System.Globalization.CultureInfo.InvariantCulture) }
     };
 
-    public async Task<ResultBox<CheckpointSlot>> ReadCheckpointSlotAsync(
+    public async Task<CheckpointSlot> ReadCheckpointSlotAsync(
         string projectorName,
         string projectorVersion,
         CancellationToken cancellationToken = default)
     {
-        try
+        await _context.EnsureTablesAsync(cancellationToken).ConfigureAwait(false);
+        var serviceId = CurrentServiceId;
+        var response = await _client.GetItemAsync(new GetItemRequest
         {
-            await _context.EnsureTablesAsync(cancellationToken).ConfigureAwait(false);
-            var serviceId = CurrentServiceId;
-            var response = await _client.GetItemAsync(new GetItemRequest
-            {
-                TableName = _context.ProjectionStatesTableName,
-                Key = BuildProjectionKey(serviceId, projectorName, projectorVersion),
-                ConsistentRead = true
-            }, cancellationToken).ConfigureAwait(false);
+            TableName = _context.ProjectionStatesTableName,
+            Key = BuildProjectionKey(serviceId, projectorName, projectorVersion),
+            ConsistentRead = true
+        }, cancellationToken).ConfigureAwait(false);
 
-            if (response.Item == null || response.Item.Count == 0)
-            {
-                return ResultBox.FromValue(CheckpointSlot.Absent);
-            }
-            var doc = DynamoMultiProjectionState.FromAttributeValues(response.Item);
-            return ResultBox.FromValue(new CheckpointSlot(
-                true, doc.Generation, doc.Revision.ToString(), (CheckpointLifecycle)doc.Lifecycle, doc.ToRecord()));
-        }
-        catch (Exception ex)
+        if (response.Item == null || response.Item.Count == 0)
         {
-            return ResultBox.Error<CheckpointSlot>(ex);
+            return CheckpointSlot.Absent;
         }
+        var doc = DynamoMultiProjectionState.FromAttributeValues(response.Item);
+        return new CheckpointSlot(
+            true, doc.Generation, doc.Revision.ToString(), (CheckpointLifecycle)doc.Lifecycle, doc.ToRecord());
     }
 
     private async Task<CheckpointSlot> RefetchAsync(string projectorName, string projectorVersion, CancellationToken ct)
     {
-        var read = await ReadCheckpointSlotAsync(projectorName, projectorVersion, ct);
-        return read.IsSuccess ? read.GetValue() : CheckpointSlot.Absent;
+        try
+        {
+            return await ReadCheckpointSlotAsync(projectorName, projectorVersion, ct);
+        }
+        catch (Exception)
+        {
+            // An unreadable refetch is treated as absent, as before.
+            return CheckpointSlot.Absent;
+        }
     }
 
     public async Task<CheckpointCasOutcome> ConditionalUpsertAsync(

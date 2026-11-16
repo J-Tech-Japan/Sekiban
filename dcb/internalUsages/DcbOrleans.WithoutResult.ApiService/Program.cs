@@ -734,8 +734,7 @@ apiRoute
         "/debug/events",
         async ([FromServices] IEventStore eventStore) =>
         {
-            var result = await eventStore.ReadAllSerializableEventsAsync();
-            var events = result.GetValue().ToList();
+            var events = (await eventStore.ReadAllSerializableEventsAsync()).ToList();
             Console.WriteLine($"[Debug] ReadAllSerializableEventsAsync returned {events.Count} events");
             return Results.Ok(
                 new
@@ -1342,10 +1341,14 @@ apiRoute
         async ([FromServices] IColdEventProgressReader reader, [FromServices] IServiceIdProvider serviceIdProvider, CancellationToken ct) =>
         {
             var serviceId = serviceIdProvider.GetCurrentServiceId();
-            var result = await reader.GetProgressAsync(serviceId, ct);
-            return result.IsSuccess
-                ? Results.Ok(result.GetValue())
-                : Results.BadRequest(new { error = result.GetException().Message });
+            try
+            {
+                return Results.Ok(await reader.GetProgressAsync(serviceId, ct));
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                return Results.BadRequest(new { error = ex.Message });
+            }
         })
     .WithOpenApi()
     .WithName("GetColdProgress");
@@ -1356,10 +1359,14 @@ apiRoute
         async ([FromServices] IColdEventCatalogReader reader, [FromServices] IServiceIdProvider serviceIdProvider, CancellationToken ct) =>
         {
             var serviceId = serviceIdProvider.GetCurrentServiceId();
-            var result = await reader.GetDataRangeSummaryAsync(serviceId, ct);
-            return result.IsSuccess
-                ? Results.Ok(result.GetValue())
-                : Results.BadRequest(new { error = result.GetException().Message });
+            try
+            {
+                return Results.Ok(await reader.GetDataRangeSummaryAsync(serviceId, ct));
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                return Results.BadRequest(new { error = ex.Message });
+            }
         })
     .WithOpenApi()
     .WithName("GetColdCatalog");
@@ -1370,10 +1377,14 @@ apiRoute
         async ([FromServices] IColdEventExporter exporter, [FromServices] IServiceIdProvider serviceIdProvider, CancellationToken ct) =>
         {
             var serviceId = serviceIdProvider.GetCurrentServiceId();
-            var result = await exporter.ExportIncrementalAsync(serviceId, ct);
-            return result.IsSuccess
-                ? Results.Ok(result.GetValue())
-                : Results.BadRequest(new { error = result.GetException().Message });
+            try
+            {
+                return Results.Ok(await exporter.ExportIncrementalAsync(serviceId, ct));
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                return Results.BadRequest(new { error = ex.Message });
+            }
         })
     .WithOpenApi()
     .WithName("RunColdExport");
@@ -1385,10 +1396,14 @@ apiRoute
         async ([FromServices] IColdEventExporter exporter, [FromServices] IServiceIdProvider serviceIdProvider, CancellationToken ct) =>
         {
             var serviceId = serviceIdProvider.GetCurrentServiceId();
-            var result = await exporter.ExportIncrementalAsync(serviceId, ct);
-            return result.IsSuccess
-                ? Results.Ok(result.GetValue())
-                : Results.BadRequest(new { error = result.GetException().Message });
+            try
+            {
+                return Results.Ok(await exporter.ExportIncrementalAsync(serviceId, ct));
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                return Results.BadRequest(new { error = ex.Message });
+            }
         })
     .WithName("RunColdExportNow")
     .ExcludeFromDescription();
@@ -1409,29 +1424,18 @@ if (app.Environment.IsDevelopment())
                 var manifestPath = ColdStoragePaths.ManifestPath(serviceId);
                 var checkpointPath = ColdStoragePaths.CheckpointPath(serviceId);
 
-                string? leaseReadError = null;
-                string? manifestReadError = null;
-                string? checkpointReadError = null;
-
-                var leaseObject = await storage.GetAsync(leasePath, ct);
-                if (!leaseObject.IsSuccess)
+                var (leaseExists, leaseReadError) = await ProbeColdObjectAsync(storage, leasePath, ct);
+                var (manifestExists, manifestReadError) = await ProbeColdObjectAsync(storage, manifestPath, ct);
+                var (checkpointExists, checkpointReadError) = await ProbeColdObjectAsync(storage, checkpointPath, ct);
+                int segmentPathCount;
+                try
                 {
-                    leaseReadError = leaseObject.GetException().Message;
+                    segmentPathCount = (await storage.ListAsync("segments/", ct)).Count;
                 }
-
-                var manifestObject = await storage.GetAsync(manifestPath, ct);
-                if (!manifestObject.IsSuccess)
+                catch (Exception ex) when (ex is not OperationCanceledException)
                 {
-                    manifestReadError = manifestObject.GetException().Message;
+                    segmentPathCount = -1;
                 }
-
-                var checkpointObject = await storage.GetAsync(checkpointPath, ct);
-                if (!checkpointObject.IsSuccess)
-                {
-                    checkpointReadError = checkpointObject.GetException().Message;
-                }
-
-                var segmentList = await storage.ListAsync("segments/", ct);
 
                 return Results.Ok(new
                 {
@@ -1443,22 +1447,22 @@ if (app.Environment.IsDevelopment())
                     lease = new
                     {
                         path = leasePath,
-                        exists = leaseObject.IsSuccess,
+                        exists = leaseExists,
                         error = leaseReadError
                     },
                     manifest = new
                     {
                         path = manifestPath,
-                        exists = manifestObject.IsSuccess,
+                        exists = manifestExists,
                         error = manifestReadError
                     },
                     checkpoint = new
                     {
                         path = checkpointPath,
-                        exists = checkpointObject.IsSuccess,
+                        exists = checkpointExists,
                         error = checkpointReadError
                     },
-                    segmentPathCount = segmentList.IsSuccess ? segmentList.GetValue().Count : -1
+                    segmentPathCount
                 });
             })
         .WithName("ColdDebug")
@@ -1573,6 +1577,21 @@ apiRoute
 app.MapDefaultEndpoints();
 
 app.Run();
+
+static async Task<(bool Exists, string? Error)> ProbeColdObjectAsync(
+    IColdObjectStorage storage,
+    string path,
+    CancellationToken ct)
+{
+    try
+    {
+        return (await storage.GetAsync(path, ct) is not null, null);
+    }
+    catch (Exception ex) when (ex is not OperationCanceledException)
+    {
+        return (false, ex.Message);
+    }
+}
 
 static bool ResolveColdEventEnabled(IConfiguration configuration)
 {

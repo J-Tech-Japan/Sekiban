@@ -814,8 +814,7 @@ if (TemplateEnvironment.IsDevelopment(app.Environment.EnvironmentName))
             "/debug/events",
             async ([FromServices] IEventStore eventStore, [FromServices] ILogger<Program> logger) =>
             {
-                var result = await eventStore.ReadAllEventsAsync();
-                var events = result.GetValue().ToList();
+                var events = (await eventStore.ReadAllEventsAsync()).ToList();
                 logger.LogDebug("ReadAllEventsAsync returned {EventCount} events", events.Count);
                 return Results.Ok(
                     new

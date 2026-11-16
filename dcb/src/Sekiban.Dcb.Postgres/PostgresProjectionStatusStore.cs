@@ -1,174 +1,157 @@
 using System.Data.Common;
 using Microsoft.EntityFrameworkCore;
-using ResultBoxes;
 
 namespace Sekiban.Dcb.Postgres;
 
 public partial class PostgresMultiProjectionStateStore
 {
-    public async Task<ResultBox<ProjectionStatusWriteResult>> UpsertAsync(
+    public async Task<ProjectionStatusWriteResult> UpsertAsync(
         ProjectionStatusHeartbeat heartbeat,
         long expectedSequence,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(heartbeat);
-        try
+        _projectionStatusOptions.Validate();
+        var serviceId = CurrentServiceId;
+        if (!string.Equals(heartbeat.ServiceId, serviceId, StringComparison.Ordinal))
         {
-            _projectionStatusOptions.Validate();
-            var serviceId = CurrentServiceId;
-            if (!string.Equals(heartbeat.ServiceId, serviceId, StringComparison.Ordinal))
-            {
-                return ResultBox.Error<ProjectionStatusWriteResult>(
-                    new UnauthorizedAccessException("Projection status ServiceId is owned by the server."));
-            }
-
-            if (expectedSequence < 0 || heartbeat.Sequence <= 0)
-            {
-                return ResultBox.Error<ProjectionStatusWriteResult>(
-                    new ArgumentOutOfRangeException(nameof(expectedSequence), "Projection status sequences must be positive and expected sequence must not be negative."));
-            }
-
-            await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-            await EnsureProjectionStatusSchemaIfAllowedAsync(context, cancellationToken).ConfigureAwait(false);
-            await using var connection = context.Database.GetDbConnection();
-            if (connection.State != System.Data.ConnectionState.Open)
-            {
-                await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
-            }
-
-            await using var command = connection.CreateCommand();
-            command.CommandText = """
-                INSERT INTO dcb_projection_statuses
-                    (service_id, projector_name, projector_version, cluster_id, activation_id, sequence,
-                     applied_event_count, last_applied_sortable_unique_id, last_traversed_sortable_unique_id, recorded_at_utc,
-                     phase, lease_expires_at_utc, is_faulted, fault_message, switch_kind, switch_reason, switched_at_utc)
-                SELECT @service_id, @projector_name, @projector_version, @cluster_id, @activation_id, @sequence,
-                       @applied_event_count, @last_applied_sortable_unique_id, @last_traversed_sortable_unique_id, @recorded_at_utc,
-                       @phase, @lease_expires_at_utc, @is_faulted, @fault_message, @switch_kind, @switch_reason, @switched_at_utc
-                WHERE @expected_sequence = 0
-                   OR EXISTS (
-                       SELECT 1
-                       FROM dcb_projection_statuses
-                       WHERE service_id = @service_id
-                         AND projector_name = @projector_name
-                         AND projector_version = @projector_version
-                         AND cluster_id = @cluster_id)
-                ON CONFLICT (service_id, projector_name, projector_version, cluster_id)
-                DO UPDATE SET
-                    activation_id = EXCLUDED.activation_id,
-                    sequence = EXCLUDED.sequence,
-                    applied_event_count = EXCLUDED.applied_event_count,
-                    last_applied_sortable_unique_id = EXCLUDED.last_applied_sortable_unique_id,
-                    last_traversed_sortable_unique_id = EXCLUDED.last_traversed_sortable_unique_id,
-                    recorded_at_utc = EXCLUDED.recorded_at_utc,
-                    phase = EXCLUDED.phase,
-                    lease_expires_at_utc = EXCLUDED.lease_expires_at_utc,
-                    is_faulted = EXCLUDED.is_faulted,
-                    fault_message = EXCLUDED.fault_message,
-                    switch_kind = EXCLUDED.switch_kind,
-                    switch_reason = EXCLUDED.switch_reason,
-                    switched_at_utc = EXCLUDED.switched_at_utc
-                WHERE dcb_projection_statuses.sequence = @expected_sequence
-                  AND EXCLUDED.sequence > dcb_projection_statuses.sequence
-                RETURNING service_id, projector_name, projector_version, cluster_id, activation_id, sequence,
-                          applied_event_count, last_applied_sortable_unique_id, last_traversed_sortable_unique_id,
-                          recorded_at_utc, phase, lease_expires_at_utc, is_faulted, fault_message,
-                          switch_kind, switch_reason, switched_at_utc;
-                """;
-            AddParameter(command, "service_id", heartbeat.ServiceId);
-            AddParameter(command, "projector_name", heartbeat.ProjectorName);
-            AddParameter(command, "projector_version", heartbeat.ProjectorVersion);
-            AddParameter(command, "cluster_id", heartbeat.ClusterId);
-            AddParameter(command, "activation_id", heartbeat.ActivationId);
-            AddParameter(command, "sequence", heartbeat.Sequence);
-            AddParameter(command, "applied_event_count", heartbeat.AppliedEventCount);
-            AddParameter(command, "last_applied_sortable_unique_id", (object?)heartbeat.LastAppliedSortableUniqueId ?? DBNull.Value);
-            AddParameter(command, "last_traversed_sortable_unique_id", (object?)heartbeat.LastTraversedSortableUniqueId ?? DBNull.Value);
-            AddParameter(command, "recorded_at_utc", heartbeat.RecordedAtUtc);
-            AddParameter(command, "phase", heartbeat.Phase);
-            AddParameter(command, "lease_expires_at_utc", (object?)heartbeat.LeaseExpiresAtUtc ?? DBNull.Value);
-            AddParameter(command, "is_faulted", heartbeat.IsFaulted);
-            AddParameter(command, "fault_message", (object?)heartbeat.FaultMessage ?? DBNull.Value);
-            AddParameter(command, "switch_kind", (object?)heartbeat.SwitchKind ?? DBNull.Value);
-            AddParameter(command, "switch_reason", (object?)heartbeat.SwitchReason ?? DBNull.Value);
-            AddParameter(command, "switched_at_utc", (object?)heartbeat.SwitchedAtUtc ?? DBNull.Value);
-            AddParameter(command, "expected_sequence", expectedSequence);
-
-            await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
-            if (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
-            {
-                return ResultBox.FromValue(ProjectionStatusWriteResult.Success(ReadHeartbeat(reader)));
-            }
-
-            await reader.DisposeAsync().ConfigureAwait(false);
-            var current = await ReadCurrentHeartbeatAsync(
-                connection,
-                heartbeat.ServiceId,
-                heartbeat.ProjectorName,
-                heartbeat.ProjectorVersion,
-                heartbeat.ClusterId,
-                cancellationToken).ConfigureAwait(false);
-            return ResultBox.FromValue(ProjectionStatusWriteResult.Rejected(
-                heartbeat,
-                expectedSequence,
-                current,
-                current is null && expectedSequence > 0
-                    ? ProjectionStatusConflictReason.RowAbsent
-                    : null));
+            throw new UnauthorizedAccessException("Projection status ServiceId is owned by the server.");
         }
-        catch (Exception ex)
+
+        if (expectedSequence < 0 || heartbeat.Sequence <= 0)
         {
-            return ResultBox.Error<ProjectionStatusWriteResult>(ex);
+            throw new ArgumentOutOfRangeException(nameof(expectedSequence), "Projection status sequences must be positive and expected sequence must not be negative.");
         }
+
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        await EnsureProjectionStatusSchemaIfAllowedAsync(context, cancellationToken).ConfigureAwait(false);
+        await using var connection = context.Database.GetDbConnection();
+        if (connection.State != System.Data.ConnectionState.Open)
+        {
+            await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            INSERT INTO dcb_projection_statuses
+                (service_id, projector_name, projector_version, cluster_id, activation_id, sequence,
+                 applied_event_count, last_applied_sortable_unique_id, last_traversed_sortable_unique_id, recorded_at_utc,
+                 phase, lease_expires_at_utc, is_faulted, fault_message, switch_kind, switch_reason, switched_at_utc)
+            SELECT @service_id, @projector_name, @projector_version, @cluster_id, @activation_id, @sequence,
+                   @applied_event_count, @last_applied_sortable_unique_id, @last_traversed_sortable_unique_id, @recorded_at_utc,
+                   @phase, @lease_expires_at_utc, @is_faulted, @fault_message, @switch_kind, @switch_reason, @switched_at_utc
+            WHERE @expected_sequence = 0
+               OR EXISTS (
+                   SELECT 1
+                   FROM dcb_projection_statuses
+                   WHERE service_id = @service_id
+                     AND projector_name = @projector_name
+                     AND projector_version = @projector_version
+                     AND cluster_id = @cluster_id)
+            ON CONFLICT (service_id, projector_name, projector_version, cluster_id)
+            DO UPDATE SET
+                activation_id = EXCLUDED.activation_id,
+                sequence = EXCLUDED.sequence,
+                applied_event_count = EXCLUDED.applied_event_count,
+                last_applied_sortable_unique_id = EXCLUDED.last_applied_sortable_unique_id,
+                last_traversed_sortable_unique_id = EXCLUDED.last_traversed_sortable_unique_id,
+                recorded_at_utc = EXCLUDED.recorded_at_utc,
+                phase = EXCLUDED.phase,
+                lease_expires_at_utc = EXCLUDED.lease_expires_at_utc,
+                is_faulted = EXCLUDED.is_faulted,
+                fault_message = EXCLUDED.fault_message,
+                switch_kind = EXCLUDED.switch_kind,
+                switch_reason = EXCLUDED.switch_reason,
+                switched_at_utc = EXCLUDED.switched_at_utc
+            WHERE dcb_projection_statuses.sequence = @expected_sequence
+              AND EXCLUDED.sequence > dcb_projection_statuses.sequence
+            RETURNING service_id, projector_name, projector_version, cluster_id, activation_id, sequence,
+                      applied_event_count, last_applied_sortable_unique_id, last_traversed_sortable_unique_id,
+                      recorded_at_utc, phase, lease_expires_at_utc, is_faulted, fault_message,
+                      switch_kind, switch_reason, switched_at_utc;
+            """;
+        AddParameter(command, "service_id", heartbeat.ServiceId);
+        AddParameter(command, "projector_name", heartbeat.ProjectorName);
+        AddParameter(command, "projector_version", heartbeat.ProjectorVersion);
+        AddParameter(command, "cluster_id", heartbeat.ClusterId);
+        AddParameter(command, "activation_id", heartbeat.ActivationId);
+        AddParameter(command, "sequence", heartbeat.Sequence);
+        AddParameter(command, "applied_event_count", heartbeat.AppliedEventCount);
+        AddParameter(command, "last_applied_sortable_unique_id", (object?)heartbeat.LastAppliedSortableUniqueId ?? DBNull.Value);
+        AddParameter(command, "last_traversed_sortable_unique_id", (object?)heartbeat.LastTraversedSortableUniqueId ?? DBNull.Value);
+        AddParameter(command, "recorded_at_utc", heartbeat.RecordedAtUtc);
+        AddParameter(command, "phase", heartbeat.Phase);
+        AddParameter(command, "lease_expires_at_utc", (object?)heartbeat.LeaseExpiresAtUtc ?? DBNull.Value);
+        AddParameter(command, "is_faulted", heartbeat.IsFaulted);
+        AddParameter(command, "fault_message", (object?)heartbeat.FaultMessage ?? DBNull.Value);
+        AddParameter(command, "switch_kind", (object?)heartbeat.SwitchKind ?? DBNull.Value);
+        AddParameter(command, "switch_reason", (object?)heartbeat.SwitchReason ?? DBNull.Value);
+        AddParameter(command, "switched_at_utc", (object?)heartbeat.SwitchedAtUtc ?? DBNull.Value);
+        AddParameter(command, "expected_sequence", expectedSequence);
+
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        if (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            return ProjectionStatusWriteResult.Success(ReadHeartbeat(reader));
+        }
+
+        await reader.DisposeAsync().ConfigureAwait(false);
+        var current = await ReadCurrentHeartbeatAsync(
+            connection,
+            heartbeat.ServiceId,
+            heartbeat.ProjectorName,
+            heartbeat.ProjectorVersion,
+            heartbeat.ClusterId,
+            cancellationToken).ConfigureAwait(false);
+        return ProjectionStatusWriteResult.Rejected(
+            heartbeat,
+            expectedSequence,
+            current,
+            current is null && expectedSequence > 0
+                ? ProjectionStatusConflictReason.RowAbsent
+                : null);
     }
 
-    public async Task<ResultBox<IReadOnlyList<ProjectionStatusHeartbeat>>> ListAsync(
+    public async Task<IReadOnlyList<ProjectionStatusHeartbeat>> ListAsync(
         string? projectorName = null,
         string? projectorVersion = null,
         CancellationToken cancellationToken = default)
     {
-        try
+        _projectionStatusOptions.Validate();
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        await EnsureProjectionStatusSchemaIfAllowedAsync(context, cancellationToken).ConfigureAwait(false);
+        await using var connection = context.Database.GetDbConnection();
+        if (connection.State != System.Data.ConnectionState.Open)
         {
-            _projectionStatusOptions.Validate();
-            await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-            await EnsureProjectionStatusSchemaIfAllowedAsync(context, cancellationToken).ConfigureAwait(false);
-            await using var connection = context.Database.GetDbConnection();
-            if (connection.State != System.Data.ConnectionState.Open)
-            {
-                await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
-            }
-
-            await using var command = connection.CreateCommand();
-            command.CommandText = """
-                SELECT service_id, projector_name, projector_version, cluster_id, activation_id, sequence,
-                       applied_event_count, last_applied_sortable_unique_id, last_traversed_sortable_unique_id,
-                       recorded_at_utc, phase, lease_expires_at_utc, is_faulted, fault_message,
-                       switch_kind, switch_reason, switched_at_utc
-                FROM dcb_projection_statuses
-                WHERE service_id = @service_id
-                  AND (CAST(@projector_name AS varchar) IS NULL
-                       OR projector_name = CAST(@projector_name AS varchar))
-                  AND (CAST(@projector_version AS varchar) IS NULL
-                       OR projector_version = CAST(@projector_version AS varchar))
-                ORDER BY projector_name, projector_version, cluster_id, activation_id;
-                """;
-            AddParameter(command, "service_id", CurrentServiceId);
-            AddParameter(command, "projector_name", (object?)projectorName ?? DBNull.Value);
-            AddParameter(command, "projector_version", (object?)projectorVersion ?? DBNull.Value);
-
-            var rows = new List<ProjectionStatusHeartbeat>();
-            await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
-            while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
-            {
-                rows.Add(ReadHeartbeat(reader));
-            }
-
-            return ResultBox.FromValue<IReadOnlyList<ProjectionStatusHeartbeat>>(rows);
+            await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
         }
-        catch (Exception ex)
+
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT service_id, projector_name, projector_version, cluster_id, activation_id, sequence,
+                   applied_event_count, last_applied_sortable_unique_id, last_traversed_sortable_unique_id,
+                   recorded_at_utc, phase, lease_expires_at_utc, is_faulted, fault_message,
+                   switch_kind, switch_reason, switched_at_utc
+            FROM dcb_projection_statuses
+            WHERE service_id = @service_id
+              AND (CAST(@projector_name AS varchar) IS NULL
+                   OR projector_name = CAST(@projector_name AS varchar))
+              AND (CAST(@projector_version AS varchar) IS NULL
+                   OR projector_version = CAST(@projector_version AS varchar))
+            ORDER BY projector_name, projector_version, cluster_id, activation_id;
+            """;
+        AddParameter(command, "service_id", CurrentServiceId);
+        AddParameter(command, "projector_name", (object?)projectorName ?? DBNull.Value);
+        AddParameter(command, "projector_version", (object?)projectorVersion ?? DBNull.Value);
+
+        var rows = new List<ProjectionStatusHeartbeat>();
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
         {
-            return ResultBox.Error<IReadOnlyList<ProjectionStatusHeartbeat>>(ex);
+            rows.Add(ReadHeartbeat(reader));
         }
+
+        return rows;
     }
 
     private async Task EnsureProjectionStatusSchemaIfAllowedAsync(

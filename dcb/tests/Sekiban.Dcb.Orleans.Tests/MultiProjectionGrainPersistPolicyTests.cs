@@ -19,6 +19,7 @@ using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
 using System.Reflection;
 using Xunit;
+using Sekiban.Dcb.TestSupport;
 
 namespace Sekiban.Dcb.Orleans.Tests;
 
@@ -344,7 +345,7 @@ public class MultiProjectionGrainPersistPolicyTests
         InvokePrivate(grain, "CaptureProjectionStatusWriterIdentity", ["projection"]);
 
         await InvokePrivateTaskAsync(grain, "WriteProjectionStatusHeartbeatAsync");
-        var first = Assert.Single((await statusStore.ListAsync("projection", "registered-v1")).GetValue());
+        var first = Assert.Single((await statusStore.ListAsync("projection", "registered-v1").AsResultBoxAsync()).GetValue());
         Assert.Equal(1, first.Sequence);
         Assert.Equal("registered-v1", first.ProjectorVersion);
 
@@ -361,15 +362,15 @@ public class MultiProjectionGrainPersistPolicyTests
         Assert.Equal("registered-v1", pinned.ProjectorVersion);
 
         await InvokePrivateTaskAsync(grain, "WriteProjectionStatusHeartbeatAsync");
-        var advanced = Assert.Single((await statusStore.ListAsync("projection", "registered-v1")).GetValue());
+        var advanced = Assert.Single((await statusStore.ListAsync("projection", "registered-v1").AsResultBoxAsync()).GetValue());
         Assert.Equal(2, advanced.Sequence);
-        Assert.Empty((await statusStore.ListAsync("projection", "mutable-v2")).GetValue());
+        Assert.Empty((await statusStore.ListAsync("projection", "mutable-v2").AsResultBoxAsync()).GetValue());
 
         // Simulate external row loss. The expected=2 write must report RowAbsent and only reset the local fence; no
         // unconditional insert is allowed in this operation.
         statusStore.Clear();
         await InvokePrivateTaskAsync(grain, "WriteProjectionStatusHeartbeatAsync");
-        Assert.Empty((await statusStore.ListAsync("projection", "registered-v1")).GetValue());
+        Assert.Empty((await statusStore.ListAsync("projection", "registered-v1").AsResultBoxAsync()).GetValue());
         Assert.Equal(0L, GetPrivateField<long>(grain, "_projectionStatusSequence"));
 
         // A competing writer can win the later conditional create. The grain must adopt that fence, then use the
@@ -380,19 +381,19 @@ public class MultiProjectionGrainPersistPolicyTests
             Sequence = 1,
             RecordedAtUtc = DateTimeOffset.UtcNow
         };
-        Assert.True((await statusStore.UpsertAsync(competing, 0)).GetValue().Committed);
+        Assert.True((await statusStore.UpsertAsync(competing, 0).AsResultBoxAsync()).GetValue().Committed);
         SetPrivateField(grain, "_projectionStatusNextAttemptUtc", DateTimeOffset.MinValue);
         await InvokePrivateTaskAsync(grain, "WriteProjectionStatusHeartbeatAsync");
-        var afterCreateRace = Assert.Single((await statusStore.ListAsync("projection", "registered-v1")).GetValue());
+        var afterCreateRace = Assert.Single((await statusStore.ListAsync("projection", "registered-v1").AsResultBoxAsync()).GetValue());
         Assert.Equal("competing-activation", afterCreateRace.ActivationId);
         Assert.Equal(1, afterCreateRace.Sequence);
         Assert.Equal(1L, GetPrivateField<long>(grain, "_projectionStatusSequence"));
 
         SetPrivateField(grain, "_projectionStatusNextAttemptUtc", DateTimeOffset.MinValue);
         await InvokePrivateTaskAsync(grain, "WriteProjectionStatusHeartbeatAsync");
-        var recovered = Assert.Single((await statusStore.ListAsync("projection", "registered-v1")).GetValue());
+        var recovered = Assert.Single((await statusStore.ListAsync("projection", "registered-v1").AsResultBoxAsync()).GetValue());
         Assert.Equal(2, recovered.Sequence);
-        Assert.Empty((await statusStore.ListAsync("projection", "mutable-v2")).GetValue());
+        Assert.Empty((await statusStore.ListAsync("projection", "mutable-v2").AsResultBoxAsync()).GetValue());
     }
 
     [Fact]
@@ -877,38 +878,38 @@ public class MultiProjectionGrainPersistPolicyTests
 
     private sealed class StubEventStore : IEventStore
     {
-        public Task<ResultBox<IEnumerable<TagStream>>> ReadTagsAsync(ITag tag) => throw new NotSupportedException();
-        public Task<ResultBox<TagState>> GetLatestTagAsync(ITag tag) => throw new NotSupportedException();
-        public Task<ResultBox<bool>> TagExistsAsync(ITag tag) => throw new NotSupportedException();
-        public Task<ResultBox<long>> GetEventCountAsync(SortableUniqueId? since = null) => throw new NotSupportedException();
-        public Task<ResultBox<IEnumerable<TagInfo>>> GetAllTagsAsync(string? tagGroup = null) => throw new NotSupportedException();
-        public Task<ResultBox<string>> GetLatestSortableUniqueIdAsync() => throw new NotSupportedException();
-        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadSerializableEventsByTagAsync(ITag tag, SortableUniqueId? since = null) =>
+        public Task<IEnumerable<TagStream>> ReadTagsAsync(ITag tag) => throw new NotSupportedException();
+        public Task<TagState> GetLatestTagAsync(ITag tag) => throw new NotSupportedException();
+        public Task<bool> TagExistsAsync(ITag tag) => throw new NotSupportedException();
+        public Task<long> GetEventCountAsync(SortableUniqueId? since = null) => throw new NotSupportedException();
+        public Task<IEnumerable<TagInfo>> GetAllTagsAsync(string? tagGroup = null) => throw new NotSupportedException();
+        public Task<string> GetLatestSortableUniqueIdAsync() => throw new NotSupportedException();
+        public Task<IEnumerable<SerializableEvent>> ReadSerializableEventsByTagAsync(ITag tag, SortableUniqueId? since = null) =>
             throw new NotSupportedException();
-        public Task<ResultBox<SerializableEvent>> ReadSerializableEventAsync(Guid eventId) => throw new NotSupportedException();
-        public Task<ResultBox<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>> WriteSerializableEventsAsync(
+        public Task<SerializableEvent?> ReadSerializableEventAsync(Guid eventId) => throw new NotSupportedException();
+        public Task<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)> WriteSerializableEventsAsync(
             IEnumerable<SerializableEvent> events) => throw new NotSupportedException();
-        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null) =>
+        public Task<IEnumerable<SerializableEvent>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null) =>
             throw new NotSupportedException();
-        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(SortableUniqueId? since, int? maxCount) =>
+        public Task<IEnumerable<SerializableEvent>> ReadAllSerializableEventsAsync(SortableUniqueId? since, int? maxCount) =>
             throw new NotSupportedException();
     }
 
     private sealed class EmptyColdObjectStorage : IColdObjectStorage
     {
-        public Task<ResultBox<ColdStorageObject>> GetAsync(string path, CancellationToken ct) =>
-            Task.FromResult(ResultBox.Error<ColdStorageObject>(new FileNotFoundException(path)));
+        public Task<ColdStorageObject?> GetAsync(string path, CancellationToken ct) =>
+            Task.FromResult<ColdStorageObject?>(null);
 
-        public Task<ResultBox<bool>> PutAsync(string path, Stream data, string? expectedETag, CancellationToken ct) =>
-            Task.FromResult(ResultBox.FromValue(true));
+        public Task<bool> PutAsync(string path, Stream data, string? expectedETag, CancellationToken ct) =>
+            Task.FromResult(true);
 
-        public Task<ResultBox<bool>> PutAsync(string path, byte[] data, string? expectedETag, CancellationToken ct) =>
-            Task.FromResult(ResultBox.FromValue(true));
+        public Task<bool> PutAsync(string path, byte[] data, string? expectedETag, CancellationToken ct) =>
+            Task.FromResult(true);
 
-        public Task<ResultBox<IReadOnlyList<string>>> ListAsync(string prefix, CancellationToken ct) =>
-            Task.FromResult(ResultBox.FromValue<IReadOnlyList<string>>(Array.Empty<string>()));
+        public Task<IReadOnlyList<string>> ListAsync(string prefix, CancellationToken ct) =>
+            Task.FromResult<IReadOnlyList<string>>(Array.Empty<string>());
 
-        public Task<ResultBox<bool>> DeleteAsync(string path, CancellationToken ct) =>
-            Task.FromResult(ResultBox.FromValue(true));
+        public Task<bool> DeleteAsync(string path, CancellationToken ct) =>
+            Task.FromResult(true);
     }
 }

@@ -18,6 +18,7 @@ using Sekiban.Dcb.Testing;
 using System.Text;
 using System.Text.Json;
 using Xunit;
+using Sekiban.Dcb.TestSupport;
 namespace Sekiban.Dcb.Orleans.Tests;
 
 /// <summary>
@@ -138,7 +139,7 @@ public class ProjectionFaultOrleansTests : IAsyncLifetime
         // query must synchronously catch up, re-encounter the poison and fault — no empty-success window before a
         // background timer eventually re-faults.
         await SharedEventStore.WriteSerializableEventsAsync(
-            new List<SerializableEvent> { Event(poison: true, tick: 8_000) });
+            new List<SerializableEvent> { Event(poison: true, tick: 8_000) }).AsResultBoxAsync();
 
         var grain = Client.GetGrain<IMultiProjectionGrain>(FaultTestProjector.MultiProjectorName);
 

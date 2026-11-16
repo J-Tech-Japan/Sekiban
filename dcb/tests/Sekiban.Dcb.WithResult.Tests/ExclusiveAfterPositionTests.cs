@@ -8,6 +8,7 @@ using Sekiban.Dcb.Events;
 using Sekiban.Dcb.Sqlite;
 using Sekiban.Dcb.Storage;
 using Xunit;
+using Sekiban.Dcb.TestSupport;
 namespace Sekiban.Dcb.Tests;
 
 /// <summary>
@@ -50,9 +51,9 @@ public class ExclusiveAfterPositionTests
     public async Task InMemoryStore_ReadAfterPosition_ExcludesTheEventAtThePosition()
     {
         var store = new Sekiban.Dcb.Testing.InMemoryEventStore(EventTypes);
-        await store.WriteSerializableEventsAsync(new[] { Ev(P1), Ev(P2), Ev(P3) });
+        await store.WriteSerializableEventsAsync(new[] { Ev(P1), Ev(P2), Ev(P3) }).AsResultBoxAsync();
 
-        var read = (await store.ReadAllSerializableEventsAsync(new SortableUniqueId(P2))).GetValue().ToList();
+        var read = (await store.ReadAllSerializableEventsAsync(new SortableUniqueId(P2)).AsResultBoxAsync()).GetValue().ToList();
 
         Assert.Single(read);                                  // P1 (< P2) and P2 (== P2) excluded
         Assert.Equal(P3, read[0].SortableUniqueIdValue);      // only the strictly-later event
@@ -65,10 +66,10 @@ public class ExclusiveAfterPositionTests
         try
         {
             var store = new SqliteEventStore(dbPath, EventTypes);
-            var write = await store.WriteSerializableEventsAsync(new[] { Ev(P1), Ev(P2), Ev(P3) });
+            var write = await store.WriteSerializableEventsAsync(new[] { Ev(P1), Ev(P2), Ev(P3) }).AsResultBoxAsync();
             Assert.True(write.IsSuccess, write.IsSuccess ? "" : write.GetException().ToString());
 
-            var read = (await store.ReadAllSerializableEventsAsync(new SortableUniqueId(P2))).GetValue().ToList();
+            var read = (await store.ReadAllSerializableEventsAsync(new SortableUniqueId(P2)).AsResultBoxAsync()).GetValue().ToList();
 
             Assert.Single(read);
             Assert.Equal(P3, read[0].SortableUniqueIdValue);

@@ -19,6 +19,7 @@ using Sekiban.Dcb.Tags;
 using Sekiban.Dcb.Testing;
 using Xunit;
 using static Sekiban.Dcb.Orleans.Tests.G20Shared;
+using Sekiban.Dcb.TestSupport;
 namespace Sekiban.Dcb.Orleans.Tests;
 
 /// <summary>
@@ -81,12 +82,12 @@ public class TwoClusterRetrogradeRecontaminationTests : IAsyncLifetime
         //     CAS-rejected, row byte-for-byte unchanged" sequence is proven in TwoClusterRecontaminationProofTests; here
         //     we prove the PRODUCT-code integration converges under concurrent retrograde rebuild.)
         var later = CreateEvent(new CreatedWithId("team-1", "later"), DateTime.UtcNow.AddSeconds(-30));
-        await SharedStores.EventStore.WriteSerializableEventsAsync(new[] { ToSerializable(later) });
+        await SharedStores.EventStore.WriteSerializableEventsAsync(new[] { ToSerializable(later) }).AsResultBoxAsync();
         await grainA.RefreshAsync();
         Assert.True((await grainA.PersistStateAsync()).IsSuccess);
         await grainB.RefreshAsync();
         _ = await grainB.PersistStateAsync();   // CAS-contends with A's create; whoever loses adopts the winner's token
-        var slot0 = (await SharedStores.StateStore.ReadCheckpointSlotAsync(FirstWinsProjector.MultiProjectorName, "1.0.0")).GetValue();
+        var slot0 = (await SharedStores.StateStore.ReadCheckpointSlotAsync(FirstWinsProjector.MultiProjectorName, "1.0.0").AsResultBoxAsync()).GetValue();
         Assert.True(slot0.IsActive);
         Assert.Equal(0, slot0.Generation);
         Assert.Equal("later", await WinnerAsync(grainA));
@@ -96,7 +97,7 @@ public class TwoClusterRetrogradeRecontaminationTests : IAsyncLifetime
         //     first-event-wins winner — is written to the shared store and delivered to BOTH clusters out of order. Both
         //     independently trigger a durable bump+tombstone rebuild; the CAS admits EXACTLY ONE generation bump.
         var earlier = CreateEvent(new CreatedWithId("team-1", "earlier"), DateTime.UtcNow.AddSeconds(-31));
-        await SharedStores.EventStore.WriteSerializableEventsAsync(new[] { ToSerializable(earlier) });
+        await SharedStores.EventStore.WriteSerializableEventsAsync(new[] { ToSerializable(earlier) }).AsResultBoxAsync();
         await grainA.AddEventsAsync(new[] { ToSerializable(earlier) });
         await grainB.AddEventsAsync(new[] { ToSerializable(earlier) });
 
@@ -108,7 +109,7 @@ public class TwoClusterRetrogradeRecontaminationTests : IAsyncLifetime
 
         // The shared row is Active at the bumped generation with the rebuilt 2-event checkpoint — NEVER dropped back to a
         // stale 1-event state, and the generation advanced EXACTLY ONCE (one retrograde epoch, one winner), never twice.
-        var slotAfter = (await SharedStores.StateStore.ReadCheckpointSlotAsync(FirstWinsProjector.MultiProjectorName, "1.0.0")).GetValue();
+        var slotAfter = (await SharedStores.StateStore.ReadCheckpointSlotAsync(FirstWinsProjector.MultiProjectorName, "1.0.0").AsResultBoxAsync()).GetValue();
         Assert.True(slotAfter.IsActive);
         Assert.Equal(1, slotAfter.Generation);
         Assert.Equal(2, slotAfter.Record!.EventsProcessed);
@@ -163,7 +164,7 @@ public class TwoClusterRetrogradeRecontaminationTests : IAsyncLifetime
             // (1) One already-safe event; both clusters catch up + persist through the CAS -> shared row Active(gen0), winner
             //     "later"; both adopt the gen0 token.
             var later = CreateEvent(new CreatedWithId("team-1", "later"), DateTime.UtcNow.AddSeconds(-30));
-            await SharedStores.EventStore.WriteSerializableEventsAsync(new[] { ToSerializable(later) });
+            await SharedStores.EventStore.WriteSerializableEventsAsync(new[] { ToSerializable(later) }).AsResultBoxAsync();
             await grainA.RefreshAsync();
             Assert.True((await grainA.PersistStateAsync()).IsSuccess);
             await grainB.RefreshAsync();
@@ -194,7 +195,7 @@ public class TwoClusterRetrogradeRecontaminationTests : IAsyncLifetime
                 await MultiProjectionGrainWatermarkRetirementTests.ReplaceCheckpointCountAsync(SharedStores.StateStore, slot0.Record!, 10_000);
             }
             var earlier = CreateEvent(new CreatedWithId("team-1", "earlier"), DateTime.UtcNow.AddSeconds(-31));
-            await SharedStores.EventStore.WriteSerializableEventsAsync(new[] { ToSerializable(earlier) });
+            await SharedStores.EventStore.WriteSerializableEventsAsync(new[] { ToSerializable(earlier) }).AsResultBoxAsync();
             await grainA.AddEventsAsync(new[] { ToSerializable(earlier) });
             var aDrive = grainA.GetStateAsync(canGetUnsafeState: true, waitForCatchUp: false);   // drives invalidate -> parks at commit
             try
@@ -291,7 +292,7 @@ public class TwoClusterRetrogradeRecontaminationTests : IAsyncLifetime
         var a = _clusterA.Client.GetGrain<IMultiProjectionGrain>(FirstWinsProjector.MultiProjectorName);
         var b = _clusterB.Client.GetGrain<IMultiProjectionGrain>(FirstWinsProjector.MultiProjectorName);
         var later = CreateEvent(new CreatedWithId("team-1", "later"), DateTime.UtcNow.AddSeconds(-30));
-        await SharedStores.EventStore.WriteSerializableEventsAsync(new[] { ToSerializable(later) });
+        await SharedStores.EventStore.WriteSerializableEventsAsync(new[] { ToSerializable(later) }).AsResultBoxAsync();
         await a.RefreshAsync();
         _ = await a.PersistStateAsync();
         await b.RefreshAsync();
@@ -309,7 +310,7 @@ public class TwoClusterRetrogradeRecontaminationTests : IAsyncLifetime
         {
             await parked.Arrived.Task.WaitAsync(TimeSpan.FromMinutes(2));
             var earlier = CreateEvent(new CreatedWithId("team-1", "earlier"), DateTime.UtcNow.AddSeconds(-31));
-            await SharedStores.EventStore.WriteSerializableEventsAsync(new[] { ToSerializable(earlier) });
+            await SharedStores.EventStore.WriteSerializableEventsAsync(new[] { ToSerializable(earlier) }).AsResultBoxAsync();
             await a.AddEventsAsync(new[] { ToSerializable(earlier) });
             drive = a.GetStateAsync(canGetUnsafeState: true, waitForCatchUp: false);
             await rebuilt.Arrived.Task.WaitAsync(TimeSpan.FromMinutes(2));
@@ -357,7 +358,7 @@ public class TwoClusterRetrogradeRecontaminationTests : IAsyncLifetime
     }
 
     private static async Task<CheckpointSlot> ReadSlotAsync() =>
-        (await SharedStores.StateStore.ReadCheckpointSlotAsync(FirstWinsProjector.MultiProjectorName, "1.0.0")).GetValue();
+        (await SharedStores.StateStore.ReadCheckpointSlotAsync(FirstWinsProjector.MultiProjectorName, "1.0.0").AsResultBoxAsync()).GetValue();
 
     private static async Task<CheckpointSlot> PollUntilTombstoneAsync()
     {

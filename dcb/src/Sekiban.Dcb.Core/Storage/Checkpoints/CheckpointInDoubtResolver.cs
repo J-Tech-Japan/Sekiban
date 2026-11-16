@@ -1,4 +1,3 @@
-using ResultBoxes;
 namespace Sekiban.Dcb.Storage.Checkpoints;
 
 /// <summary>
@@ -26,7 +25,7 @@ public static class CheckpointInDoubtResolver
     public const int DefaultVerificationAttempts = 3;
 
     public static async Task<CheckpointCasOutcome> ResolveAsync(
-        Func<CancellationToken, Task<ResultBox<CheckpointSlot>>> reread,
+        Func<CancellationToken, Task<CheckpointSlot>> reread,
         Func<CheckpointSlot, bool> committedByUs,
         int maxAttempts,
         Exception cause,
@@ -50,7 +49,7 @@ public static class CheckpointInDoubtResolver
         var anyReadSucceeded = false;
         for (var attempt = 0; attempt < Math.Max(1, maxAttempts) && !budgetCts.IsCancellationRequested; attempt++)
         {
-            ResultBox<CheckpointSlot> read;
+            CheckpointSlot read;
             try
             {
                 read = await reread(budgetCts.Token).ConfigureAwait(false);
@@ -63,18 +62,10 @@ public static class CheckpointInDoubtResolver
                 }
                 continue; // a transient unreadable authority does not prove non-commit; keep within budget
             }
-            if (!read.IsSuccess)
-            {
-                if (budgetCts.IsCancellationRequested)
-                {
-                    break;
-                }
-                continue; // a failed ResultBox is also an unavailable read
-            }
             anyReadSucceeded = true;
-            if (committedByUs(read.GetValue()))
+            if (committedByUs(read))
             {
-                return CheckpointCasOutcome.Committed(read.GetValue());
+                return CheckpointCasOutcome.Committed(read);
             }
         }
         return CheckpointCasOutcome.Doubt(
@@ -127,7 +118,7 @@ public static class CheckpointInDoubtResolver
     ///     identity reports Committed, else typed retryable InDoubt. Keeps the resolution shape in one place across stores.
     /// </summary>
     public static Task<CheckpointCasOutcome> ResolveActiveWriteAsync(
-        Func<CancellationToken, Task<ResultBox<CheckpointSlot>>> reread,
+        Func<CancellationToken, Task<CheckpointSlot>> reread,
         long resultingGeneration, string lastSortableUniqueId, long eventsProcessed, Exception cause,
         TimeSpan? verificationBudget = null) =>
         ResolveAsync(reread, CommittedActiveByPayload(resultingGeneration, lastSortableUniqueId, eventsProcessed),
@@ -139,7 +130,7 @@ public static class CheckpointInDoubtResolver
     ///     negative <paramref name="resultingRevision" /> for stores with an opaque token (match on generation alone).
     /// </summary>
     public static Task<CheckpointCasOutcome> ResolveTombstoneWriteAsync(
-        Func<CancellationToken, Task<ResultBox<CheckpointSlot>>> reread,
+        Func<CancellationToken, Task<CheckpointSlot>> reread,
         long resultingGeneration, long resultingRevision, Exception cause,
         TimeSpan? verificationBudget = null) =>
         ResolveAsync(reread, CommittedTombstoneByExact(resultingGeneration, resultingRevision),
@@ -154,7 +145,7 @@ public static class CheckpointInDoubtResolver
     public static Task<CheckpointCasOutcome> ClassifyActiveWriteFailure(
         bool deterministicPreCommit,
         Exception cause,
-        Func<CancellationToken, Task<ResultBox<CheckpointSlot>>> reread,
+        Func<CancellationToken, Task<CheckpointSlot>> reread,
         long resultingGeneration, string lastSortableUniqueId, long eventsProcessed,
         TimeSpan? verificationBudget = null) =>
         deterministicPreCommit
@@ -165,7 +156,7 @@ public static class CheckpointInDoubtResolver
     public static Task<CheckpointCasOutcome> ClassifyTombstoneWriteFailure(
         bool deterministicPreCommit,
         Exception cause,
-        Func<CancellationToken, Task<ResultBox<CheckpointSlot>>> reread,
+        Func<CancellationToken, Task<CheckpointSlot>> reread,
         long resultingGeneration, long resultingRevision,
         TimeSpan? verificationBudget = null) =>
         deterministicPreCommit

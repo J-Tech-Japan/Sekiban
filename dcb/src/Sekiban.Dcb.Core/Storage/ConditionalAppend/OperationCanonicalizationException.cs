@@ -8,7 +8,7 @@ namespace Sekiban.Dcb.Storage;
 ///     SECRET-SAFE by construction: this exception carries NO inner exception and NO caller payload/key — only a sanitized
 ///     message whose sole caller-supplied datum is the registered event-type NAME (safe metadata). A converter/
 ///     deserializer exception (which may embed the raw payload or key in its message, Data, or stack) is deliberately
-///     discarded rather than chained here, so it can never surface through the ResultBox.Error graph. There is no
+///     discarded rather than chained here, so it can never surface through the thrown exception graph. There is no
 ///     inner-exception constructor for exactly this reason.
 /// </summary>
 public sealed class OperationCanonicalizationException : Exception

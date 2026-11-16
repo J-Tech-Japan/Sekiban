@@ -10,6 +10,7 @@ using Sekiban.Dcb.Postgres.DbModels;
 using Sekiban.Dcb.ServiceId;
 using Sekiban.Dcb.Storage;
 using Xunit;
+using Sekiban.Dcb.TestSupport;
 
 namespace Sekiban.Dcb.Postgres.Tests;
 
@@ -44,7 +45,7 @@ public sealed class PostgresSetBasedProtocolTests(PostgresTestFixture fixture) :
         var store = Store(logger);
         var calls = 0;
         store.TagHeadProtocolHook = () => ++calls == stage ? Task.FromException(new InvalidOperationException("injected")) : Task.CompletedTask;
-        var result = await store.WriteSerializableEventsAsync([Event("0300", [.. Keys, "rev5:lazy"])]);
+        var result = await store.WriteSerializableEventsAsync([Event("0300", [.. Keys, "rev5:lazy"])]).AsResultBoxAsync();
         Assert.False(result.IsSuccess);
         Assert.Contains("injected", result.GetException().ToString());
         // Independent physical connection, not the writer's tracked context or transaction.
@@ -68,7 +69,7 @@ public sealed class PostgresSetBasedProtocolTests(PostgresTestFixture fixture) :
         string violationSql;
         using (var recorder = new Recorder())
         {
-            var failed = await store.WriteSerializableEventsWithExpectedTagPositionsAsync([Event("0300", Keys)], Spec(Keys, TagHeadExpectation.Exact("0100")));
+            var failed = await store.WriteSerializableEventsWithExpectedTagPositionsAsync([Event("0300", Keys)], Spec(Keys, TagHeadExpectation.Exact("0100"))).AsResultBoxAsync();
             Assert.False(failed.IsSuccess);
             violationSql = Assert.Single(recorder.Commands.Where(sql => sql.StartsWith("INSERT INTO dcb_tag_head_violations")));
         }
@@ -83,7 +84,7 @@ public sealed class PostgresSetBasedProtocolTests(PostgresTestFixture fixture) :
         for (var retry = 0; retry < 2; retry++)
         {
             using var recorder = new Recorder();
-            var result = await store.WriteSerializableEventsWithExpectedTagPositionsAsync([Event("0300", Keys)], Spec(Keys, TagHeadExpectation.Exact("0100")));
+            var result = await store.WriteSerializableEventsWithExpectedTagPositionsAsync([Event("0300", Keys)], Spec(Keys, TagHeadExpectation.Exact("0100"))).AsResultBoxAsync();
             Assert.False(result.IsSuccess);
             Assert.IsType<ExpectedTagPositionConflictException>(result.GetException());
             Assert.Equal(retry == 0 ? 1 : 0, recorder.Commands.Count(sql => sql.StartsWith("INSERT INTO dcb_tag_head_violations")));
@@ -175,8 +176,8 @@ public sealed class PostgresSetBasedProtocolTests(PostgresTestFixture fixture) :
         Synchronize(first, second, rollback);
         var expectation = exact ? TagHeadExpectation.Exact("0100") : TagHeadExpectation.AssertEmpty();
         var results = await Task.WhenAll(
-            first.WriteSerializableEventsWithExpectedTagPositionsAsync([Event("0200", Keys)], Spec(Keys, expectation)),
-            second.WriteSerializableEventsWithExpectedTagPositionsAsync([Event("0300", Keys.Reverse().ToArray())], Spec(Keys, expectation)))
+            first.WriteSerializableEventsWithExpectedTagPositionsAsync([Event("0200", Keys)], Spec(Keys, expectation)).AsResultBoxAsync(),
+            second.WriteSerializableEventsWithExpectedTagPositionsAsync([Event("0300", Keys.Reverse().ToArray())], Spec(Keys, expectation)).AsResultBoxAsync())
             .WaitAsync(TimeSpan.FromSeconds(30));
         Assert.Single(results, result => result.IsSuccess);
         if (rollback) Assert.Contains("rollback creator", results[0].GetException().ToString());
@@ -198,8 +199,8 @@ public sealed class PostgresSetBasedProtocolTests(PostgresTestFixture fixture) :
         var enforced = Store();
         var legacy = Store();
         Synchronize(enforcedFirst ? enforced : legacy, enforcedFirst ? legacy : enforced);
-        var enforcedTask = enforced.WriteSerializableEventsWithExpectedTagPositionsAsync([Event("0600", Keys)], Spec(Keys, TagHeadExpectation.Exact("0500")));
-        var legacyTask = legacy.WriteSerializableEventsAsync([Event("0300", Keys.Reverse().ToArray())]);
+        var enforcedTask = enforced.WriteSerializableEventsWithExpectedTagPositionsAsync([Event("0600", Keys)], Spec(Keys, TagHeadExpectation.Exact("0500"))).AsResultBoxAsync();
+        var legacyTask = legacy.WriteSerializableEventsAsync([Event("0300", Keys.Reverse().ToArray())]).AsResultBoxAsync();
         await Task.WhenAll(enforcedTask, legacyTask).WaitAsync(TimeSpan.FromSeconds(30));
         Assert.True((await enforcedTask).IsSuccess, (await enforcedTask).IsSuccess ? "" : (await enforcedTask).GetException().ToString());
         Assert.True((await legacyTask).IsSuccess, (await legacyTask).IsSuccess ? "" : (await legacyTask).GetException().ToString());
@@ -218,8 +219,8 @@ public sealed class PostgresSetBasedProtocolTests(PostgresTestFixture fixture) :
         var second = Store();
         Synchronize(first, second);
         var results = await Task.WhenAll(
-            first.WriteSerializableEventsAsync([Event("0300", singleFirst ? [Keys[0]] : Keys)]),
-            second.WriteSerializableEventsAsync([Event("0200", singleFirst ? Keys : [Keys[0]])])).WaitAsync(TimeSpan.FromSeconds(30));
+            first.WriteSerializableEventsAsync([Event("0300", singleFirst ? [Keys[0]] : Keys)]).AsResultBoxAsync(),
+            second.WriteSerializableEventsAsync([Event("0200", singleFirst ? Keys : [Keys[0]])]).AsResultBoxAsync()).WaitAsync(TimeSpan.FromSeconds(30));
         Assert.All(results, result => Assert.True(result.IsSuccess, result.IsSuccess ? "" : result.GetException().ToString()));
         await using var fresh = await Fixture.GetDbContextAsync();
         Assert.Equal("0300", await fresh.TagHeads.Where(h => h.Tag == Keys[0]).Select(h => h.HeadPosition).SingleAsync());
@@ -230,7 +231,7 @@ public sealed class PostgresSetBasedProtocolTests(PostgresTestFixture fixture) :
     public async Task ZeroDistinctKeys_RecorderSeesNoHeadStatement()
     {
         using var recorder = new Recorder();
-        var result = await Store().WriteSerializableEventsAsync([Event("0100")]);
+        var result = await Store().WriteSerializableEventsAsync([Event("0100")]).AsResultBoxAsync();
         Assert.True(result.IsSuccess);
         Assert.Empty(recorder.Commands);
     }
@@ -245,7 +246,7 @@ public sealed class PostgresSetBasedProtocolTests(PostgresTestFixture fixture) :
         if (shape is "existing" or "repair") await Seed("0100", shape == "repair" ? "0200" : null);
         if (shape == "bootstrap") await Seed(history: "0100");
         using var recorder = new Recorder();
-        var result = await Store().WriteSerializableEventsAsync([Event("0300", Keys[0])]);
+        var result = await Store().WriteSerializableEventsAsync([Event("0300", Keys[0])]).AsResultBoxAsync();
         Assert.True(result.IsSuccess, result.IsSuccess ? "" : result.GetException().ToString());
         Assert.NotEmpty(recorder.Commands);
         // Captured by this identical test with ONLY PostgresEventStore.cs temporarily
@@ -275,13 +276,13 @@ public sealed class PostgresSetBasedProtocolTests(PostgresTestFixture fixture) :
         // legacy batch with no head advances. Both send only insert/lock/reconcile.
         if (conflict)
         {
-            var result = await Store().WriteSerializableEventsWithExpectedTagPositionsAsync([Event("0400", Keys)], Spec(Keys, TagHeadExpectation.Exact("0100")));
+            var result = await Store().WriteSerializableEventsWithExpectedTagPositionsAsync([Event("0400", Keys)], Spec(Keys, TagHeadExpectation.Exact("0100"))).AsResultBoxAsync();
             Assert.False(result.IsSuccess);
             Assert.IsType<ExpectedTagPositionConflictException>(result.GetException());
         }
         else
         {
-            var result = await Store().WriteSerializableEventsAsync([Event("0200", Keys)]);
+            var result = await Store().WriteSerializableEventsAsync([Event("0200", Keys)]).AsResultBoxAsync();
             Assert.True(result.IsSuccess, result.IsSuccess ? "" : result.GetException().ToString());
         }
         Assert.Equal(3, recorder.Commands.Count);

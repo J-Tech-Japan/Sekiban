@@ -327,39 +327,39 @@ public class OrleansTagStatePersistentTests
 
     private class EmptyEventStore : IEventStore
     {
-        public Task<ResultBox<IEnumerable<TagStream>>> ReadTagsAsync(ITag tag) =>
-            Task.FromResult(ResultBox.FromValue(Enumerable.Empty<TagStream>()));
+        public Task<IEnumerable<TagStream>> ReadTagsAsync(ITag tag) =>
+            Task.FromResult(Enumerable.Empty<TagStream>());
 
-        public Task<ResultBox<TagState>> GetLatestTagAsync(ITag tag) =>
-            Task.FromResult(ResultBox.Error<TagState>(new NotImplementedException()));
+        public Task<TagState> GetLatestTagAsync(ITag tag) =>
+            Task.FromException<TagState>(new NotImplementedException());
 
-        public Task<ResultBox<bool>> TagExistsAsync(ITag tag) =>
-            Task.FromResult(ResultBox.FromValue(false));
+        public Task<bool> TagExistsAsync(ITag tag) =>
+            Task.FromResult(false);
 
-        public Task<ResultBox<long>> GetEventCountAsync(SortableUniqueId? since = null) =>
-            Task.FromResult(ResultBox.FromValue(0L));
+        public Task<long> GetEventCountAsync(SortableUniqueId? since = null) =>
+            Task.FromResult(0L);
 
-        public Task<ResultBox<IEnumerable<TagInfo>>> GetAllTagsAsync(string? tagGroup = null) =>
-            Task.FromResult(ResultBox.FromValue(Enumerable.Empty<TagInfo>()));
+        public Task<IEnumerable<TagInfo>> GetAllTagsAsync(string? tagGroup = null) =>
+            Task.FromResult(Enumerable.Empty<TagInfo>());
 
-        public Task<ResultBox<string>> GetLatestSortableUniqueIdAsync() =>
-            Task.FromResult(ResultBox.FromValue(string.Empty));
+        public Task<string> GetLatestSortableUniqueIdAsync() =>
+            Task.FromResult(string.Empty);
 
-        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null) =>
-            Task.FromResult(ResultBox.FromValue(Enumerable.Empty<SerializableEvent>()));
+        public Task<IEnumerable<SerializableEvent>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null) =>
+            Task.FromResult(Enumerable.Empty<SerializableEvent>());
 
-        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(SortableUniqueId? since, int? maxCount) =>
-            Task.FromResult(ResultBox.FromValue(Enumerable.Empty<SerializableEvent>()));
+        public Task<IEnumerable<SerializableEvent>> ReadAllSerializableEventsAsync(SortableUniqueId? since, int? maxCount) =>
+            Task.FromResult(Enumerable.Empty<SerializableEvent>());
 
-        public Task<ResultBox<SerializableEvent>> ReadSerializableEventAsync(Guid eventId) =>
-            Task.FromResult(ResultBox.Error<SerializableEvent>(new NotImplementedException()));
+        public Task<SerializableEvent?> ReadSerializableEventAsync(Guid eventId) =>
+            Task.FromException<SerializableEvent?>(new NotImplementedException());
 
-        public virtual Task<ResultBox<IEnumerable<SerializableEvent>>> ReadSerializableEventsByTagAsync(ITag tag, SortableUniqueId? since = null) =>
-            Task.FromResult(ResultBox.FromValue(Enumerable.Empty<SerializableEvent>()));
+        public virtual Task<IEnumerable<SerializableEvent>> ReadSerializableEventsByTagAsync(ITag tag, SortableUniqueId? since = null) =>
+            Task.FromResult(Enumerable.Empty<SerializableEvent>());
 
-        public Task<ResultBox<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>> WriteSerializableEventsAsync(
+        public Task<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)> WriteSerializableEventsAsync(
             IEnumerable<SerializableEvent> events) =>
-            Task.FromResult(ResultBox.Error<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>(new NotImplementedException()));
+            Task.FromException<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>(new NotImplementedException());
     }
 
     private sealed class StreamingEventStore : EmptyEventStore, IStreamingTaggedSerializableEventStore,
@@ -379,7 +379,7 @@ public class OrleansTagStatePersistentTests
         public TaggedStreamCapabilityDescriptor DescribeTaggedStream() =>
             TaggedStreamCapabilityDescriptor.Native("grain streaming test");
 
-        public override Task<ResultBox<IEnumerable<SerializableEvent>>> ReadSerializableEventsByTagAsync(
+        public override Task<IEnumerable<SerializableEvent>> ReadSerializableEventsByTagAsync(
             ITag tag,
             SortableUniqueId? since = null)
         {
@@ -387,7 +387,7 @@ public class OrleansTagStatePersistentTests
             throw new InvalidOperationException("The tagged stream grain path must not read the list API.");
         }
 
-        public async Task<ResultBox<SerializableEventStreamReadResult>> StreamSerializableEventsByTagAsync(
+        public async Task<SerializableEventStreamReadResult> StreamSerializableEventsByTagAsync(
             ITag tag,
             SortableUniqueId? since,
             SortableUniqueId? until,
@@ -397,7 +397,7 @@ public class OrleansTagStatePersistentTests
             StreamCalls++;
             cancellationToken.ThrowIfCancellationRequested();
             await onEvent(_event);
-            return ResultBox.FromValue(new SerializableEventStreamReadResult(1, _event.SortableUniqueIdValue));
+            return new SerializableEventStreamReadResult(1, _event.SortableUniqueIdValue);
         }
     }
 

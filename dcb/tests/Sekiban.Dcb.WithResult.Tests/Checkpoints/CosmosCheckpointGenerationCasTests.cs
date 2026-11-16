@@ -5,6 +5,7 @@ using Sekiban.Dcb.ServiceId;
 using Sekiban.Dcb.Storage.Checkpoints;
 using Sekiban.Dcb.Tests.Cosmos;
 using Xunit;
+using Sekiban.Dcb.TestSupport;
 namespace Sekiban.Dcb.Tests.Checkpoints;
 
 /// <summary>
@@ -36,7 +37,7 @@ public class CosmosCheckpointGenerationCasTests
 
     private static Stream Payload(string s) => new MemoryStream(Encoding.UTF8.GetBytes(s));
     private static async Task<CheckpointSlot> ReadAsync(IGenerationAwareCheckpointStore s) =>
-        (await s.ReadCheckpointSlotAsync(Projector, Version)).GetValue();
+        (await s.ReadCheckpointSlotAsync(Projector, Version).AsResultBoxAsync()).GetValue();
 
     [Fact]
     public void Capability_advertised() =>
@@ -188,7 +189,7 @@ public class CosmosCheckpointGenerationCasTests
     {
         // A legacy write leaves the generation/lifecycle properties absent; Newtonsoft defaults them to 0 → gen 0, Active.
         var store = NewStore(new InMemoryCosmosClient());
-        Assert.True((await store.UpsertFromStreamAsync(Req(7), Payload("legacy"), 1_000_000)).GetValue());
+        Assert.True((await store.UpsertFromStreamAsync(Req(7), Payload("legacy"), 1_000_000).AsResultBoxAsync()).GetValue());
         var slot = await ReadAsync(store);
         Assert.True(slot.IsActive);
         Assert.Equal(0, slot.Generation);

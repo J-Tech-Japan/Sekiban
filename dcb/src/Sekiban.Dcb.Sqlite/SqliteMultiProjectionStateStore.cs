@@ -1,6 +1,5 @@
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging;
-using ResultBoxes;
 using Sekiban.Dcb.MultiProjections;
 using Sekiban.Dcb.ServiceId;
 using Sekiban.Dcb.Storage;
@@ -246,7 +245,7 @@ public partial class SqliteMultiProjectionStateStore :
         }
     }
 
-    public async Task<ResultBox<OptionalValue<MultiProjectionStateRecord>>> GetLatestForVersionAsync(
+    public async Task<MultiProjectionStateRecord?> GetLatestForVersionAsync(
         string projectorName,
         string projectorVersion,
         CancellationToken cancellationToken = default)
@@ -274,19 +273,19 @@ public partial class SqliteMultiProjectionStateStore :
             if (await reader.ReadAsync(cancellationToken))
             {
                 var record = ReadRecord(reader);
-                return ResultBox.FromValue(OptionalValue.FromValue(record));
+                return record;
             }
 
-            return ResultBox.FromValue(OptionalValue<MultiProjectionStateRecord>.Empty);
+            return null;
         }
         catch (Exception ex)
         {
             _logger?.LogError(ex, "Error getting projection state for {ProjectorName}:{ProjectorVersion}", projectorName, projectorVersion);
-            return ResultBox.Error<OptionalValue<MultiProjectionStateRecord>>(ex);
+            throw;
         }
     }
 
-    public async Task<ResultBox<OptionalValue<MultiProjectionStateRecord>>> GetLatestAnyVersionAsync(
+    public async Task<MultiProjectionStateRecord?> GetLatestAnyVersionAsync(
         string projectorName,
         CancellationToken cancellationToken = default)
     {
@@ -314,44 +313,43 @@ public partial class SqliteMultiProjectionStateStore :
             if (await reader.ReadAsync(cancellationToken))
             {
                 var record = ReadRecord(reader);
-                return ResultBox.FromValue(OptionalValue.FromValue(record));
+                return record;
             }
 
-            return ResultBox.FromValue(OptionalValue<MultiProjectionStateRecord>.Empty);
+            return null;
         }
         catch (Exception ex)
         {
             _logger?.LogError(ex, "Error getting latest projection state for {ProjectorName}", projectorName);
-            return ResultBox.Error<OptionalValue<MultiProjectionStateRecord>>(ex);
+            throw;
         }
     }
 
-    public Task<ResultBox<bool>> UpsertAsync(
+    public Task<bool> UpsertAsync(
         MultiProjectionStateRecord record,
         int offloadThresholdBytes = 1_000_000,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(record);
-        return Task.FromResult(ResultBox.Error<bool>(
+        return Task.FromException<bool>(
             new NotSupportedException(
-                "SqliteMultiProjectionStateStore requires payload stream upsert. Use UpsertFromStreamAsync.")));
+                "SqliteMultiProjectionStateStore requires payload stream upsert. Use UpsertFromStreamAsync."));
     }
 
-    public async Task<ResultBox<bool>> UpsertFromStreamAsync(
+    public async Task<bool> UpsertFromStreamAsync(
         MultiProjectionStateWriteRequest request,
         Stream stream,
         int offloadThresholdBytes,
         CancellationToken cancellationToken = default)
     {
+        if (request.IsOffloaded)
+        {
+            throw new NotSupportedException(
+                "SqliteMultiProjectionStateStore does not support offloaded snapshot metadata. Provide inline stream payload.");
+        }
+
         try
         {
-            if (request.IsOffloaded)
-            {
-                return ResultBox.Error<bool>(
-                    new NotSupportedException(
-                        "SqliteMultiProjectionStateStore does not support offloaded snapshot metadata. Provide inline stream payload."));
-            }
-
             using var ms = new MemoryStream();
             await stream.CopyToAsync(ms, cancellationToken).ConfigureAwait(false);
             var stateData = ms.ToArray();
@@ -391,17 +389,17 @@ public partial class SqliteMultiProjectionStateStore :
             cmd.Parameters.AddWithValue("@buildHost", (object?)request.BuildHost ?? DBNull.Value);
 
             await cmd.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
-            return ResultBox.FromValue(true);
+            return true;
         }
         catch (Exception ex)
         {
             _logger?.LogError(ex, "Error upserting projection state stream for {ProjectorName}:{ProjectorVersion}",
                 request.ProjectorName, request.ProjectorVersion);
-            return ResultBox.Error<bool>(ex);
+            throw;
         }
     }
 
-    public async Task<ResultBox<Stream>> OpenStateDataReadStreamAsync(
+    public async Task<Stream> OpenStateDataReadStreamAsync(
         MultiProjectionStateRecord record,
         CancellationToken cancellationToken = default)
     {
@@ -424,15 +422,14 @@ public partial class SqliteMultiProjectionStateStore :
         var result = await cmd.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
         if (result is byte[] data)
         {
-            return ResultBox.FromValue<Stream>(new MemoryStream(data, writable: false));
+            return new MemoryStream(data, writable: false);
         }
 
-        return ResultBox.Error<Stream>(
-            new InvalidOperationException(
-                $"StateData not found for {record.ProjectorName}/{record.ProjectorVersion} in sqlite store."));
+        throw new InvalidOperationException(
+            $"StateData not found for {record.ProjectorName}/{record.ProjectorVersion} in sqlite store.");
     }
 
-    public async Task<ResultBox<IReadOnlyList<ProjectorStateInfo>>> ListAllAsync(
+    public async Task<IReadOnlyList<ProjectorStateInfo>> ListAllAsync(
         CancellationToken cancellationToken = default)
     {
         try
@@ -475,16 +472,16 @@ public partial class SqliteMultiProjectionStateStore :
                     lastSortableUniqueId));
             }
 
-            return ResultBox.FromValue<IReadOnlyList<ProjectorStateInfo>>(states);
+            return states;
         }
         catch (Exception ex)
         {
             _logger?.LogError(ex, "Error listing all projection states");
-            return ResultBox.Error<IReadOnlyList<ProjectorStateInfo>>(ex);
+            throw;
         }
     }
 
-    public async Task<ResultBox<bool>> DeleteAsync(
+    public async Task<bool> DeleteAsync(
         string projectorName,
         string projectorVersion,
         CancellationToken cancellationToken = default)
@@ -505,17 +502,17 @@ public partial class SqliteMultiProjectionStateStore :
             cmd.Parameters.AddWithValue(ParamServiceId, serviceId);
 
             var deleted = await cmd.ExecuteNonQueryAsync(cancellationToken);
-            return ResultBox.FromValue(deleted > 0);
+            return deleted > 0;
         }
         catch (Exception ex)
         {
             _logger?.LogError(ex, "Error deleting projection state for {ProjectorName}:{ProjectorVersion}",
                 projectorName, projectorVersion);
-            return ResultBox.Error<bool>(ex);
+            throw;
         }
     }
 
-    public async Task<ResultBox<int>> DeleteAllAsync(
+    public async Task<int> DeleteAllAsync(
         string? projectorName = null,
         CancellationToken cancellationToken = default)
     {
@@ -541,12 +538,12 @@ public partial class SqliteMultiProjectionStateStore :
             cmd.Parameters.AddWithValue(ParamServiceId, serviceId);
 
             var deleted = await cmd.ExecuteNonQueryAsync(cancellationToken);
-            return ResultBox.FromValue(deleted);
+            return deleted;
         }
         catch (Exception ex)
         {
             _logger?.LogError(ex, "Error deleting all projection states");
-            return ResultBox.Error<int>(ex);
+            throw;
         }
     }
 
@@ -600,48 +597,48 @@ public partial class SqliteMultiProjectionStateStore :
         return false;
     }
 
-    public async Task<ResultBox<CheckpointSlot>> ReadCheckpointSlotAsync(
+    public async Task<CheckpointSlot> ReadCheckpointSlotAsync(
         string projectorName,
         string projectorVersion,
         CancellationToken cancellationToken = default)
     {
-        try
+        var serviceId = CurrentServiceId;
+        await using var connection = new SqliteConnection(_connectionString);
+        await connection.OpenAsync(cancellationToken);
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = $"""
+            SELECT ProjectorName, ProjectorVersion, PayloadType, LastSortableUniqueId, EventsProcessed,
+                   StateData, IsOffloaded, OffloadKey, OffloadProvider, OriginalSizeBytes, CompressedSizeBytes,
+                   SafeWindowThreshold, CreatedAt, UpdatedAt, BuildSource, BuildHost, Generation, Revision, Lifecycle
+            FROM dcb_multi_projection_states
+            WHERE ServiceId = {ParamServiceId} AND ProjectorName = @projectorName AND ProjectorVersion = @projectorVersion
+            """;
+        cmd.Parameters.AddWithValue(ParamServiceId, serviceId);
+        cmd.Parameters.AddWithValue("@projectorName", projectorName);
+        cmd.Parameters.AddWithValue("@projectorVersion", projectorVersion);
+        await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
+        if (!await reader.ReadAsync(cancellationToken))
         {
-            var serviceId = CurrentServiceId;
-            await using var connection = new SqliteConnection(_connectionString);
-            await connection.OpenAsync(cancellationToken);
-            await using var cmd = connection.CreateCommand();
-            cmd.CommandText = $"""
-                SELECT ProjectorName, ProjectorVersion, PayloadType, LastSortableUniqueId, EventsProcessed,
-                       StateData, IsOffloaded, OffloadKey, OffloadProvider, OriginalSizeBytes, CompressedSizeBytes,
-                       SafeWindowThreshold, CreatedAt, UpdatedAt, BuildSource, BuildHost, Generation, Revision, Lifecycle
-                FROM dcb_multi_projection_states
-                WHERE ServiceId = {ParamServiceId} AND ProjectorName = @projectorName AND ProjectorVersion = @projectorVersion
-                """;
-            cmd.Parameters.AddWithValue(ParamServiceId, serviceId);
-            cmd.Parameters.AddWithValue("@projectorName", projectorName);
-            cmd.Parameters.AddWithValue("@projectorVersion", projectorVersion);
-            await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
-            if (!await reader.ReadAsync(cancellationToken))
-            {
-                return ResultBox.FromValue(CheckpointSlot.Absent);
-            }
-            var record = ReadRecord(reader);
-            var generation = reader.GetInt64(16);
-            var revision = reader.GetInt64(17);
-            var lifecycle = (CheckpointLifecycle)reader.GetInt32(18);
-            return ResultBox.FromValue(new CheckpointSlot(true, generation, revision.ToString(), lifecycle, record));
+            return CheckpointSlot.Absent;
         }
-        catch (Exception ex)
-        {
-            return ResultBox.Error<CheckpointSlot>(ex);
-        }
+        var record = ReadRecord(reader);
+        var generation = reader.GetInt64(16);
+        var revision = reader.GetInt64(17);
+        var lifecycle = (CheckpointLifecycle)reader.GetInt32(18);
+        return new CheckpointSlot(true, generation, revision.ToString(), lifecycle, record);
     }
 
     private async Task<CheckpointSlot> RefetchAsync(string projectorName, string projectorVersion, CancellationToken ct)
     {
-        var read = await ReadCheckpointSlotAsync(projectorName, projectorVersion, ct);
-        return read.IsSuccess ? read.GetValue() : CheckpointSlot.Absent;
+        try
+        {
+            return await ReadCheckpointSlotAsync(projectorName, projectorVersion, ct);
+        }
+        catch (Exception)
+        {
+            // An unreadable refetch is treated as absent, as before.
+            return CheckpointSlot.Absent;
+        }
     }
 
     private static void BindPayloadParams(SqliteCommand cmd, MultiProjectionStateWriteRequest r, byte[] stateData)

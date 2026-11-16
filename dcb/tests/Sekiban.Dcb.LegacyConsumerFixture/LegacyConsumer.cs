@@ -51,28 +51,27 @@ public static class LegacyConsumer
 /// </summary>
 public sealed class LegacyExternalEventStore : IEventStore
 {
-    public Task<ResultBox<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>>
+    public Task<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>
         WriteSerializableEventsAsync(IEnumerable<SerializableEvent> events) =>
         Task.FromResult(
-            ResultBox.FromValue(
                 ((IReadOnlyList<SerializableEvent>)events.ToList(),
-                    (IReadOnlyList<TagWriteResult>)new List<TagWriteResult>())));
+                    (IReadOnlyList<TagWriteResult>)new List<TagWriteResult>()));
 
-    public Task<ResultBox<IEnumerable<TagStream>>> ReadTagsAsync(ITag tag) =>
-        Task.FromResult(ResultBox.FromValue(Enumerable.Empty<TagStream>()));
-    public Task<ResultBox<TagState>> GetLatestTagAsync(ITag tag) => throw new NotSupportedException();
-    public Task<ResultBox<bool>> TagExistsAsync(ITag tag) => Task.FromResult(ResultBox.FromValue(false));
-    public Task<ResultBox<long>> GetEventCountAsync(SortableUniqueId? since = null) =>
-        Task.FromResult(ResultBox.FromValue(0L));
-    public Task<ResultBox<IEnumerable<TagInfo>>> GetAllTagsAsync(string? tagGroup = null) =>
-        Task.FromResult(ResultBox.FromValue(Enumerable.Empty<TagInfo>()));
-    public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null) =>
-        Task.FromResult(ResultBox.FromValue(Enumerable.Empty<SerializableEvent>()));
-    public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(SortableUniqueId? since, int? maxCount) =>
-        Task.FromResult(ResultBox.FromValue(Enumerable.Empty<SerializableEvent>()));
-    public Task<ResultBox<SerializableEvent>> ReadSerializableEventAsync(Guid eventId) => throw new NotSupportedException();
-    public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadSerializableEventsByTagAsync(ITag tag, SortableUniqueId? since = null) =>
-        Task.FromResult(ResultBox.FromValue(Enumerable.Empty<SerializableEvent>()));
-    public Task<ResultBox<string>> GetLatestSortableUniqueIdAsync() =>
-        Task.FromResult(ResultBox.FromValue(string.Empty));
+    public Task<IEnumerable<TagStream>> ReadTagsAsync(ITag tag) =>
+        Task.FromResult(Enumerable.Empty<TagStream>());
+    public Task<TagState> GetLatestTagAsync(ITag tag) => throw new NotSupportedException();
+    public Task<bool> TagExistsAsync(ITag tag) => Task.FromResult(false);
+    public Task<long> GetEventCountAsync(SortableUniqueId? since = null) =>
+        Task.FromResult(0L);
+    public Task<IEnumerable<TagInfo>> GetAllTagsAsync(string? tagGroup = null) =>
+        Task.FromResult(Enumerable.Empty<TagInfo>());
+    public Task<IEnumerable<SerializableEvent>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null) =>
+        Task.FromResult(Enumerable.Empty<SerializableEvent>());
+    public Task<IEnumerable<SerializableEvent>> ReadAllSerializableEventsAsync(SortableUniqueId? since, int? maxCount) =>
+        Task.FromResult(Enumerable.Empty<SerializableEvent>());
+    public Task<SerializableEvent?> ReadSerializableEventAsync(Guid eventId) => throw new NotSupportedException();
+    public Task<IEnumerable<SerializableEvent>> ReadSerializableEventsByTagAsync(ITag tag, SortableUniqueId? since = null) =>
+        Task.FromResult(Enumerable.Empty<SerializableEvent>());
+    public Task<string> GetLatestSortableUniqueIdAsync() =>
+        Task.FromResult(string.Empty);
 }

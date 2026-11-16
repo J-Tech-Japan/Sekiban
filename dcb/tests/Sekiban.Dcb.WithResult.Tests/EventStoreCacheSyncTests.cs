@@ -6,6 +6,7 @@ using Sekiban.Dcb.Events;
 using Sekiban.Dcb.Sqlite;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
+using Sekiban.Dcb.TestSupport;
 
 namespace Sekiban.Dcb.Tests;
 
@@ -31,7 +32,7 @@ public class EventStoreCacheSyncTests
             Assert.Equal(7, result.EventsSynced);
             Assert.Equal(7, result.TotalEventsInCache);
             Assert.Equal(new int?[] { 3, 3, 3 }, remoteStore.ReadAllSerializableMaxCounts.ToArray());
-            Assert.Equal(7L, (await localStore.GetEventCountAsync()).GetValue());
+            Assert.Equal(7L, (await localStore.GetEventCountAsync().AsResultBoxAsync()).GetValue());
         }
         finally
         {
@@ -62,7 +63,7 @@ public class EventStoreCacheSyncTests
 
             var firstResult = await failingSync.SyncAsync();
             Assert.False(firstResult.IsSuccess);
-            Assert.Equal(2L, (await localStore.GetEventCountAsync()).GetValue());
+            Assert.Equal(2L, (await localStore.GetEventCountAsync().AsResultBoxAsync()).GetValue());
 
             var metadataAfterFailure = await localStore.GetMetadataAsync();
             Assert.NotNull(metadataAfterFailure);
@@ -120,45 +121,45 @@ public class EventStoreCacheSyncTests
 
         public IReadOnlyList<int?> ReadAllSerializableMaxCounts => _maxCounts;
 
-        public Task<ResultBox<IEnumerable<Event>>> ReadAllEventsAsync(SortableUniqueId? since = null, int? maxCount = null) =>
+        public Task<IEnumerable<Event>> ReadAllEventsAsync(SortableUniqueId? since = null, int? maxCount = null) =>
             throw new NotSupportedException();
 
-        public Task<ResultBox<IEnumerable<Event>>> ReadEventsByTagAsync(ITag tag, SortableUniqueId? since = null) =>
+        public Task<IEnumerable<Event>> ReadEventsByTagAsync(ITag tag, SortableUniqueId? since = null) =>
             throw new NotSupportedException();
 
-        public Task<ResultBox<Event>> ReadEventAsync(Guid eventId) =>
+        public Task<Event?> ReadEventAsync(Guid eventId) =>
             throw new NotSupportedException();
 
-        public Task<ResultBox<(IReadOnlyList<Event> Events, IReadOnlyList<TagWriteResult> TagWrites)>> WriteEventsAsync(
+        public Task<(IReadOnlyList<Event> Events, IReadOnlyList<TagWriteResult> TagWrites)> WriteEventsAsync(
             IEnumerable<Event> events) => throw new NotSupportedException();
 
-        public Task<ResultBox<IEnumerable<TagStream>>> ReadTagsAsync(ITag tag) =>
+        public Task<IEnumerable<TagStream>> ReadTagsAsync(ITag tag) =>
             throw new NotSupportedException();
 
-        public Task<ResultBox<TagState>> GetLatestTagAsync(ITag tag) =>
+        public Task<TagState> GetLatestTagAsync(ITag tag) =>
             throw new NotSupportedException();
 
-        public Task<ResultBox<bool>> TagExistsAsync(ITag tag) =>
+        public Task<bool> TagExistsAsync(ITag tag) =>
             throw new NotSupportedException();
 
-        public Task<ResultBox<long>> GetEventCountAsync(SortableUniqueId? since = null)
+        public Task<long> GetEventCountAsync(SortableUniqueId? since = null)
         {
             var count = since == null
                 ? _events.Count
                 : _events.Count(e => string.Compare(e.SortableUniqueIdValue, since.Value, StringComparison.Ordinal) > 0);
-            return Task.FromResult(ResultBox.FromValue((long)count));
+            return Task.FromResult((long)count);
         }
 
-        public Task<ResultBox<IEnumerable<TagInfo>>> GetAllTagsAsync(string? tagGroup = null) =>
+        public Task<IEnumerable<TagInfo>> GetAllTagsAsync(string? tagGroup = null) =>
             throw new NotSupportedException();
 
-        public Task<ResultBox<string>> GetLatestSortableUniqueIdAsync() =>
+        public Task<string> GetLatestSortableUniqueIdAsync() =>
             throw new NotSupportedException();
 
-        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null) =>
+        public Task<IEnumerable<SerializableEvent>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null) =>
             ReadAllSerializableEventsAsync(since, null);
 
-        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(
+        public Task<IEnumerable<SerializableEvent>> ReadAllSerializableEventsAsync(
             SortableUniqueId? since,
             int? maxCount)
         {
@@ -167,8 +168,8 @@ public class EventStoreCacheSyncTests
 
             if (_failAtReadCall.HasValue && _readCallCount == _failAtReadCall.Value)
             {
-                return Task.FromResult(ResultBox.Error<IEnumerable<SerializableEvent>>(
-                    new InvalidOperationException("Simulated remote failure")));
+                return Task.FromException<IEnumerable<SerializableEvent>>(
+                    new InvalidOperationException("Simulated remote failure"));
             }
 
             IEnumerable<SerializableEvent> query = _events;
@@ -182,21 +183,19 @@ public class EventStoreCacheSyncTests
                 query = query.Take(maxCount.Value);
             }
 
-            return Task.FromResult(ResultBox.FromValue(query));
+            return Task.FromResult(query);
         }
 
-        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadSerializableEventsByTagAsync(ITag tag, SortableUniqueId? since = null) =>
+        public Task<IEnumerable<SerializableEvent>> ReadSerializableEventsByTagAsync(ITag tag, SortableUniqueId? since = null) =>
             throw new NotSupportedException();
 
-        public Task<ResultBox<SerializableEvent>> ReadSerializableEventAsync(Guid eventId)
+        public Task<SerializableEvent?> ReadSerializableEventAsync(Guid eventId)
         {
             var result = _events.FirstOrDefault(e => e.Id == eventId);
-            return result is null
-                ? Task.FromResult(ResultBox.Error<SerializableEvent>(new KeyNotFoundException($"Event {eventId} not found")))
-                : Task.FromResult(ResultBox.FromValue(result));
+            return Task.FromResult<SerializableEvent?>(result);
         }
 
-        public Task<ResultBox<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>> WriteSerializableEventsAsync(
+        public Task<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)> WriteSerializableEventsAsync(
             IEnumerable<SerializableEvent> events) => throw new NotSupportedException();
     }
 }

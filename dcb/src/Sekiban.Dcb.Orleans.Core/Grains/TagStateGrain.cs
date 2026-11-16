@@ -154,7 +154,7 @@ public class TagStateGrain : Grain, ITagStateGrain
                     previousId = serializableEvent.SortableUniqueIdValue;
                     return ValueTask.CompletedTask;
                 },
-                cancellationToken);
+                cancellationToken).ToResultBoxPropagatingCancellationAsync();
             cancellationToken.ThrowIfCancellationRequested();
             if (!streamResult.IsSuccess)
             {
@@ -392,7 +392,7 @@ public class TagStateGrain : Grain, ITagStateGrain
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var serializableResult = await _eventStore.ReadSerializableEventsByTagAsync(tag, since);
+        var serializableResult = await _eventStore.ReadSerializableEventsByTagAsync(tag, since).ToResultBoxAsync();
         cancellationToken.ThrowIfCancellationRequested();
         if (serializableResult.IsSuccess)
         {

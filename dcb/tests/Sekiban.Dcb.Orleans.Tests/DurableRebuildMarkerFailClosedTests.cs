@@ -21,6 +21,7 @@ using Sekiban.Dcb.Storage.Checkpoints;
 using Sekiban.Dcb.Tags;
 using Sekiban.Dcb.Testing;
 using Xunit;
+using Sekiban.Dcb.TestSupport;
 namespace Sekiban.Dcb.Orleans.Tests;
 
 /// <summary>
@@ -78,7 +79,7 @@ public class DurableRebuildMarkerFailClosedTests : IAsyncLifetime
 
         // Seed a later already-safe event, graduate + persist (compaction -> incremental promotion path).
         var later = ToSerializable(CreateEvent(new Counted("later"), t0.AddSeconds(-30)));
-        await Env.EventStore.WriteSerializableEventsAsync(new[] { later });
+        await Env.EventStore.WriteSerializableEventsAsync(new[] { later }).AsResultBoxAsync();
         await grain.RefreshAsync();
         Assert.True((await grain.PersistStateAsync()).IsSuccess);
         var externalWritesBefore = Env.StateStore.WriteCount;
@@ -91,7 +92,7 @@ public class DurableRebuildMarkerFailClosedTests : IAsyncLifetime
         MarkerFailingGrainStorage.FailMarkerWrites = true;
         var earlier = ToSerializable(CreateEvent(new Counted("earlier"), t0.AddSeconds(-31)));
         Assert.True(string.CompareOrdinal(earlier.SortableUniqueIdValue, later.SortableUniqueIdValue) < 0);
-        await Env.EventStore.WriteSerializableEventsAsync(new[] { earlier });
+        await Env.EventStore.WriteSerializableEventsAsync(new[] { earlier }).AsResultBoxAsync();
         await grain.AddEventsAsync(new[] { earlier });
 
         // With the durable marker not committed, all three query surfaces MUST fail closed (never a stale success).
@@ -102,7 +103,7 @@ public class DurableRebuildMarkerFailClosedTests : IAsyncLifetime
         // No external snapshot mutation happened (the marker write failed BEFORE any external invalidate/upsert).
         Assert.Equal(externalWritesBefore, Env.StateStore.WriteCount);
         Assert.Equal(0, Env.StateStore.DeleteCount);
-        Assert.True((await Env.StateStore.GetLatestForVersionAsync(CountProjector.MultiProjectorName, "1.0.0")).GetValue().HasValue);
+        Assert.True((await Env.StateStore.GetLatestForVersionAsync(CountProjector.MultiProjectorName, "1.0.0").AsOptionalResultBoxAsync()).GetValue().HasValue);
 
         // Same-activation retry: once the marker store recovers, the next query drives the durable rebuild to completion
         // and returns the recovered value (both events counted, from the authoritative global replay).
@@ -123,10 +124,10 @@ public class DurableRebuildMarkerFailClosedTests : IAsyncLifetime
         var executor = new OrleansDcbExecutor(_client, Env.EventStore, Env.Domain);
 
         var later = ToSerializable(CreateEvent(new Counted("later"), t0.AddSeconds(-30)));
-        await Env.EventStore.WriteSerializableEventsAsync(new[] { later });
+        await Env.EventStore.WriteSerializableEventsAsync(new[] { later }).AsResultBoxAsync();
         await grain.RefreshAsync();
         Assert.True((await grain.PersistStateAsync()).IsSuccess);
-        Assert.True((await Env.StateStore.GetLatestForVersionAsync(CountProjector.MultiProjectorName, "1.0.0")).GetValue().HasValue);
+        Assert.True((await Env.StateStore.GetLatestForVersionAsync(CountProjector.MultiProjectorName, "1.0.0").AsOptionalResultBoxAsync()).GetValue().HasValue);
         await FirstQueryBoundedWaitClusterTests.PollUntilAsync(async () => !(await grain.GetStatusAsync()).IsCatchUpActive);
 
         // The DURABLE MARKER commits, but the external-snapshot invalidate (SEK-G20 tombstone CAS) fails. Per the
@@ -135,13 +136,13 @@ public class DurableRebuildMarkerFailClosedTests : IAsyncLifetime
         Env.StateStore.FailInvalidate = true;
         var earlier = ToSerializable(CreateEvent(new Counted("earlier"), t0.AddSeconds(-31)));
         Assert.True(string.CompareOrdinal(earlier.SortableUniqueIdValue, later.SortableUniqueIdValue) < 0);
-        await Env.EventStore.WriteSerializableEventsAsync(new[] { earlier });
+        await Env.EventStore.WriteSerializableEventsAsync(new[] { earlier }).AsResultBoxAsync();
         await grain.AddEventsAsync(new[] { earlier });
 
         // The invalidate was attempted and failed; the stale external snapshot is still present; and because the live host
         // still signals RebuildRequired every query fails closed (never the stale pre-rebuild payload).
         Assert.True(Env.StateStore.InvalidateCount >= 1);
-        Assert.True((await Env.StateStore.GetLatestForVersionAsync(CountProjector.MultiProjectorName, "1.0.0")).GetValue().HasValue);
+        Assert.True((await Env.StateStore.GetLatestForVersionAsync(CountProjector.MultiProjectorName, "1.0.0").AsOptionalResultBoxAsync()).GetValue().HasValue);
         Assert.False((await grain.GetStateAsync()).IsSuccess);
         Assert.False((await executor.QueryAsync(new CountQuery())).IsSuccess);
         Assert.False((await executor.QueryAsync(new CountListQuery())).IsSuccess);
@@ -292,11 +293,11 @@ public class DurableRebuildMarkerFailClosedTests : IAsyncLifetime
         public bool FailDeletes { get; set; }
         public bool FailInvalidate { get; set; }
 
-        public Task<ResultBox<OptionalValue<MultiProjectionStateRecord>>> GetLatestForVersionAsync(string p, string v, CancellationToken ct = default) => _inner.GetLatestForVersionAsync(p, v, ct);
-        public Task<ResultBox<OptionalValue<MultiProjectionStateRecord>>> GetLatestAnyVersionAsync(string p, CancellationToken ct = default) => _inner.GetLatestAnyVersionAsync(p, ct);
-        public Task<ResultBox<bool>> UpsertAsync(MultiProjectionStateRecord r, int off = 1_000_000, CancellationToken ct = default) { Interlocked.Increment(ref _writeCount); return _inner.UpsertAsync(r, off, ct); }
-        public Task<ResultBox<IReadOnlyList<ProjectorStateInfo>>> ListAllAsync(CancellationToken ct = default) => _inner.ListAllAsync(ct);
-        public Task<ResultBox<bool>> DeleteAsync(string p, string v, CancellationToken ct = default)
+        public Task<MultiProjectionStateRecord?> GetLatestForVersionAsync(string p, string v, CancellationToken ct = default) => _inner.GetLatestForVersionAsync(p, v, ct);
+        public Task<MultiProjectionStateRecord?> GetLatestAnyVersionAsync(string p, CancellationToken ct = default) => _inner.GetLatestAnyVersionAsync(p, ct);
+        public Task<bool> UpsertAsync(MultiProjectionStateRecord r, int off = 1_000_000, CancellationToken ct = default) { Interlocked.Increment(ref _writeCount); return _inner.UpsertAsync(r, off, ct); }
+        public Task<IReadOnlyList<ProjectorStateInfo>> ListAllAsync(CancellationToken ct = default) => _inner.ListAllAsync(ct);
+        public Task<bool> DeleteAsync(string p, string v, CancellationToken ct = default)
         {
             Interlocked.Increment(ref _deleteCount);
             if (FailDeletes)
@@ -305,12 +306,12 @@ public class DurableRebuildMarkerFailClosedTests : IAsyncLifetime
             }
             return _inner.DeleteAsync(p, v, ct);
         }
-        public Task<ResultBox<int>> DeleteAllAsync(string? p = null, CancellationToken ct = default) => _inner.DeleteAllAsync(p, ct);
-        public Task<ResultBox<Stream>> OpenStateDataReadStreamAsync(MultiProjectionStateRecord r, CancellationToken ct = default) => _inner.OpenStateDataReadStreamAsync(r, ct);
-        public Task<ResultBox<bool>> UpsertFromStreamAsync(MultiProjectionStateWriteRequest req, Stream s, int off, CancellationToken ct = default) { Interlocked.Increment(ref _writeCount); return _inner.UpsertFromStreamAsync(req, s, off, ct); }
+        public Task<int> DeleteAllAsync(string? p = null, CancellationToken ct = default) => _inner.DeleteAllAsync(p, ct);
+        public Task<Stream> OpenStateDataReadStreamAsync(MultiProjectionStateRecord r, CancellationToken ct = default) => _inner.OpenStateDataReadStreamAsync(r, ct);
+        public Task<bool> UpsertFromStreamAsync(MultiProjectionStateWriteRequest req, Stream s, int off, CancellationToken ct = default) { Interlocked.Increment(ref _writeCount); return _inner.UpsertFromStreamAsync(req, s, off, ct); }
 
         public CheckpointStoreCapabilityDescriptor DescribeCheckpointCapability() => _inner.DescribeCheckpointCapability();
-        public Task<ResultBox<CheckpointSlot>> ReadCheckpointSlotAsync(string p, string v, CancellationToken ct = default) => _inner.ReadCheckpointSlotAsync(p, v, ct);
+        public Task<CheckpointSlot> ReadCheckpointSlotAsync(string p, string v, CancellationToken ct = default) => _inner.ReadCheckpointSlotAsync(p, v, ct);
         public Task<CheckpointCasOutcome> ConditionalUpsertAsync(MultiProjectionStateWriteRequest req, Stream s, CheckpointExpectation e, int off, CancellationToken ct = default) => _inner.ConditionalUpsertAsync(req, s, e, off, ct);
         public Task<CheckpointCasOutcome> InvalidateWithTombstoneAsync(string p, string v, CheckpointExpectation e, CancellationToken ct = default)
         {

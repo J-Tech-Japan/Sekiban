@@ -12,6 +12,7 @@ using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
 using CoreInMemoryEventStore = Sekiban.Dcb.Testing.InMemoryEventStore;
 using Xunit;
+using Sekiban.Dcb.TestSupport;
 
 namespace Sekiban.Dcb.Postgres.Tests;
 
@@ -70,7 +71,7 @@ public sealed class TaggedStreamParityMatrixTests : PostgresTestBase
         {
             ToSerializableEvent(domain, tag, P1, 3),
             ToSerializableEvent(domain, tag, P2, 4)
-        });
+        }).AsResultBoxAsync();
         Assert.True(write.IsSuccess, write.IsSuccess ? string.Empty : write.GetException().ToString());
 
         var streamingColdStore = new StreamingCountingStore(provider, providerName);
@@ -258,21 +259,21 @@ public sealed class TaggedStreamParityMatrixTests : PostgresTestBase
         public int StreamCalls { get; protected set; }
         public int ListCalls { get; private set; }
 
-        public Task<ResultBox<IEnumerable<TagStream>>> ReadTagsAsync(ITag tag) => Inner.ReadTagsAsync(tag);
-        public Task<ResultBox<TagState>> GetLatestTagAsync(ITag tag) => Inner.GetLatestTagAsync(tag);
-        public Task<ResultBox<bool>> TagExistsAsync(ITag tag) => Inner.TagExistsAsync(tag);
-        public Task<ResultBox<long>> GetEventCountAsync(SortableUniqueId? since = null) => Inner.GetEventCountAsync(since);
-        public Task<ResultBox<IEnumerable<TagInfo>>> GetAllTagsAsync(string? tagGroup = null) => Inner.GetAllTagsAsync(tagGroup);
-        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null) =>
+        public Task<IEnumerable<TagStream>> ReadTagsAsync(ITag tag) => Inner.ReadTagsAsync(tag);
+        public Task<TagState> GetLatestTagAsync(ITag tag) => Inner.GetLatestTagAsync(tag);
+        public Task<bool> TagExistsAsync(ITag tag) => Inner.TagExistsAsync(tag);
+        public Task<long> GetEventCountAsync(SortableUniqueId? since = null) => Inner.GetEventCountAsync(since);
+        public Task<IEnumerable<TagInfo>> GetAllTagsAsync(string? tagGroup = null) => Inner.GetAllTagsAsync(tagGroup);
+        public Task<IEnumerable<SerializableEvent>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null) =>
             Inner.ReadAllSerializableEventsAsync(since);
-        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(SortableUniqueId? since, int? maxCount) =>
+        public Task<IEnumerable<SerializableEvent>> ReadAllSerializableEventsAsync(SortableUniqueId? since, int? maxCount) =>
             Inner.ReadAllSerializableEventsAsync(since, maxCount);
-        public Task<ResultBox<SerializableEvent>> ReadSerializableEventAsync(Guid eventId) => Inner.ReadSerializableEventAsync(eventId);
-        public Task<ResultBox<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>>
+        public Task<SerializableEvent?> ReadSerializableEventAsync(Guid eventId) => Inner.ReadSerializableEventAsync(eventId);
+        public Task<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>
             WriteSerializableEventsAsync(IEnumerable<SerializableEvent> events) => Inner.WriteSerializableEventsAsync(events);
-        public Task<ResultBox<string>> GetLatestSortableUniqueIdAsync() => Inner.GetLatestSortableUniqueIdAsync();
+        public Task<string> GetLatestSortableUniqueIdAsync() => Inner.GetLatestSortableUniqueIdAsync();
 
-        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadSerializableEventsByTagAsync(
+        public Task<IEnumerable<SerializableEvent>> ReadSerializableEventsByTagAsync(
             ITag tag,
             SortableUniqueId? since = null)
         {
@@ -289,7 +290,7 @@ public sealed class TaggedStreamParityMatrixTests : PostgresTestBase
         public TaggedStreamCapabilityDescriptor DescribeTaggedStream() =>
             TaggedStreamCapabilityDescriptor.Native($"{providerName} parity wrapper");
 
-        public Task<ResultBox<SerializableEventStreamReadResult>> StreamSerializableEventsByTagAsync(
+        public Task<SerializableEventStreamReadResult> StreamSerializableEventsByTagAsync(
             ITag tag,
             SortableUniqueId? since,
             SortableUniqueId? until,

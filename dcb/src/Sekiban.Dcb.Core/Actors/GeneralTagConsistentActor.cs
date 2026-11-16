@@ -6,6 +6,7 @@ using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
 using System.Collections.Concurrent;
 using System.Globalization;
+using Sekiban.Dcb.Common;
 namespace Sekiban.Dcb.Actors;
 
 /// <summary>
@@ -173,7 +174,7 @@ public class GeneralTagConsistentActor : ITagConsistentActorCommon
         try
         {
             var tag = _tagTypes.GetTag(_tagName);
-            var latestTagResult = await _eventStore.GetLatestTagAsync(tag);
+            var latestTagResult = await _eventStore.GetLatestTagAsync(tag).ToResultBoxAsync();
             if (!latestTagResult.IsSuccess)
             {
                 return ResultBox.Error<string>(latestTagResult.GetException());
@@ -347,7 +348,7 @@ public class GeneralTagConsistentActor : ITagConsistentActorCommon
             var tag = _tagTypes.GetTag(_tagName);
 
             // Get the latest tag state
-            var latestTagResult = await _eventStore!.GetLatestTagAsync(tag);
+            var latestTagResult = await _eventStore!.GetLatestTagAsync(tag).ToResultBoxAsync();
             if (latestTagResult.IsSuccess)
             {
                 var tagState = latestTagResult.GetValue();

@@ -1,5 +1,4 @@
 using Microsoft.EntityFrameworkCore;
-using ResultBoxes;
 using Sekiban.Dcb.MultiProjections;
 using Sekiban.Dcb.Postgres.DbModels;
 using Sekiban.Dcb.ServiceId;
@@ -57,85 +56,50 @@ public partial class PostgresMultiProjectionStateStore :
 
     private string CurrentServiceId => _serviceIdProvider.GetCurrentServiceId();
 
-    public async Task<ResultBox<OptionalValue<MultiProjectionStateRecord>>> GetLatestForVersionAsync(
+    public async Task<MultiProjectionStateRecord?> GetLatestForVersionAsync(
         string projectorName,
         string projectorVersion,
         CancellationToken cancellationToken = default)
     {
-        try
-        {
-            await using var ctx = await _contextFactory.CreateDbContextAsync(cancellationToken);
-            var serviceId = CurrentServiceId;
-            var entity = await ctx.MultiProjectionStates
-                .FirstOrDefaultAsync(s =>
-                    s.ServiceId == serviceId &&
-                    s.ProjectorName == projectorName &&
-                    s.ProjectorVersion == projectorVersion, cancellationToken);
-
-            if (entity == null)
-                return ResultBox.FromValue(OptionalValue<MultiProjectionStateRecord>.Empty);
-
-            return ResultBox.FromValue(OptionalValue.FromValue(entity.ToRecord()));
-        }
-        catch (Exception ex)
-        {
-            return ResultBox.Error<OptionalValue<MultiProjectionStateRecord>>(ex);
-        }
+        await using var ctx = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var entity = await FindStateAsync(ctx, CurrentServiceId, projectorName, projectorVersion, cancellationToken);
+        return entity?.ToRecord();
     }
 
-    public async Task<ResultBox<OptionalValue<MultiProjectionStateRecord>>> GetLatestAnyVersionAsync(
+    public async Task<MultiProjectionStateRecord?> GetLatestAnyVersionAsync(
         string projectorName,
         CancellationToken cancellationToken = default)
     {
-        try
-        {
-            await using var ctx = await _contextFactory.CreateDbContextAsync(cancellationToken);
-            var serviceId = CurrentServiceId;
-            var entity = await ctx.MultiProjectionStates
-                .Where(s => s.ServiceId == serviceId && s.ProjectorName == projectorName)
-                .OrderByDescending(s => s.EventsProcessed)
-                .FirstOrDefaultAsync(cancellationToken);
-
-            if (entity == null)
-                return ResultBox.FromValue(OptionalValue<MultiProjectionStateRecord>.Empty);
-
-            return ResultBox.FromValue(OptionalValue.FromValue(entity.ToRecord()));
-        }
-        catch (Exception ex)
-        {
-            return ResultBox.Error<OptionalValue<MultiProjectionStateRecord>>(ex);
-        }
+        await using var ctx = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var serviceId = CurrentServiceId;
+        var entity = await ctx.MultiProjectionStates
+            .Where(s => s.ServiceId == serviceId && s.ProjectorName == projectorName)
+            .OrderByDescending(s => s.EventsProcessed)
+            .FirstOrDefaultAsync(cancellationToken);
+        return entity?.ToRecord();
     }
 
-    public async Task<ResultBox<bool>> UpsertAsync(
+    public async Task<bool> UpsertAsync(
         MultiProjectionStateRecord record,
         int offloadThresholdBytes = 1_000_000,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(record);
-        try
+        if (!record.IsOffloaded)
         {
-            if (!record.IsOffloaded)
-            {
-                return ResultBox.Error<bool>(
-                    new NotSupportedException(
-                        "UpsertAsync without payload stream is not supported for non-offloaded snapshots. Use UpsertFromStreamAsync."));
-            }
-
-            await using var ctx = await _contextFactory.CreateDbContextAsync(cancellationToken);
-            var serviceId = CurrentServiceId;
-            var dbRecord = DbMultiProjectionState.FromRecord(record with { UpdatedAt = DateTime.UtcNow }, serviceId, stateData: null);
-
-            await UpsertDbRecordAsync(ctx, serviceId, record.ProjectorName, record.ProjectorVersion, dbRecord, cancellationToken);
-            return ResultBox.FromValue(true);
+            throw new NotSupportedException(
+                "UpsertAsync without payload stream is not supported for non-offloaded snapshots. Use UpsertFromStreamAsync.");
         }
-        catch (Exception ex)
-        {
-            return ResultBox.Error<bool>(ex);
-        }
+
+        await using var ctx = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var serviceId = CurrentServiceId;
+        var dbRecord = DbMultiProjectionState.FromRecord(record with { UpdatedAt = DateTime.UtcNow }, serviceId, stateData: null);
+
+        await UpsertDbRecordAsync(ctx, serviceId, record.ProjectorName, record.ProjectorVersion, dbRecord, cancellationToken);
+        return true;
     }
 
-    public async Task<ResultBox<Stream>> OpenStateDataReadStreamAsync(
+    public async Task<Stream> OpenStateDataReadStreamAsync(
         MultiProjectionStateRecord record,
         CancellationToken cancellationToken = default)
     {
@@ -144,80 +108,70 @@ public partial class PostgresMultiProjectionStateStore :
         {
             try
             {
-                var stream = await _blobAccessor.OpenReadAsync(record.OffloadKey, cancellationToken);
-                return ResultBox.FromValue(stream);
+                return await _blobAccessor.OpenReadAsync(record.OffloadKey, cancellationToken);
             }
-            catch (IOException ex)
+            catch (Exception ex) when (ex is IOException or InvalidOperationException)
             {
-                return ResultBox.Error<Stream>(
-                    new InvalidOperationException(
-                        $"Failed to open offloaded state stream: {record.OffloadKey}",
-                        ex));
-            }
-            catch (InvalidOperationException ex)
-            {
-                return ResultBox.Error<Stream>(
-                    new InvalidOperationException(
-                        $"Failed to open offloaded state stream: {record.OffloadKey}",
-                        ex));
+                throw new InvalidOperationException(
+                    $"Failed to open offloaded state stream: {record.OffloadKey}",
+                    ex);
             }
         }
 
         await using var ctx = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        var serviceId = CurrentServiceId;
-        var entity = await ctx.MultiProjectionStates
-            .FirstOrDefaultAsync(s =>
-                s.ServiceId == serviceId &&
-                s.ProjectorName == record.ProjectorName &&
-                s.ProjectorVersion == record.ProjectorVersion, cancellationToken);
+        var entity = await FindStateAsync(ctx, CurrentServiceId, record.ProjectorName, record.ProjectorVersion, cancellationToken);
 
         if (entity?.StateData != null)
         {
-            return ResultBox.FromValue<Stream>(new MemoryStream(entity.StateData, writable: false));
+            return new MemoryStream(entity.StateData, writable: false);
         }
 
-        return ResultBox.Error<Stream>(
-            new InvalidOperationException(
-                $"Projection state has no inline data and no readable offload stream: {record.ProjectorName}/{record.ProjectorVersion}"));
+        throw new InvalidOperationException(
+            $"Projection state has no inline data and no readable offload stream: {record.ProjectorName}/{record.ProjectorVersion}");
     }
+
+    private static Task<DbMultiProjectionState?> FindStateAsync(
+        SekibanDcbDbContext ctx,
+        string serviceId,
+        string projectorName,
+        string projectorVersion,
+        CancellationToken cancellationToken) =>
+        ctx.MultiProjectionStates
+            .FirstOrDefaultAsync(s =>
+                s.ServiceId == serviceId &&
+                s.ProjectorName == projectorName &&
+                s.ProjectorVersion == projectorVersion, cancellationToken);
 
     /// <summary>
     ///     Stream-based upsert with offload via StreamOffloadHelper.
     /// </summary>
-    public async Task<ResultBox<bool>> UpsertFromStreamAsync(
+    public async Task<bool> UpsertFromStreamAsync(
         MultiProjectionStateWriteRequest request,
         Stream stream,
         int offloadThresholdBytes,
         CancellationToken cancellationToken = default)
     {
-        try
+        var offloadResult = await StreamOffloadHelper.ProcessAsync(
+            stream,
+            $"{request.ProjectorName}/{request.ProjectorVersion}",
+            offloadThresholdBytes,
+            _blobAccessor,
+            cancellationToken);
+        var record = (request with
         {
-            var offloadResult = await StreamOffloadHelper.ProcessAsync(
-                stream,
-                $"{request.ProjectorName}/{request.ProjectorVersion}",
-                offloadThresholdBytes,
-                _blobAccessor,
-                cancellationToken);
-            var record = (request with
-            {
-                IsOffloaded = offloadResult.IsOffloaded,
-                OffloadKey = offloadResult.OffloadKey,
-                OffloadProvider = offloadResult.OffloadProvider,
-                UpdatedAt = DateTime.UtcNow
-            }).ToRecord();
+            IsOffloaded = offloadResult.IsOffloaded,
+            OffloadKey = offloadResult.OffloadKey,
+            OffloadProvider = offloadResult.OffloadProvider,
+            UpdatedAt = DateTime.UtcNow
+        }).ToRecord();
 
-            await using var ctx = await _contextFactory.CreateDbContextAsync(cancellationToken);
-            var serviceId = CurrentServiceId;
+        await using var ctx = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var serviceId = CurrentServiceId;
 
-            var dbRecord = DbMultiProjectionState.FromRecord(record, serviceId, offloadResult.InlineData);
+        var dbRecord = DbMultiProjectionState.FromRecord(record, serviceId, offloadResult.InlineData);
 
-            await UpsertDbRecordAsync(ctx, serviceId, record.ProjectorName, record.ProjectorVersion, dbRecord, cancellationToken);
-            return ResultBox.FromValue(true);
-        }
-        catch (Exception ex)
-        {
-            return ResultBox.Error<bool>(ex);
-        }
+        await UpsertDbRecordAsync(ctx, serviceId, record.ProjectorName, record.ProjectorVersion, dbRecord, cancellationToken);
+        return true;
     }
 
     private static async Task UpsertDbRecordAsync(
@@ -228,11 +182,7 @@ public partial class PostgresMultiProjectionStateStore :
         DbMultiProjectionState dbRecord,
         CancellationToken cancellationToken)
     {
-        var existing = await ctx.MultiProjectionStates
-            .FirstOrDefaultAsync(s =>
-                s.ServiceId == serviceId &&
-                s.ProjectorName == projectorName &&
-                s.ProjectorVersion == projectorVersion, cancellationToken);
+        var existing = await FindStateAsync(ctx, serviceId, projectorName, projectorVersion, cancellationToken);
 
         if (existing != null)
         {
@@ -246,94 +196,66 @@ public partial class PostgresMultiProjectionStateStore :
         await ctx.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task<ResultBox<IReadOnlyList<ProjectorStateInfo>>> ListAllAsync(
+    public async Task<IReadOnlyList<ProjectorStateInfo>> ListAllAsync(
         CancellationToken cancellationToken = default)
     {
-        try
-        {
-            await using var ctx = await _contextFactory.CreateDbContextAsync(cancellationToken);
-            var list = await ctx.MultiProjectionStates
-                .Where(s => s.ServiceId == CurrentServiceId)
-                .Select(s => new ProjectorStateInfo(
-                    s.ProjectorName,
-                    s.ProjectorVersion,
-                    s.EventsProcessed,
-                    s.UpdatedAt,
-                    s.OriginalSizeBytes,
-                    s.CompressedSizeBytes,
-                    s.LastSortableUniqueId))
-                .ToListAsync(cancellationToken);
-
-            return ResultBox.FromValue<IReadOnlyList<ProjectorStateInfo>>(list);
-        }
-        catch (Exception ex)
-        {
-            return ResultBox.Error<IReadOnlyList<ProjectorStateInfo>>(ex);
-        }
+        await using var ctx = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        return await ctx.MultiProjectionStates
+            .Where(s => s.ServiceId == CurrentServiceId)
+            .Select(s => new ProjectorStateInfo(
+                s.ProjectorName,
+                s.ProjectorVersion,
+                s.EventsProcessed,
+                s.UpdatedAt,
+                s.OriginalSizeBytes,
+                s.CompressedSizeBytes,
+                s.LastSortableUniqueId))
+            .ToListAsync(cancellationToken);
     }
 
-    public async Task<ResultBox<bool>> DeleteAsync(
+    public async Task<bool> DeleteAsync(
         string projectorName,
         string projectorVersion,
         CancellationToken cancellationToken = default)
     {
-        try
-        {
-            await using var ctx = await _contextFactory.CreateDbContextAsync(cancellationToken);
-            var serviceId = CurrentServiceId;
-            var entity = await ctx.MultiProjectionStates
-                .FirstOrDefaultAsync(s =>
-                    s.ServiceId == serviceId &&
-                    s.ProjectorName == projectorName &&
-                    s.ProjectorVersion == projectorVersion, cancellationToken);
+        await using var ctx = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var entity = await FindStateAsync(ctx, CurrentServiceId, projectorName, projectorVersion, cancellationToken);
 
-            if (entity == null)
-                return ResultBox.FromValue(false);
+        if (entity == null)
+            return false;
 
-            // Note: Offloaded blob cleanup should be handled separately
-            // (IBlobStorageSnapshotAccessor does not currently support deletion)
+        // Note: Offloaded blob cleanup should be handled separately
+        // (IBlobStorageSnapshotAccessor does not currently support deletion)
 
-            ctx.MultiProjectionStates.Remove(entity);
-            await ctx.SaveChangesAsync(cancellationToken);
-            return ResultBox.FromValue(true);
-        }
-        catch (Exception ex)
-        {
-            return ResultBox.Error<bool>(ex);
-        }
+        ctx.MultiProjectionStates.Remove(entity);
+        await ctx.SaveChangesAsync(cancellationToken);
+        return true;
     }
 
-    public async Task<ResultBox<int>> DeleteAllAsync(
+    public async Task<int> DeleteAllAsync(
         string? projectorName = null,
         CancellationToken cancellationToken = default)
     {
-        try
+        await using var ctx = await _contextFactory.CreateDbContextAsync(cancellationToken);
+
+        IQueryable<DbMultiProjectionState> query = ctx.MultiProjectionStates;
+        if (!string.IsNullOrEmpty(projectorName))
         {
-            await using var ctx = await _contextFactory.CreateDbContextAsync(cancellationToken);
-
-            IQueryable<DbMultiProjectionState> query = ctx.MultiProjectionStates;
-            if (!string.IsNullOrEmpty(projectorName))
-            {
-                query = query.Where(s => s.ServiceId == CurrentServiceId && s.ProjectorName == projectorName);
-            }
-            else
-            {
-                query = query.Where(s => s.ServiceId == CurrentServiceId);
-            }
-
-            var entities = await query.ToListAsync(cancellationToken);
-
-            // Note: Offloaded blob cleanup should be handled separately
-            // (IBlobStorageSnapshotAccessor does not currently support deletion)
-
-            ctx.MultiProjectionStates.RemoveRange(entities);
-            await ctx.SaveChangesAsync(cancellationToken);
-            return ResultBox.FromValue(entities.Count);
+            query = query.Where(s => s.ServiceId == CurrentServiceId && s.ProjectorName == projectorName);
         }
-        catch (Exception ex)
+        else
         {
-            return ResultBox.Error<int>(ex);
+            query = query.Where(s => s.ServiceId == CurrentServiceId);
         }
+
+        var entities = await query.ToListAsync(cancellationToken);
+
+        // Note: Offloaded blob cleanup should be handled separately
+        // (IBlobStorageSnapshotAccessor does not currently support deletion)
+
+        ctx.MultiProjectionStates.RemoveRange(entities);
+        await ctx.SaveChangesAsync(cancellationToken);
+        return entities.Count;
     }
 
     // ---------------------------------------------------------------------------------------------------------------
@@ -346,26 +268,19 @@ public partial class PostgresMultiProjectionStateStore :
     private static CheckpointSlot SlotFrom(DbMultiProjectionState e) => new(
         true, e.Generation, e.Revision.ToString(), (CheckpointLifecycle)e.Lifecycle, e.ToRecord());
 
-    public async Task<ResultBox<CheckpointSlot>> ReadCheckpointSlotAsync(
+    public async Task<CheckpointSlot> ReadCheckpointSlotAsync(
         string projectorName,
         string projectorVersion,
         CancellationToken cancellationToken = default)
     {
-        try
-        {
-            await using var ctx = await _contextFactory.CreateDbContextAsync(cancellationToken);
-            var serviceId = CurrentServiceId;
-            var entity = await ctx.MultiProjectionStates
-                .AsNoTracking()
-                .FirstOrDefaultAsync(s =>
-                    s.ServiceId == serviceId && s.ProjectorName == projectorName && s.ProjectorVersion == projectorVersion,
-                    cancellationToken);
-            return ResultBox.FromValue(entity is null ? CheckpointSlot.Absent : SlotFrom(entity));
-        }
-        catch (Exception ex)
-        {
-            return ResultBox.Error<CheckpointSlot>(ex);
-        }
+        await using var ctx = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var serviceId = CurrentServiceId;
+        var entity = await ctx.MultiProjectionStates
+            .AsNoTracking()
+            .FirstOrDefaultAsync(s =>
+                s.ServiceId == serviceId && s.ProjectorName == projectorName && s.ProjectorVersion == projectorVersion,
+                cancellationToken);
+        return entity is null ? CheckpointSlot.Absent : SlotFrom(entity);
     }
 
     /// <summary>True only for a Postgres unique-violation (23505) — the "row already exists" conflict on an insert.</summary>
@@ -395,8 +310,15 @@ public partial class PostgresMultiProjectionStateStore :
 
     private async Task<CheckpointSlot> RefetchSlotAsync(string projectorName, string projectorVersion, CancellationToken ct)
     {
-        var read = await ReadCheckpointSlotAsync(projectorName, projectorVersion, ct);
-        return read.IsSuccess ? read.GetValue() : CheckpointSlot.Absent;
+        try
+        {
+            return await ReadCheckpointSlotAsync(projectorName, projectorVersion, ct);
+        }
+        catch (Exception)
+        {
+            // An unreadable refetch reports the slot as absent (unchanged behaviour, cancellation included).
+            return CheckpointSlot.Absent;
+        }
     }
 
     public async Task<CheckpointCasOutcome> ConditionalUpsertAsync(

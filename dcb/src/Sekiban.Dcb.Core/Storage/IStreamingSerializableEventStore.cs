@@ -1,4 +1,3 @@
-using ResultBoxes;
 using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Events;
 
@@ -9,7 +8,7 @@ namespace Sekiban.Dcb.Storage;
 /// </summary>
 public interface IStreamingSerializableEventStore
 {
-    Task<ResultBox<SerializableEventStreamReadResult>> StreamAllSerializableEventsAsync(
+    Task<SerializableEventStreamReadResult> StreamAllSerializableEventsAsync(
         SortableUniqueId? since,
         int? maxCount,
         Func<SerializableEvent, ValueTask> onEvent,

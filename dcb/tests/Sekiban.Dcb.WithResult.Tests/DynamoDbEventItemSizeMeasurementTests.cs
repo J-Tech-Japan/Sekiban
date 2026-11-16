@@ -18,6 +18,7 @@ using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Testing;
 using Microsoft.Extensions.Options;
 using CoreInMemoryEventStore = Sekiban.Dcb.Testing.InMemoryEventStore;
+using Sekiban.Dcb.TestSupport;
 
 namespace Sekiban.Dcb.Tests;
 
@@ -45,17 +46,17 @@ public sealed class DynamoDbEventItemSizeMeasurementTests
         var capture = (CapturingDynamoDb)(object)client;
         var store = NewStore(client, domain, "shape");
 
-        Assert.True((await store.WriteEventsAsync([@event])).IsSuccess);
+        Assert.True((await store.WriteEventsAsync([@event]).AsResultBoxAsync()).IsSuccess);
         var typedEvent = capture.EventItems.Single();
         capture.Clear();
 
-        Assert.True((await store.WriteSerializableEventsAsync([serialized])).IsSuccess);
+        Assert.True((await store.WriteSerializableEventsAsync([serialized]).AsResultBoxAsync()).IsSuccess);
         var serializedEvent = capture.EventItems.Single();
         Assert.Equal(2, capture.TagItems.Count);
         capture.Clear();
 
         var conditional = await store.AppendIfUniqueAsync(
-            new ConditionalAppendRequest("shape-conditional", serialized));
+            new ConditionalAppendRequest("shape-conditional", serialized)).AsResultBoxAsync();
         Assert.True(conditional.IsSuccess);
         var conditionalEvent = capture.EventItems.Single();
 
@@ -83,7 +84,7 @@ public sealed class DynamoDbEventItemSizeMeasurementTests
         var client = System.Reflection.DispatchProxy.Create<IAmazonDynamoDB, CapturingDynamoDb>();
         var capture = (CapturingDynamoDb)(object)client;
         var store = NewStore(client, domain, "oracle");
-        Assert.True((await store.WriteSerializableEventsAsync([serialized])).IsSuccess);
+        Assert.True((await store.WriteSerializableEventsAsync([serialized]).AsResultBoxAsync()).IsSuccess);
 
         var measurement = new DynamoDbEventItemSizeMeasurement(new DynamoDbEventStoreOptions { WriteShardCount = 1 });
         var measured = measurement.Measure(new ExecutorSizeMeasurementContext(
@@ -200,7 +201,7 @@ public sealed class DynamoDbEventItemSizeMeasurementTests
         Assert.Equal(DynamoDbEventItemSizeMeasurement.Scope, exception.Scope);
         Assert.Equal(ExecutorSizeRepresentation.LogicalSerializedEventUtf8, exception.Representation);
         Assert.Contains("only the StorageItem representation", exception.Reason);
-        Assert.Empty((await store.ReadAllSerializableEventsAsync()).GetValue());
+        Assert.Empty((await store.ReadAllSerializableEventsAsync().AsResultBoxAsync()).GetValue());
     }
 
     [Fact]
@@ -227,7 +228,7 @@ public sealed class DynamoDbEventItemSizeMeasurementTests
         Assert.Equal(DynamoDbEventItemSizeMeasurement.Scope, diagnostic.Scope);
         Assert.Equal(ExecutorSizeRepresentation.LogicalSerializedEventUtf8, diagnostic.Representation);
         Assert.Contains("only the StorageItem representation", diagnostic.Reason);
-        Assert.Single((await store.ReadAllSerializableEventsAsync()).GetValue());
+        Assert.Single((await store.ReadAllSerializableEventsAsync().AsResultBoxAsync()).GetValue());
     }
 
     [Theory]
@@ -253,13 +254,13 @@ public sealed class DynamoDbEventItemSizeMeasurementTests
         Assert.Equal(expectedSuccess, result.IsSuccess);
         if (expectedSuccess)
         {
-            Assert.Single((await store.ReadAllSerializableEventsAsync()).GetValue());
+            Assert.Single((await store.ReadAllSerializableEventsAsync().AsResultBoxAsync()).GetValue());
         }
         else
         {
             var exception = Assert.IsType<ExecutorSizeLimitExceededException>(result.GetException());
             Assert.Equal(DynamoDbEventItemSizeMeasurement.MaximumItemBytes + 1, exception.MeasuredBytes);
-            Assert.Empty((await store.ReadAllSerializableEventsAsync()).GetValue());
+            Assert.Empty((await store.ReadAllSerializableEventsAsync().AsResultBoxAsync()).GetValue());
         }
     }
 
@@ -289,7 +290,7 @@ public sealed class DynamoDbEventItemSizeMeasurementTests
         var result = await executor.CommitSerializableEventsAsync(request);
 
         Assert.IsType<ExecutorSizeLimitExceededException>(result.GetException());
-        Assert.Empty((await store.ReadAllSerializableEventsAsync()).GetValue());
+        Assert.Empty((await store.ReadAllSerializableEventsAsync().AsResultBoxAsync()).GetValue());
     }
 
     [Fact]

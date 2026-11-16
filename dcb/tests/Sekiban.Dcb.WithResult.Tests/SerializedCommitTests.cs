@@ -380,24 +380,24 @@ public class SerializedCommitTests
         public CountingEventStore(IEventStore inner) => _inner = inner;
         public int Calls => Volatile.Read(ref _calls);
 
-        public Task<ResultBox<TagState>> GetLatestTagAsync(ITag tag) => Count(_inner.GetLatestTagAsync(tag));
-        public Task<ResultBox<IEnumerable<TagStream>>> ReadTagsAsync(ITag tag) => Count(_inner.ReadTagsAsync(tag));
-        public Task<ResultBox<bool>> TagExistsAsync(ITag tag) => Count(_inner.TagExistsAsync(tag));
-        public Task<ResultBox<long>> GetEventCountAsync(SortableUniqueId? since = null) => Count(_inner.GetEventCountAsync(since));
-        public Task<ResultBox<IEnumerable<TagInfo>>> GetAllTagsAsync(string? tagGroup = null) => Count(_inner.GetAllTagsAsync(tagGroup));
-        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null) =>
+        public Task<TagState> GetLatestTagAsync(ITag tag) => Count(_inner.GetLatestTagAsync(tag));
+        public Task<IEnumerable<TagStream>> ReadTagsAsync(ITag tag) => Count(_inner.ReadTagsAsync(tag));
+        public Task<bool> TagExistsAsync(ITag tag) => Count(_inner.TagExistsAsync(tag));
+        public Task<long> GetEventCountAsync(SortableUniqueId? since = null) => Count(_inner.GetEventCountAsync(since));
+        public Task<IEnumerable<TagInfo>> GetAllTagsAsync(string? tagGroup = null) => Count(_inner.GetAllTagsAsync(tagGroup));
+        public Task<IEnumerable<SerializableEvent>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null) =>
             Count(_inner.ReadAllSerializableEventsAsync(since));
-        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(SortableUniqueId? since, int? maxCount) =>
+        public Task<IEnumerable<SerializableEvent>> ReadAllSerializableEventsAsync(SortableUniqueId? since, int? maxCount) =>
             Count(_inner.ReadAllSerializableEventsAsync(since, maxCount));
-        public Task<ResultBox<SerializableEvent>> ReadSerializableEventAsync(Guid eventId) =>
+        public Task<SerializableEvent?> ReadSerializableEventAsync(Guid eventId) =>
             Count(_inner.ReadSerializableEventAsync(eventId));
-        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadSerializableEventsByTagAsync(
+        public Task<IEnumerable<SerializableEvent>> ReadSerializableEventsByTagAsync(
             ITag tag,
             SortableUniqueId? since = null) => Count(_inner.ReadSerializableEventsByTagAsync(tag, since));
-        public Task<ResultBox<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>>
+        public Task<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>
             WriteSerializableEventsAsync(IEnumerable<SerializableEvent> events) =>
             Count(_inner.WriteSerializableEventsAsync(events));
-        public Task<ResultBox<string>> GetLatestSortableUniqueIdAsync() => Count(_inner.GetLatestSortableUniqueIdAsync());
+        public Task<string> GetLatestSortableUniqueIdAsync() => Count(_inner.GetLatestSortableUniqueIdAsync());
 
         private async Task<T> Count<T>(Task<T> operation)
         {

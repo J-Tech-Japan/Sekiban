@@ -1,4 +1,3 @@
-using ResultBoxes;
 using Sekiban.Dcb.Capabilities;
 namespace Sekiban.Dcb.Storage;
 
@@ -16,7 +15,7 @@ namespace Sekiban.Dcb.Storage;
 ///             <see cref="ConditionalAppendStatus.Appended" />;</item>
 ///         <item>same key, same operation fingerprint → write NOTHING, return the ORIGINAL winner's receipt with
 ///             <see cref="ConditionalAppendStatus.AlreadyCommittedSameOperation" />;</item>
-///         <item>same key, different fingerprint → write nothing, return <c>ResultBox.Error</c> carrying
+///         <item>same key, different fingerprint → write nothing, throw
 ///             <see cref="KeyReuseConflictException" />.</item>
 ///     </list>
 ///     The store guarantees at most ONE durable claim per key; making an external side effect exactly-once still needs an
@@ -24,7 +23,7 @@ namespace Sekiban.Dcb.Storage;
 /// </summary>
 public interface IConditionalEventStore
 {
-    Task<ResultBox<ConditionalAppendReceipt>> AppendIfUniqueAsync(
+    Task<ConditionalAppendReceipt> AppendIfUniqueAsync(
         ConditionalAppendRequest request,
         CancellationToken cancellationToken = default);
 }

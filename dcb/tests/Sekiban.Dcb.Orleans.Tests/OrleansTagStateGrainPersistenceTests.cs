@@ -30,6 +30,7 @@ using WithResultOrleansDcbExecutor = Sekiban.Dcb.Orleans.OrleansDcbExecutor;
 using WithoutResultExecutor = WithoutResultFacade::Sekiban.Dcb.ISekibanExecutor;
 using WithoutResultInMemoryDcbExecutor = WithoutResultFacade::Sekiban.Dcb.InMemory.InMemoryDcbExecutor;
 using WithoutResultOrleansDcbExecutor = WithoutResultFacade::Sekiban.Dcb.Orleans.OrleansDcbExecutor;
+using Sekiban.Dcb.TestSupport;
 namespace Sekiban.Dcb.Orleans.Tests;
 
 public class OrleansTagStateGrainPersistenceTests : IAsyncLifetime
@@ -115,7 +116,7 @@ public class OrleansTagStateGrainPersistenceTests : IAsyncLifetime
                 CreateEvent(new CounterIncremented(2), tag, "002"),
                 CreateEvent(new CounterIncremented(3), tag, "003"),
                 CreateEvent(new CounterIncremented(4), tag, "004")
-            });
+            }).AsResultBoxAsync();
 
         var state = await WaitForStateAsync(grain, 4);
         Assert.Equal(4, state.Version);
@@ -134,7 +135,7 @@ public class OrleansTagStateGrainPersistenceTests : IAsyncLifetime
             new[]
             {
                 CreateEvent(new CounterIncremented(5), tag, "001")
-            });
+            }).AsResultBoxAsync();
 
         var first = await grain.GetStateAsync();
         Assert.Equal(1, first.Version);
@@ -163,7 +164,7 @@ public class OrleansTagStateGrainPersistenceTests : IAsyncLifetime
         var grain = GetTagStateGrain(tagStateId);
 
         await SharedEventStore.WriteEventsAsync(
-            new[] { CreateEvent(new CounterIncremented(7), tag, "001") });
+            new[] { CreateEvent(new CounterIncremented(7), tag, "001") }).AsResultBoxAsync();
 
         var original = await grain.GetStateAsync();
         var staleState = new TagState(
@@ -196,7 +197,7 @@ public class OrleansTagStateGrainPersistenceTests : IAsyncLifetime
         var grain = GetTagStateGrain(tagStateId);
 
         await SharedEventStore.WriteEventsAsync(
-            new[] { CreateEvent(new CounterIncremented(9), tag, "001") });
+            new[] { CreateEvent(new CounterIncremented(9), tag, "001") }).AsResultBoxAsync();
 
         var first = await grain.GetStateAsync();
         Assert.Equal(1, first.Version);
@@ -384,7 +385,7 @@ public class OrleansTagStateGrainPersistenceTests : IAsyncLifetime
             {
                 CreateEvent(new CounterIncremented(1), tag, "001"),
                 CreateEvent(new CounterIncremented(2), tag, "002")
-            });
+            }).AsResultBoxAsync();
 
         // Prime the tag-consistent actor, then clear the cache so the measured request must stream both rows.
         await WaitForStateAsync(grain, 2, TimeSpan.FromSeconds(10));
@@ -439,7 +440,7 @@ public class OrleansTagStateGrainPersistenceTests : IAsyncLifetime
             {
                 CreateEvent(new CounterIncremented(1), tag, "001"),
                 CreateEvent(new CounterIncremented(2), tag, "002")
-            });
+            }).AsResultBoxAsync();
 
         // Prime the actual grain, then clear its persistence cache so the public executor must relay into a stream.
         await WaitForStateAsync(grain, 2, TimeSpan.FromSeconds(10));
@@ -492,7 +493,7 @@ public class OrleansTagStateGrainPersistenceTests : IAsyncLifetime
             {
                 CreateEvent(new CounterIncremented(1), tag, "001"),
                 CreateEvent(new CounterIncremented(2), tag, "002")
-            });
+            }).AsResultBoxAsync();
 
         var firstRowGate = eventStore.GateFirstStreamRow();
         using var cancellation = new CancellationTokenSource();
@@ -826,40 +827,40 @@ public class OrleansTagStateGrainPersistenceTests : IAsyncLifetime
             return new InMemoryEventStore(eventTypes);
         }
 
-        public Task<ResultBox<IEnumerable<Event>>> ReadAllEventsAsync(SortableUniqueId? since = null, int? maxCount = null) =>
+        public Task<IEnumerable<Event>> ReadAllEventsAsync(SortableUniqueId? since = null, int? maxCount = null) =>
             _inner.ReadAllEventsAsync(since, maxCount);
 
-        public async Task<ResultBox<IEnumerable<Event>>> ReadEventsByTagAsync(ITag tag, SortableUniqueId? since = null)
+        public async Task<IEnumerable<Event>> ReadEventsByTagAsync(ITag tag, SortableUniqueId? since = null)
         {
             return await _inner.ReadEventsByTagAsync(tag, since);
         }
 
-        public Task<ResultBox<Event>> ReadEventAsync(Guid eventId) => _inner.ReadEventAsync(eventId);
+        public Task<Event?> ReadEventAsync(Guid eventId) => _inner.ReadEventAsync(eventId);
 
-        public Task<ResultBox<(IReadOnlyList<Event> Events, IReadOnlyList<TagWriteResult> TagWrites)>> WriteEventsAsync(IEnumerable<Event> events)
+        public Task<(IReadOnlyList<Event> Events, IReadOnlyList<TagWriteResult> TagWrites)> WriteEventsAsync(IEnumerable<Event> events)
             => _inner.WriteEventsAsync(events);
 
-        public Task<ResultBox<IEnumerable<TagStream>>> ReadTagsAsync(ITag tag) => _inner.ReadTagsAsync(tag);
+        public Task<IEnumerable<TagStream>> ReadTagsAsync(ITag tag) => _inner.ReadTagsAsync(tag);
 
-        public Task<ResultBox<TagState>> GetLatestTagAsync(ITag tag) => _inner.GetLatestTagAsync(tag);
+        public Task<TagState> GetLatestTagAsync(ITag tag) => _inner.GetLatestTagAsync(tag);
 
-        public Task<ResultBox<bool>> TagExistsAsync(ITag tag) => _inner.TagExistsAsync(tag);
+        public Task<bool> TagExistsAsync(ITag tag) => _inner.TagExistsAsync(tag);
 
-        public Task<ResultBox<long>> GetEventCountAsync(SortableUniqueId? since = null) => _inner.GetEventCountAsync(since);
+        public Task<long> GetEventCountAsync(SortableUniqueId? since = null) => _inner.GetEventCountAsync(since);
 
-        public Task<ResultBox<IEnumerable<TagInfo>>> GetAllTagsAsync(string? tagGroup = null) => _inner.GetAllTagsAsync(tagGroup);
+        public Task<IEnumerable<TagInfo>> GetAllTagsAsync(string? tagGroup = null) => _inner.GetAllTagsAsync(tagGroup);
 
-        public Task<ResultBox<string>> GetLatestSortableUniqueIdAsync() => _inner.GetLatestSortableUniqueIdAsync();
+        public Task<string> GetLatestSortableUniqueIdAsync() => _inner.GetLatestSortableUniqueIdAsync();
 
-        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null)
+        public Task<IEnumerable<SerializableEvent>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null)
             => _inner.ReadAllSerializableEventsAsync(since);
 
-        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(
+        public Task<IEnumerable<SerializableEvent>> ReadAllSerializableEventsAsync(
             SortableUniqueId? since,
             int? maxCount)
             => _inner.ReadAllSerializableEventsAsync(since, maxCount);
 
-        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadSerializableEventsByTagAsync(
+        public Task<IEnumerable<SerializableEvent>> ReadSerializableEventsByTagAsync(
             ITag tag,
             SortableUniqueId? since = null)
         {
@@ -867,10 +868,10 @@ public class OrleansTagStateGrainPersistenceTests : IAsyncLifetime
             return _inner.ReadSerializableEventsByTagAsync(tag, since);
         }
 
-        public Task<ResultBox<SerializableEvent>> ReadSerializableEventAsync(Guid eventId)
+        public Task<SerializableEvent?> ReadSerializableEventAsync(Guid eventId)
             => _inner.ReadSerializableEventAsync(eventId);
 
-        public async Task<ResultBox<SerializableEventStreamReadResult>> StreamSerializableEventsByTagAsync(
+        public async Task<SerializableEventStreamReadResult> StreamSerializableEventsByTagAsync(
             ITag tag,
             SortableUniqueId? since,
             SortableUniqueId? until,
@@ -905,7 +906,7 @@ public class OrleansTagStateGrainPersistenceTests : IAsyncLifetime
             }
         }
 
-        public Task<ResultBox<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>> WriteSerializableEventsAsync(
+        public Task<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)> WriteSerializableEventsAsync(
             IEnumerable<SerializableEvent> events)
             => _inner.WriteSerializableEventsAsync(events);
 

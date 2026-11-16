@@ -22,6 +22,7 @@ using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Testing;
 using CoreInMemoryEventStore = Sekiban.Dcb.Testing.InMemoryEventStore;
 using Xunit;
+using Sekiban.Dcb.TestSupport;
 
 namespace Sekiban.Dcb.Tests;
 
@@ -160,7 +161,7 @@ public sealed class DynamoDbWriteOperationSizeMeasurementTests
             .Select(_ => CreateSerializedEvent(escapedJsonPayload, [], "BatchWireEvent"))
             .ToArray();
 
-        var result = await store.WriteSerializableEventsAsync(events);
+        var result = await store.WriteSerializableEventsAsync(events).AsResultBoxAsync();
 
         Assert.True(result.IsSuccess);
         var request = Assert.Single(capture.BatchRequests);
@@ -221,7 +222,7 @@ public sealed class DynamoDbWriteOperationSizeMeasurementTests
         var store = NewStore(client, domain, "operation-shape");
         var measurement = new DynamoDbWriteOperationSizeMeasurement();
 
-        Assert.True((await store.WriteEventsAsync([@event])).IsSuccess);
+        Assert.True((await store.WriteEventsAsync([@event]).AsResultBoxAsync()).IsSuccess);
         var typedEvent = capture.EventItems.Single();
         var typedTags = capture.TagItems.ToArray();
         Assert.Contains(
@@ -233,13 +234,13 @@ public sealed class DynamoDbWriteOperationSizeMeasurementTests
         Assert.NotEmpty(capture.ClientRequestTokens);
         capture.Clear();
 
-        Assert.True((await store.WriteSerializableEventsAsync([serialized])).IsSuccess);
+        Assert.True((await store.WriteSerializableEventsAsync([serialized]).AsResultBoxAsync()).IsSuccess);
         var serializedEvent = capture.EventItems.Single();
         var serializedTags = capture.TagItems.ToArray();
         capture.Clear();
 
         Assert.True((await store.AppendIfUniqueAsync(
-            new ConditionalAppendRequest("operation-shape", serialized))).IsSuccess);
+            new ConditionalAppendRequest("operation-shape", serialized)).AsResultBoxAsync()).IsSuccess);
         var conditionalEvent = capture.EventItems.Single();
         var conditionalTags = capture.TagItems.ToArray();
         Assert.Equal([null], capture.ClientRequestTokens);
@@ -289,7 +290,7 @@ public sealed class DynamoDbWriteOperationSizeMeasurementTests
         var store = NewStore(client, domain, "conditional-aggregate", eventTypes: eventTypes);
 
         var append = await store.AppendIfUniqueAsync(
-            new ConditionalAppendRequest("conditional-aggregate-key", serialized));
+            new ConditionalAppendRequest("conditional-aggregate-key", serialized)).AsResultBoxAsync();
         if (!append.IsSuccess)
             Assert.Fail(append.GetException().ToString());
 
@@ -377,7 +378,7 @@ public sealed class DynamoDbWriteOperationSizeMeasurementTests
         {
             var exception = Assert.IsType<ExecutorSizeCapabilityException>(result.GetException());
             Assert.Equal(scope, exception.Scope);
-            Assert.Empty((await store.ReadAllSerializableEventsAsync()).GetValue());
+            Assert.Empty((await store.ReadAllSerializableEventsAsync().AsResultBoxAsync()).GetValue());
         }
         else
         {
@@ -385,7 +386,7 @@ public sealed class DynamoDbWriteOperationSizeMeasurementTests
             var diagnostic = Assert.Single(result.GetValue().SizeGateDiagnostics);
             Assert.Equal(scope, diagnostic.Scope);
             Assert.Contains("StorageItem", diagnostic.Reason);
-            Assert.Single((await store.ReadAllSerializableEventsAsync()).GetValue());
+            Assert.Single((await store.ReadAllSerializableEventsAsync().AsResultBoxAsync()).GetValue());
         }
     }
 
@@ -468,7 +469,7 @@ public sealed class DynamoDbWriteOperationSizeMeasurementTests
         var exception = Assert.IsType<ExecutorSizeLimitExceededException>(result.GetException());
         Assert.True(exception.IsOperationLimit);
         Assert.Equal(120, exception.MeasuredBytes);
-        Assert.Empty((await store.ReadAllSerializableEventsAsync()).GetValue());
+        Assert.Empty((await store.ReadAllSerializableEventsAsync().AsResultBoxAsync()).GetValue());
     }
 
     private static List<SerializableEvent> CreateOperationBoundary(
@@ -512,7 +513,7 @@ public sealed class DynamoDbWriteOperationSizeMeasurementTests
         var client = System.Reflection.DispatchProxy.Create<IAmazonDynamoDB,
             DynamoDbEventItemSizeMeasurementTests.CapturingDynamoDb>();
         var capture = (DynamoDbEventItemSizeMeasurementTests.CapturingDynamoDb)(object)client;
-        Assert.True(NewStore(client, domain, serviceId).WriteSerializableEventsAsync([serialized]).Result.IsSuccess);
+        Assert.True(NewStore(client, domain, serviceId).WriteSerializableEventsAsync([serialized]).AsResultBoxAsync().Result.IsSuccess);
         return capture;
     }
 

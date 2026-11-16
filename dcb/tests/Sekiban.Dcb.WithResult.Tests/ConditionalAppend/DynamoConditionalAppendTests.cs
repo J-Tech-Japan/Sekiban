@@ -87,7 +87,7 @@ public class DynamoConditionalAppendTests
                 new EventMetadata("seed", "seed", "test"),
                 ["Many:seed"])
             .ToSerializableEvent(_domain.EventTypes);
-        Assert.True((await store.WriteSerializableEventsAsync([persisted])).IsSuccess);
+        Assert.True((await store.WriteSerializableEventsAsync([persisted]).AsResultBoxAsync()).IsSuccess);
 
         var generator = new MonotonicSortableUniqueIdGenerator(
             new FixedTimeProvider(new DateTimeOffset(2020, 1, 1, 0, 0, 0, TimeSpan.Zero)));
@@ -137,7 +137,7 @@ public class DynamoConditionalAppendTests
         var (s, client) = NewStore();
         var store = (IConditionalEventStore)s;
         var tags = Enumerable.Range(0, 99).Select(i => $"Many:{i}");
-        var result = await store.AppendIfUniqueAsync(new ConditionalAppendRequest("dyn-99", MarkerWithTags("v", tags)));
+        var result = await store.AppendIfUniqueAsync(new ConditionalAppendRequest("dyn-99", MarkerWithTags("v", tags))).AsResultBoxAsync();
 
         Assert.True(result.IsSuccess); // 1 event + 99 tags = 100 items, exactly the TransactWriteItems cap
         Assert.Equal(1, client.CountIn(EventsTable));
@@ -149,7 +149,7 @@ public class DynamoConditionalAppendTests
         var (s, client) = NewStore();
         var store = (IConditionalEventStore)s;
         var tags = Enumerable.Range(0, 100).Select(i => $"Many:{i}");
-        var result = await store.AppendIfUniqueAsync(new ConditionalAppendRequest("dyn-100", MarkerWithTags("v", tags)));
+        var result = await store.AppendIfUniqueAsync(new ConditionalAppendRequest("dyn-100", MarkerWithTags("v", tags))).AsResultBoxAsync();
 
         Assert.False(result.IsSuccess); // 1 event + 100 tags = 101 items > 100
         Assert.IsType<DynamoConditionalAppendLimitException>(result.GetException());
@@ -162,7 +162,7 @@ public class DynamoConditionalAppendTests
         var (s, client) = NewStore();
         var store = (IConditionalEventStore)s;
         var result = await store.AppendIfUniqueAsync(
-            new ConditionalAppendRequest("dyn-dup", MarkerWithTags("v", new[] { "Many:same", "Many:same" })));
+            new ConditionalAppendRequest("dyn-dup", MarkerWithTags("v", new[] { "Many:same", "Many:same" }))).AsResultBoxAsync();
 
         Assert.False(result.IsSuccess); // duplicate item key in one transaction
         Assert.IsType<DynamoConditionalAppendLimitException>(result.GetException());
@@ -187,7 +187,7 @@ public class DynamoConditionalAppendTests
             }
         };
 
-        var result = await store.AppendIfUniqueAsync(new ConditionalAppendRequest("dyn-idx", ConditionalAppendScenarios.Marker(_domain, "v")));
+        var result = await store.AppendIfUniqueAsync(new ConditionalAppendRequest("dyn-idx", ConditionalAppendScenarios.Marker(_domain, "v"))).AsResultBoxAsync();
 
         Assert.False(result.IsSuccess);
         Assert.IsType<TransactionCanceledException>(result.GetException());
@@ -206,7 +206,7 @@ public class DynamoConditionalAppendTests
         // An already-cancelled token is a KNOWN no-commit: the pre-dispatch boundary throws before any SDK call, so it
         // surfaces the exact original OperationCanceledException/token — never the post-commit ambiguity marker/in-doubt.
         var result = await store.AppendIfUniqueAsync(
-            new ConditionalAppendRequest("dyn-precancel", ConditionalAppendScenarios.Marker(_domain, "v")), cts.Token);
+            new ConditionalAppendRequest("dyn-precancel", ConditionalAppendScenarios.Marker(_domain, "v")), cts.Token).AsResultBoxAsync();
 
         Assert.False(result.IsSuccess);
         Assert.IsNotType<ConditionalAppendInDoubtException>(result.GetException());
@@ -225,7 +225,7 @@ public class DynamoConditionalAppendTests
         // orchestrator must resolve it by authoritative read-back + fingerprint, not fail blindly.
         client.ApplyThenThrowOnce = new OperationCanceledException("ambiguous after commit");
 
-        var result = await store.AppendIfUniqueAsync(new ConditionalAppendRequest("dyn-amb", ConditionalAppendScenarios.Marker(_domain, "v")));
+        var result = await store.AppendIfUniqueAsync(new ConditionalAppendRequest("dyn-amb", ConditionalAppendScenarios.Marker(_domain, "v"))).AsResultBoxAsync();
 
         Assert.True(result.IsSuccess);
         Assert.Equal(ConditionalAppendStatus.AlreadyCommittedSameOperation, result.GetValue().Status);
@@ -240,7 +240,7 @@ public class DynamoConditionalAppendTests
         // A TransactionCanceledException with an EMPTY reason collection is not the event claim condition.
         client.NextTransactException = new TransactionCanceledException("cancelled") { CancellationReasons = new List<CancellationReason>() };
 
-        var result = await store.AppendIfUniqueAsync(new ConditionalAppendRequest("dyn-absent", ConditionalAppendScenarios.Marker(_domain, "v")));
+        var result = await store.AppendIfUniqueAsync(new ConditionalAppendRequest("dyn-absent", ConditionalAppendScenarios.Marker(_domain, "v"))).AsResultBoxAsync();
 
         Assert.False(result.IsSuccess);
         Assert.IsType<TransactionCanceledException>(result.GetException());
@@ -257,7 +257,7 @@ public class DynamoConditionalAppendTests
             CancellationReasons = new List<CancellationReason> { new() { Code = "ThrottlingError" } }
         };
 
-        var result = await store.AppendIfUniqueAsync(new ConditionalAppendRequest("dyn-malformed", ConditionalAppendScenarios.Marker(_domain, "v")));
+        var result = await store.AppendIfUniqueAsync(new ConditionalAppendRequest("dyn-malformed", ConditionalAppendScenarios.Marker(_domain, "v"))).AsResultBoxAsync();
 
         Assert.False(result.IsSuccess);
         Assert.IsType<TransactionCanceledException>(result.GetException());
@@ -270,7 +270,7 @@ public class DynamoConditionalAppendTests
         var store = (IConditionalEventStore)s;
         client.NextTransactException = new AmazonDynamoDBException("Transaction request cannot include more than allowed size");
 
-        var result = await store.AppendIfUniqueAsync(new ConditionalAppendRequest("dyn-toolarge", ConditionalAppendScenarios.Marker(_domain, "v")));
+        var result = await store.AppendIfUniqueAsync(new ConditionalAppendRequest("dyn-toolarge", ConditionalAppendScenarios.Marker(_domain, "v"))).AsResultBoxAsync();
 
         Assert.False(result.IsSuccess);
         Assert.IsType<AmazonDynamoDBException>(result.GetException());
@@ -288,7 +288,7 @@ public class DynamoConditionalAppendTests
             CancellationReasons = new List<CancellationReason> { new() { Code = "ConditionalCheckFailed" } }
         };
 
-        var result = await store.AppendIfUniqueAsync(new ConditionalAppendRequest("dyn-indoubt", ConditionalAppendScenarios.Marker(_domain, "v")));
+        var result = await store.AppendIfUniqueAsync(new ConditionalAppendRequest("dyn-indoubt", ConditionalAppendScenarios.Marker(_domain, "v"))).AsResultBoxAsync();
 
         Assert.False(result.IsSuccess);
         var ex = Assert.IsType<ConditionalAppendInDoubtException>(result.GetException());

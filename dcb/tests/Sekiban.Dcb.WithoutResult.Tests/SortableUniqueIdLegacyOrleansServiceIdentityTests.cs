@@ -58,7 +58,7 @@ public class SortableUniqueIdLegacyOrleansServiceIdentityTests
                 new EventMetadata("seed", "seed", "test"),
                 [])
             .ToSerializableEvent(domain.EventTypes);
-        Assert.True((await store.WriteSerializableEventsAsync([persisted])).IsSuccess);
+        Assert.True((await store.WriteSerializableEventsAsync([persisted]).AsResultBoxAsync()).IsSuccess);
     }
 
     private sealed record IdentityProbeCommand : ICommand;

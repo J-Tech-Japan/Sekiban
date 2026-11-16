@@ -2,6 +2,7 @@ using System.Text;
 using Sekiban.Dcb.ColdEvents;
 using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Events;
+using Sekiban.Dcb.TestSupport;
 
 namespace Sekiban.Dcb.ColdEvents.Tests;
 
@@ -48,7 +49,7 @@ public class SqliteColdSegmentFormatHandlerTests
                     readEvents.Add(evt);
                     return ValueTask.CompletedTask;
                 },
-                CancellationToken.None);
+                CancellationToken.None).AsResultBoxAsync();
 
             Assert.True(result.IsSuccess, result.IsSuccess ? string.Empty : result.GetException().ToString());
             var value = result.GetValue();

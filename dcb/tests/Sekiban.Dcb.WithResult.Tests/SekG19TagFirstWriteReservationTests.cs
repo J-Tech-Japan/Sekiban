@@ -6,6 +6,7 @@ using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
 using CoreInMemoryEventStore = Sekiban.Dcb.Testing.InMemoryEventStore;
 using Xunit;
+using Sekiban.Dcb.TestSupport;
 namespace Sekiban.Dcb.Tests;
 
 /// <summary>
@@ -30,7 +31,7 @@ public class SekG19TagFirstWriteReservationTests
     private async Task<string> CommitCreateAsync(IEventStore store, Guid studentId, StudentTag tag, string name)
     {
         var ev = EventTestHelper.CreateEvent(new StudentCreated(studentId, name), tag);
-        await store.WriteEventAsync(ev, _domainTypes.EventTypes);
+        await store.WriteEventAsync(ev, _domainTypes.EventTypes).AsResultBoxAsync();
         return ev.SortableUniqueIdValue;
     }
 
@@ -189,15 +190,15 @@ public class SekG19TagFirstWriteReservationTests
         // merely that a tag read succeeds — by capturing each event's identity and reading them back authoritatively.
         var eventA = EventTestHelper.CreateEvent(new StudentCreated(studentId, "A"), tag);
         var eventB = EventTestHelper.CreateEvent(new StudentCreated(studentId, "B"), tag);
-        await store.WriteEventAsync(eventA, _domainTypes.EventTypes);
-        await store.WriteEventAsync(eventB, _domainTypes.EventTypes);
+        await store.WriteEventAsync(eventA, _domainTypes.EventTypes).AsResultBoxAsync();
+        await store.WriteEventAsync(eventB, _domainTypes.EventTypes).AsResultBoxAsync();
         Assert.NotEqual(eventA.Id, eventB.Id);                                       // distinct event identities
         Assert.NotEqual(eventA.SortableUniqueIdValue, eventB.SortableUniqueIdValue); // distinct positions
 
         // Authoritative event-store read by tag: exactly TWO events, distinct ids + positions + content. This FAILS if the
         // second append were deduplicated (count would be 1) — the cross-cluster duplicate is real, and unique-append (the
         // storage layer, not the actor) is the tool that would collapse it; convergence over it is SEK-G18.
-        var stored = (await store.ReadEventsByTagAsync(tag, _domainTypes.EventTypes)).GetValue().ToList();
+        var stored = (await store.ReadEventsByTagAsync(tag, _domainTypes.EventTypes).AsResultBoxAsync()).GetValue().ToList();
         Assert.Equal(2, stored.Count);
         Assert.Equal(new[] { eventA.Id, eventB.Id }.OrderBy(g => g), stored.Select(e => e.Id).OrderBy(g => g));
         Assert.Equal(2, stored.Select(e => e.SortableUniqueIdValue).Distinct().Count());

@@ -88,7 +88,7 @@ public class ConditionalAppendParityTests
                 },
                 options));
         Assert.False(invoked);
-        Assert.Empty((await plain.ReadAllSerializableEventsAsync()).GetValue());
+        Assert.Empty((await plain.ReadAllSerializableEventsAsync().AsResultBoxAsync()).GetValue());
     }
 
     [Fact]

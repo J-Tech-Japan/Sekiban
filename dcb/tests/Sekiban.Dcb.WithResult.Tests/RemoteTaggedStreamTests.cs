@@ -21,6 +21,7 @@ using Sekiban.Dcb.Tags;
 using Sekiban.Dcb.Tests.Cosmos;
 using System.Text;
 using System.Text.Json;
+using Sekiban.Dcb.TestSupport;
 
 namespace Sekiban.Dcb.Tests;
 
@@ -56,7 +57,7 @@ public sealed class RemoteTaggedStreamTests
         };
         var (cosmos, _) = NewCosmosStore(cosmosOptions);
         var cosmosTag = new RemoteParityTag("cosmos");
-        Assert.True((await cosmos.WriteSerializableEventsAsync(ParityEvents(domain, cosmosTag))).IsSuccess);
+        Assert.True((await cosmos.WriteSerializableEventsAsync(ParityEvents(domain, cosmosTag)).AsResultBoxAsync()).IsSuccess);
         var cosmosResult = await RunParityRoutesAsync(cosmos, "CosmosDb", domain, cosmosTag);
 
         // Keep the provider's arbitrary BatchGet order hostile on the actor route too. If the production rejoin is
@@ -93,7 +94,7 @@ public sealed class RemoteTaggedStreamTests
         var (store, client) = NewCosmosStore(options);
         var tag = new NativeTag("cosmos-bounds");
         var fixture = FivePointFixture(tag);
-        Assert.True((await store.WriteSerializableEventsAsync(fixture)).IsSuccess);
+        Assert.True((await store.WriteSerializableEventsAsync(fixture).AsResultBoxAsync()).IsSuccess);
 
         var emitted = new List<SerializableEvent>();
         var stream = await store.StreamSerializableEventsByTagAsync(
@@ -105,7 +106,7 @@ public sealed class RemoteTaggedStreamTests
                 emitted.Add(@event);
                 return ValueTask.CompletedTask;
             },
-            new CancellationTokenSource().Token);
+            new CancellationTokenSource().Token).AsResultBoxAsync();
 
         Assert.True(stream.IsSuccess, stream.IsSuccess ? string.Empty : stream.GetException().ToString());
         Assert.Equal(new[] { P2, P3 }, emitted.Select(@event => @event.SortableUniqueIdValue));
@@ -141,7 +142,7 @@ public sealed class RemoteTaggedStreamTests
         };
         var (store, client) = NewCosmosStore(options);
         var tag = new NativeTag("cosmos-static-bound-shapes");
-        Assert.True((await store.WriteSerializableEventsAsync(FivePointFixture(tag))).IsSuccess);
+        Assert.True((await store.WriteSerializableEventsAsync(FivePointFixture(tag)).AsResultBoxAsync()).IsSuccess);
         var tags = client.Container(options.TagsContainerName);
 
         await AssertBoundShapeAsync(
@@ -181,7 +182,7 @@ public sealed class RemoteTaggedStreamTests
                 {
                     emitted.Add(@event.SortableUniqueIdValue);
                     return ValueTask.CompletedTask;
-                });
+                }).AsResultBoxAsync();
 
             Assert.True(result.IsSuccess, result.IsSuccess ? string.Empty : result.GetException().ToString());
             Assert.Equal(expectedIds, emitted);
@@ -201,7 +202,7 @@ public sealed class RemoteTaggedStreamTests
         };
         var (store, client) = NewCosmosStore(options);
         var tag = new NativeTag("cosmos-default-window-telemetry");
-        Assert.True((await store.WriteSerializableEventsAsync(FivePointFixture(tag))).IsSuccess);
+        Assert.True((await store.WriteSerializableEventsAsync(FivePointFixture(tag)).AsResultBoxAsync()).IsSuccess);
 
         var emitted = new List<string>();
         var result = await store.StreamSerializableEventsByTagAsync(
@@ -212,7 +213,7 @@ public sealed class RemoteTaggedStreamTests
             {
                 emitted.Add(@event.SortableUniqueIdValue);
                 return ValueTask.CompletedTask;
-            });
+            }).AsResultBoxAsync();
 
         Assert.True(result.IsSuccess, result.IsSuccess ? string.Empty : result.GetException().ToString());
         Assert.Equal(new[] { P0, P1, P2, P3, P4 }, emitted);
@@ -242,7 +243,7 @@ public sealed class RemoteTaggedStreamTests
         var (store, client) = NewCosmosStore(options);
         var tag = new NativeTag("cosmos-completion-order");
         var fixture = FivePointFixture(tag);
-        Assert.True((await store.WriteSerializableEventsAsync(fixture)).IsSuccess);
+        Assert.True((await store.WriteSerializableEventsAsync(fixture).AsResultBoxAsync()).IsSuccess);
 
         var firstEventId = fixture.Single(@event => @event.SortableUniqueIdValue == P2).Id.ToString();
         var secondEventId = fixture.Single(@event => @event.SortableUniqueIdValue == P3).Id.ToString();
@@ -285,7 +286,7 @@ public sealed class RemoteTaggedStreamTests
             releaseFirst.TrySetResult();
         }
 
-        var result = await streaming;
+        var result = await streaming.AsResultBoxAsync();
         Assert.True(result.IsSuccess, result.IsSuccess ? string.Empty : result.GetException().ToString());
         Assert.Equal(new[] { P2, P3 }, emitted);
         Assert.Equal(options.MaxConcurrentTaggedStreamPointReads, events.MaximumInFlightPointReads);
@@ -304,7 +305,7 @@ public sealed class RemoteTaggedStreamTests
         var (store, client) = NewCosmosStore(options);
         var tag = new NativeTag("cosmos-failed-head");
         var fixture = FivePointFixture(tag);
-        Assert.True((await store.WriteSerializableEventsAsync(fixture)).IsSuccess);
+        Assert.True((await store.WriteSerializableEventsAsync(fixture).AsResultBoxAsync()).IsSuccess);
         var events = client.Container(options.EventsContainerName);
         var tailStarted = NewSignal();
         var p3EventId = fixture.Single(@event => @event.SortableUniqueIdValue == P3).Id.ToString();
@@ -327,7 +328,7 @@ public sealed class RemoteTaggedStreamTests
             {
                 emitted.Add(@event.SortableUniqueIdValue);
                 return ValueTask.CompletedTask;
-            });
+            }).AsResultBoxAsync();
 
         Assert.False(result.IsSuccess);
         Assert.Equal("failed P2 head", result.GetException().Message);
@@ -349,7 +350,7 @@ public sealed class RemoteTaggedStreamTests
         };
         var (store, client) = NewCosmosStore(options);
         var tag = new NativeTag("cosmos-cancel");
-        Assert.True((await store.WriteSerializableEventsAsync(FivePointFixture(tag))).IsSuccess);
+        Assert.True((await store.WriteSerializableEventsAsync(FivePointFixture(tag)).AsResultBoxAsync()).IsSuccess);
         var events = client.Container(options.EventsContainerName);
         var readStarted = NewSignal();
         events.ReadItemGate = async cancellationToken =>
@@ -392,8 +393,8 @@ public sealed class RemoteTaggedStreamTests
         var (store, _) = NewCosmosStore(options);
         var tag = new NativeTag("cosmos-captured-head");
         var initial = FivePointFixture(tag).Where(@event => @event.SortableUniqueIdValue != P4).ToList();
-        Assert.True((await store.WriteSerializableEventsAsync(initial)).IsSuccess);
-        var capturedHead = await store.GetLatestSortableUniqueIdAsync();
+        Assert.True((await store.WriteSerializableEventsAsync(initial).AsResultBoxAsync()).IsSuccess);
+        var capturedHead = await store.GetLatestSortableUniqueIdAsync().AsResultBoxAsync();
         Assert.True(capturedHead.IsSuccess, capturedHead.IsSuccess ? string.Empty : capturedHead.GetException().ToString());
         Assert.Equal(P3, capturedHead.GetValue());
 
@@ -412,13 +413,13 @@ public sealed class RemoteTaggedStreamTests
                     firstCallback.TrySetResult();
                     await releaseCallback.Task;
                 }
-            });
+            }).AsResultBoxAsync();
 
         try
         {
             await firstCallback.Task.WaitAsync(TimeSpan.FromSeconds(10));
             var appendAboveHead = FivePointFixture(tag).Single(@event => @event.SortableUniqueIdValue == P4);
-            Assert.True((await store.WriteSerializableEventsAsync([appendAboveHead])).IsSuccess);
+            Assert.True((await store.WriteSerializableEventsAsync([appendAboveHead]).AsResultBoxAsync()).IsSuccess);
         }
         finally
         {
@@ -445,10 +446,10 @@ public sealed class RemoteTaggedStreamTests
         };
         var (store, client) = NewCosmosStore(options);
         var tag = new NativeTag("cosmos-telemetry");
-        Assert.True((await store.WriteSerializableEventsAsync([FixtureEvent(P2, tag, 2)])).IsSuccess);
+        Assert.True((await store.WriteSerializableEventsAsync([FixtureEvent(P2, tag, 2)]).AsResultBoxAsync()).IsSuccess);
         client.Container(options.EventsContainerName).ReadFaults.Enqueue(CosmosFailures.Throttled(TimeSpan.FromMilliseconds(1)));
 
-        var result = await store.StreamSerializableEventsByTagAsync(tag, null, null, _ => ValueTask.CompletedTask);
+        var result = await store.StreamSerializableEventsByTagAsync(tag, null, null, _ => ValueTask.CompletedTask).AsResultBoxAsync();
 
         Assert.False(result.IsSuccess);
         var observed = Assert.Single(telemetry);
@@ -477,7 +478,7 @@ public sealed class RemoteTaggedStreamTests
             new NativeTag("cosmos-invalid-window"),
             null,
             null,
-            _ => ValueTask.CompletedTask);
+            _ => ValueTask.CompletedTask).AsResultBoxAsync();
 
         Assert.False(result.IsSuccess);
         Assert.IsType<ArgumentOutOfRangeException>(result.GetException());
@@ -499,7 +500,7 @@ public sealed class RemoteTaggedStreamTests
             new NativeTag("cosmos-compatibility-page"),
             null,
             null,
-            _ => ValueTask.CompletedTask);
+            _ => ValueTask.CompletedTask).AsResultBoxAsync();
 
         Assert.True(result.IsSuccess, result.IsSuccess ? string.Empty : result.GetException().ToString());
         Assert.Equal(-1, options.MaxItemCountPerPage); // Existing list-reader compatibility behavior remains unchanged.
@@ -537,7 +538,7 @@ public sealed class RemoteTaggedStreamTests
                 emitted.Add(@event);
                 return ValueTask.CompletedTask;
             },
-            tokenSource.Token);
+            tokenSource.Token).AsResultBoxAsync();
 
         Assert.True(result.IsSuccess, result.IsSuccess ? string.Empty : result.GetException().ToString());
         Assert.Equal(new[] { P2, P3 }, emitted.Select(@event => @event.SortableUniqueIdValue));
@@ -592,7 +593,7 @@ public sealed class RemoteTaggedStreamTests
             {
                 emitted.Add(@event.SortableUniqueIdValue);
                 return ValueTask.CompletedTask;
-            });
+            }).AsResultBoxAsync();
 
         Assert.True(result.IsSuccess, result.IsSuccess ? string.Empty : result.GetException().ToString());
         Assert.Equal(new[] { P0, P1, P2, P3, P4 }, emitted);
@@ -669,7 +670,7 @@ public sealed class RemoteTaggedStreamTests
                     firstCallback.TrySetResult();
                     await releaseCallback.Task;
                 }
-            });
+            }).AsResultBoxAsync();
 
         try
         {
@@ -724,11 +725,11 @@ public sealed class RemoteTaggedStreamTests
         var tag = new RemoteParityTag($"dynamo-invalid-{invalidSize}");
         SeedDynamo(client, tag, ReadFixture(domain, tag, 1));
 
-        var typed = await store.ReadEventsByTagAsync(tag);
+        var typed = await store.ReadEventsByTagAsync(tag).AsResultBoxAsync();
         Assert.False(typed.IsSuccess);
         AssertInvalidBatchReadOption(typed.GetException(), invalidSize);
 
-        var serialized = await store.ReadSerializableEventsByTagAsync(tag);
+        var serialized = await store.ReadSerializableEventsByTagAsync(tag).AsResultBoxAsync();
         Assert.False(serialized.IsSuccess);
         AssertInvalidBatchReadOption(serialized.GetException(), invalidSize);
 
@@ -853,8 +854,8 @@ public sealed class RemoteTaggedStreamTests
         var store = NewDynamoStore(client, options, domain);
         var tag = new RemoteParityTag("dynamo-no-tag-rows");
 
-        var typed = await store.ReadEventsByTagAsync(tag);
-        var serialized = await store.ReadSerializableEventsByTagAsync(tag);
+        var typed = await store.ReadEventsByTagAsync(tag).AsResultBoxAsync();
+        var serialized = await store.ReadSerializableEventsByTagAsync(tag).AsResultBoxAsync();
 
         Assert.True(typed.IsSuccess, typed.IsSuccess ? string.Empty : typed.GetException().ToString());
         Assert.True(serialized.IsSuccess, serialized.IsSuccess ? string.Empty : serialized.GetException().ToString());
@@ -877,7 +878,7 @@ public sealed class RemoteTaggedStreamTests
             new RemoteParityTag($"dynamo-stream-invalid-{invalidSize}"),
             null,
             null,
-            _ => ValueTask.CompletedTask);
+            _ => ValueTask.CompletedTask).AsResultBoxAsync();
 
         Assert.False(result.IsSuccess);
         AssertInvalidBatchReadOption(result.GetException(), invalidSize);
@@ -907,7 +908,7 @@ public sealed class RemoteTaggedStreamTests
             {
                 emitted.Add(@event.SortableUniqueIdValue);
                 return ValueTask.CompletedTask;
-            });
+            }).AsResultBoxAsync();
 
         Assert.True(result.IsSuccess, result.IsSuccess ? string.Empty : result.GetException().ToString());
         Assert.Equal(events.Select(@event => @event.SortableUniqueIdValue), emitted);
@@ -940,7 +941,7 @@ public sealed class RemoteTaggedStreamTests
             {
                 emitted.Add(@event.SortableUniqueIdValue);
                 return ValueTask.CompletedTask;
-            });
+            }).AsResultBoxAsync();
 
         Assert.True(result.IsSuccess, result.IsSuccess ? string.Empty : result.GetException().ToString());
         Assert.Equal(events.Select(@event => @event.SortableUniqueIdValue), emitted);
@@ -971,7 +972,7 @@ public sealed class RemoteTaggedStreamTests
             {
                 emitted.Add(@event.SortableUniqueIdValue);
                 return ValueTask.CompletedTask;
-            });
+            }).AsResultBoxAsync();
 
         Assert.True(result.IsSuccess, result.IsSuccess ? string.Empty : result.GetException().ToString());
         Assert.Equal(events.Select(@event => @event.SortableUniqueIdValue), emitted);
@@ -995,7 +996,7 @@ public sealed class RemoteTaggedStreamTests
             tag,
             null,
             null,
-            _ => ValueTask.CompletedTask);
+            _ => ValueTask.CompletedTask).AsResultBoxAsync();
 
         Assert.False(result.IsSuccess);
         Assert.IsType<InvalidOperationException>(result.GetException());
@@ -1053,7 +1054,7 @@ public sealed class RemoteTaggedStreamTests
         var store = provider.GetRequiredService<DynamoDbEventStore>();
         resolvedOptions.MaxBatchGetItems = 10;
 
-        var result = await store.ReadSerializableEventsByTagAsync(tag);
+        var result = await store.ReadSerializableEventsByTagAsync(tag).AsResultBoxAsync();
 
         Assert.True(result.IsSuccess, result.IsSuccess ? string.Empty : result.GetException().ToString());
         Assert.Equal(events.Select(@event => @event.SortableUniqueIdValue),
@@ -1078,7 +1079,7 @@ public sealed class RemoteTaggedStreamTests
             },
             method!.GetParameters().Select(parameter => parameter.ParameterType));
         Assert.Equal(
-            typeof(Task<ResultBoxes.ResultBox<SerializableEventStreamReadResult>>),
+            typeof(Task<SerializableEventStreamReadResult>),
             method.ReturnType);
     }
 
@@ -1152,12 +1153,12 @@ public sealed class RemoteTaggedStreamTests
     {
         if (serialized)
         {
-            var result = await store.ReadSerializableEventsByTagAsync(tag);
+            var result = await store.ReadSerializableEventsByTagAsync(tag).AsResultBoxAsync();
             Assert.True(result.IsSuccess, result.IsSuccess ? string.Empty : result.GetException().ToString());
             return result.GetValue().Select(@event => @event.SortableUniqueIdValue).ToList();
         }
 
-        var typed = await store.ReadEventsByTagAsync(tag);
+        var typed = await store.ReadEventsByTagAsync(tag).AsResultBoxAsync();
         Assert.True(typed.IsSuccess, typed.IsSuccess ? string.Empty : typed.GetException().ToString());
         return typed.GetValue().Select(@event => @event.SortableUniqueIdValue).ToList();
     }
@@ -1464,21 +1465,21 @@ public sealed class RemoteTaggedStreamTests
         public int StreamCalls { get; protected set; }
         public int ListCalls { get; private set; }
 
-        public Task<ResultBox<IEnumerable<TagStream>>> ReadTagsAsync(ITag tag) => Inner.ReadTagsAsync(tag);
-        public Task<ResultBox<TagState>> GetLatestTagAsync(ITag tag) => Inner.GetLatestTagAsync(tag);
-        public Task<ResultBox<bool>> TagExistsAsync(ITag tag) => Inner.TagExistsAsync(tag);
-        public Task<ResultBox<long>> GetEventCountAsync(SortableUniqueId? since = null) => Inner.GetEventCountAsync(since);
-        public Task<ResultBox<IEnumerable<TagInfo>>> GetAllTagsAsync(string? tagGroup = null) => Inner.GetAllTagsAsync(tagGroup);
-        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null) =>
+        public Task<IEnumerable<TagStream>> ReadTagsAsync(ITag tag) => Inner.ReadTagsAsync(tag);
+        public Task<TagState> GetLatestTagAsync(ITag tag) => Inner.GetLatestTagAsync(tag);
+        public Task<bool> TagExistsAsync(ITag tag) => Inner.TagExistsAsync(tag);
+        public Task<long> GetEventCountAsync(SortableUniqueId? since = null) => Inner.GetEventCountAsync(since);
+        public Task<IEnumerable<TagInfo>> GetAllTagsAsync(string? tagGroup = null) => Inner.GetAllTagsAsync(tagGroup);
+        public Task<IEnumerable<SerializableEvent>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null) =>
             Inner.ReadAllSerializableEventsAsync(since);
-        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(SortableUniqueId? since, int? maxCount) =>
+        public Task<IEnumerable<SerializableEvent>> ReadAllSerializableEventsAsync(SortableUniqueId? since, int? maxCount) =>
             Inner.ReadAllSerializableEventsAsync(since, maxCount);
-        public Task<ResultBox<SerializableEvent>> ReadSerializableEventAsync(Guid eventId) => Inner.ReadSerializableEventAsync(eventId);
-        public Task<ResultBox<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>>
+        public Task<SerializableEvent?> ReadSerializableEventAsync(Guid eventId) => Inner.ReadSerializableEventAsync(eventId);
+        public Task<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>
             WriteSerializableEventsAsync(IEnumerable<SerializableEvent> events) => Inner.WriteSerializableEventsAsync(events);
-        public Task<ResultBox<string>> GetLatestSortableUniqueIdAsync() => Inner.GetLatestSortableUniqueIdAsync();
+        public Task<string> GetLatestSortableUniqueIdAsync() => Inner.GetLatestSortableUniqueIdAsync();
 
-        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadSerializableEventsByTagAsync(
+        public Task<IEnumerable<SerializableEvent>> ReadSerializableEventsByTagAsync(
             ITag tag,
             SortableUniqueId? since = null)
         {
@@ -1495,7 +1496,7 @@ public sealed class RemoteTaggedStreamTests
         public TaggedStreamCapabilityDescriptor DescribeTaggedStream() =>
             TaggedStreamCapabilityDescriptor.Native($"{providerName} parity wrapper");
 
-        public Task<ResultBox<SerializableEventStreamReadResult>> StreamSerializableEventsByTagAsync(
+        public Task<SerializableEventStreamReadResult> StreamSerializableEventsByTagAsync(
             ITag tag,
             SortableUniqueId? since,
             SortableUniqueId? until,

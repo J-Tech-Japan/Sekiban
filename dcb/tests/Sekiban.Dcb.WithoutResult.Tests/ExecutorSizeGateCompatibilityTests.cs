@@ -6,6 +6,7 @@ using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.SizeGates;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Testing;
+using Sekiban.Dcb.TestSupport;
 
 namespace Sekiban.Dcb.WithoutResult.Tests;
 
@@ -71,6 +72,6 @@ public sealed class ExecutorSizeGateCompatibilityTests
                     Date = new DateOnly(2026, 9, 9),
                     TemperatureC = 21
                 }));
-        Assert.Empty((await optInStore.ReadAllSerializableEventsAsync()).GetValue());
+        Assert.Empty((await optInStore.ReadAllSerializableEventsAsync().AsResultBoxAsync()).GetValue());
     }
 }

@@ -4,6 +4,7 @@ using Sekiban.Dcb.Events;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
 using Xunit;
+using Sekiban.Dcb.TestSupport;
 namespace Sekiban.Dcb.Postgres.Tests;
 
 /// <summary>
@@ -39,9 +40,9 @@ public class PostgresExclusiveAfterPositionTests : PostgresTestBase
     [Fact]
     public async Task ReadAllEventsAsync_AfterPosition_ExcludesTheEventAtThePosition()
     {
-        await Fixture.EventStore.WriteEventsAsync(new[] { Ev(P1), Ev(P2), Ev(P3) });
+        await Fixture.EventStore.WriteEventsAsync(new[] { Ev(P1), Ev(P2), Ev(P3) }).AsResultBoxAsync();
 
-        var read = (await Fixture.EventStore.ReadAllEventsAsync(new SortableUniqueId(P2))).GetValue().ToList();
+        var read = (await Fixture.EventStore.ReadAllEventsAsync(new SortableUniqueId(P2)).AsResultBoxAsync()).GetValue().ToList();
 
         Assert.Single(read);                                  // P1 (< P2) and P2 (== P2) excluded
         Assert.Equal(P3, read[0].SortableUniqueIdValue);      // only the strictly-later event
@@ -50,9 +51,9 @@ public class PostgresExclusiveAfterPositionTests : PostgresTestBase
     [Fact]
     public async Task ReadAllSerializableEventsAsync_AfterPosition_ExcludesTheEventAtThePosition()
     {
-        await Fixture.EventStore.WriteEventsAsync(new[] { Ev(P1), Ev(P2), Ev(P3) });
+        await Fixture.EventStore.WriteEventsAsync(new[] { Ev(P1), Ev(P2), Ev(P3) }).AsResultBoxAsync();
 
-        var read = (await Fixture.EventStore.ReadAllSerializableEventsAsync(new SortableUniqueId(P2))).GetValue().ToList();
+        var read = (await Fixture.EventStore.ReadAllSerializableEventsAsync(new SortableUniqueId(P2)).AsResultBoxAsync()).GetValue().ToList();
 
         Assert.Single(read);
         Assert.Equal(P3, read[0].SortableUniqueIdValue);

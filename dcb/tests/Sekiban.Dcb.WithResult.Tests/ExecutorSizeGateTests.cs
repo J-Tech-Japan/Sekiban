@@ -46,7 +46,7 @@ public sealed class ExecutorSizeGateTests
         Assert.Equal("logical-event", exception.Scope);
         Assert.Equal(ExecutorSizeRepresentation.LogicalSerializedEventUtf8, exception.Representation);
         Assert.True(exception.MeasuredBytes > exception.LimitBytes);
-        Assert.Empty((await store.ReadAllSerializableEventsAsync()).GetValue());
+        Assert.Empty((await store.ReadAllSerializableEventsAsync().AsResultBoxAsync()).GetValue());
     }
 
     [Fact]
@@ -67,7 +67,7 @@ public sealed class ExecutorSizeGateTests
             SingleSerializedRequest(domain, Guid.NewGuid()));
 
         Assert.True(equalResult.IsSuccess);
-        Assert.Single((await equalStore.ReadAllSerializableEventsAsync()).GetValue());
+        Assert.Single((await equalStore.ReadAllSerializableEventsAsync().AsResultBoxAsync()).GetValue());
 
         var aboveStore = new CoreInMemoryEventStore(domain.EventTypes);
         var aboveExecutor = CreateExecutor(
@@ -85,7 +85,7 @@ public sealed class ExecutorSizeGateTests
         var exception = Assert.IsType<ExecutorSizeLimitExceededException>(aboveResult.GetException());
         Assert.Equal(42, exception.MeasuredBytes);
         Assert.Equal(41, exception.LimitBytes);
-        Assert.Empty((await aboveStore.ReadAllSerializableEventsAsync()).GetValue());
+        Assert.Empty((await aboveStore.ReadAllSerializableEventsAsync().AsResultBoxAsync()).GetValue());
     }
 
     [Fact]
@@ -106,7 +106,7 @@ public sealed class ExecutorSizeGateTests
             SingleSerializedRequest(domain, Guid.NewGuid()));
 
         Assert.True(storageResult.IsSuccess);
-        Assert.Single((await storageStore.ReadAllSerializableEventsAsync()).GetValue());
+        Assert.Single((await storageStore.ReadAllSerializableEventsAsync().AsResultBoxAsync()).GetValue());
 
         var destinationStore = new CoreInMemoryEventStore(domain.EventTypes);
         var publisher = new RecordingDestinationPublisher();
@@ -132,7 +132,7 @@ public sealed class ExecutorSizeGateTests
         var destinationException = Assert.IsType<ExecutorSizeLimitExceededException>(destinationResult.GetException());
         Assert.Equal(11, destinationException.MeasuredBytes);
         Assert.Equal("destination-2", destinationException.DestinationKey);
-        Assert.Empty((await destinationStore.ReadAllSerializableEventsAsync()).GetValue());
+        Assert.Empty((await destinationStore.ReadAllSerializableEventsAsync().AsResultBoxAsync()).GetValue());
         Assert.Equal(0, publisher.PlannedPublishCalls);
     }
 
@@ -161,7 +161,7 @@ public sealed class ExecutorSizeGateTests
         });
 
         Assert.True(result.IsSuccess);
-        Assert.Single((await store.ReadAllSerializableEventsAsync()).GetValue());
+        Assert.Single((await store.ReadAllSerializableEventsAsync().AsResultBoxAsync()).GetValue());
         Assert.Equal(1, publisher.PlannedPublishCalls);
     }
 
@@ -196,7 +196,7 @@ public sealed class ExecutorSizeGateTests
         Assert.False(exception.IsOperationLimit);
         Assert.Equal(1, exception.EventIndex);
         Assert.Equal(last.Payload.Length, exception.MeasuredBytes);
-        Assert.Empty((await store.ReadAllSerializableEventsAsync()).GetValue());
+        Assert.Empty((await store.ReadAllSerializableEventsAsync().AsResultBoxAsync()).GetValue());
         Assert.Equal(0, publisher.PlannedPublishCalls);
     }
 
@@ -244,7 +244,7 @@ public sealed class ExecutorSizeGateTests
             Summary = "fixed"
         });
         Assert.True(acceptedResult.IsSuccess);
-        Assert.Single((await acceptedStore.ReadAllSerializableEventsAsync()).GetValue());
+        Assert.Single((await acceptedStore.ReadAllSerializableEventsAsync().AsResultBoxAsync()).GetValue());
 
         var richStore = new CoreInMemoryEventStore(domain.EventTypes);
         var richExecutor = CreateExecutor(
@@ -266,8 +266,8 @@ public sealed class ExecutorSizeGateTests
 
         var richException = Assert.IsType<ExecutorSizeLimitExceededException>(richResult.GetException());
         Assert.True(richException.MeasuredBytes > minimalException.MeasuredBytes);
-        Assert.Empty((await minimalStore.ReadAllSerializableEventsAsync()).GetValue());
-        Assert.Empty((await richStore.ReadAllSerializableEventsAsync()).GetValue());
+        Assert.Empty((await minimalStore.ReadAllSerializableEventsAsync().AsResultBoxAsync()).GetValue());
+        Assert.Empty((await richStore.ReadAllSerializableEventsAsync().AsResultBoxAsync()).GetValue());
     }
 
     [Fact]
@@ -296,7 +296,7 @@ public sealed class ExecutorSizeGateTests
         var actorResult = await accessor.GetActorAsync<GeneralTagConsistentActor>(tag);
         Assert.True(actorResult.IsSuccess);
         Assert.Empty(await actorResult.GetValue().GetActiveReservationsAsync());
-        Assert.Empty((await store.ReadAllSerializableEventsAsync()).GetValue());
+        Assert.Empty((await store.ReadAllSerializableEventsAsync().AsResultBoxAsync()).GetValue());
     }
 
     [Fact]
@@ -322,7 +322,7 @@ public sealed class ExecutorSizeGateTests
         var exception = Assert.IsType<ExecutorSizeLimitExceededException>(result.GetException());
         Assert.True(exception.IsOperationLimit);
         Assert.Equal(0, exception.EventIndex);
-        Assert.Empty((await store.ReadAllSerializableEventsAsync()).GetValue());
+        Assert.Empty((await store.ReadAllSerializableEventsAsync().AsResultBoxAsync()).GetValue());
     }
 
     [Fact]
@@ -344,7 +344,7 @@ public sealed class ExecutorSizeGateTests
 
         var storageException = Assert.IsType<ExecutorSizeCapabilityException>(storageResult.GetException());
         Assert.Equal(ExecutorSizeRepresentation.StorageItem, storageException.Representation);
-        Assert.Empty((await storageStore.ReadAllSerializableEventsAsync()).GetValue());
+        Assert.Empty((await storageStore.ReadAllSerializableEventsAsync().AsResultBoxAsync()).GetValue());
 
         var destinationStore = new CoreInMemoryEventStore(domain.EventTypes);
         var destinationExecutor = CreateExecutor(
@@ -365,7 +365,7 @@ public sealed class ExecutorSizeGateTests
 
         var destinationException = Assert.IsType<ExecutorSizeCapabilityException>(destinationResult.GetException());
         Assert.Equal(ExecutorSizeRepresentation.Destination, destinationException.Representation);
-        Assert.Empty((await destinationStore.ReadAllSerializableEventsAsync()).GetValue());
+        Assert.Empty((await destinationStore.ReadAllSerializableEventsAsync().AsResultBoxAsync()).GetValue());
     }
 
     [Fact]
@@ -389,7 +389,7 @@ public sealed class ExecutorSizeGateTests
         Assert.True(result.IsSuccess);
         Assert.Single(result.GetValue().SizeGateDiagnostics);
         Assert.Equal("provider-row", result.GetValue().SizeGateDiagnostics[0].Scope);
-        Assert.Single((await store.ReadAllSerializableEventsAsync()).GetValue());
+        Assert.Single((await store.ReadAllSerializableEventsAsync().AsResultBoxAsync()).GetValue());
     }
 
     [Fact]
@@ -523,7 +523,7 @@ public sealed class ExecutorSizeGateTests
         });
 
         Assert.IsType<ExecutorSizeCapabilityException>(strictResult.GetException());
-        Assert.Empty((await strictStore.ReadAllSerializableEventsAsync()).GetValue());
+        Assert.Empty((await strictStore.ReadAllSerializableEventsAsync().AsResultBoxAsync()).GetValue());
 
         var nonStrictStore = new CoreInMemoryEventStore(domain.EventTypes);
         var nonStrictPublisher = new RecordingDestinationPublisher
@@ -554,7 +554,7 @@ public sealed class ExecutorSizeGateTests
         Assert.True(nonStrictExecution.Metadata!.TryGetValue("SizeGateDiagnostics", out var diagnostics));
         var diagnosticList = Assert.IsAssignableFrom<IReadOnlyList<ExecutorSizeDiagnostic>>(diagnostics!);
         Assert.Contains(diagnosticList, diagnostic => diagnostic.Scope == "destination");
-        Assert.Single((await nonStrictStore.ReadAllSerializableEventsAsync()).GetValue());
+        Assert.Single((await nonStrictStore.ReadAllSerializableEventsAsync().AsResultBoxAsync()).GetValue());
         Assert.Equal(0, nonStrictPublisher.PlannedPublishCalls);
         Assert.Equal(1, nonStrictPublisher.LegacyPublishCalls);
     }
@@ -787,48 +787,48 @@ public sealed class ExecutorSizeGateTests
                 WriteConditionKind.SingleEventUniqueKey,
                 WriteConditionKind.ExpectedTagPosition);
 
-        public Task<ResultBox<IEnumerable<TagStream>>> ReadTagsAsync(ITag tag) =>
-            Task.FromResult(ResultBox.FromValue<IEnumerable<TagStream>>([]));
+        public Task<IEnumerable<TagStream>> ReadTagsAsync(ITag tag) =>
+            Task.FromResult<IEnumerable<TagStream>>([]);
 
-        public Task<ResultBox<TagState>> GetLatestTagAsync(ITag tag) =>
-            Task.FromResult(ResultBox.Error<TagState>(new NotSupportedException()));
+        public Task<TagState> GetLatestTagAsync(ITag tag) =>
+            Task.FromException<TagState>(new NotSupportedException());
 
-        public Task<ResultBox<bool>> TagExistsAsync(ITag tag) =>
-            Task.FromResult(ResultBox.FromValue(false));
+        public Task<bool> TagExistsAsync(ITag tag) =>
+            Task.FromResult(false);
 
-        public Task<ResultBox<long>> GetEventCountAsync(SortableUniqueId? since = null) =>
-            Task.FromResult(ResultBox.FromValue(0L));
+        public Task<long> GetEventCountAsync(SortableUniqueId? since = null) =>
+            Task.FromResult(0L);
 
-        public Task<ResultBox<IEnumerable<TagInfo>>> GetAllTagsAsync(string? tagGroup = null) =>
-            Task.FromResult(ResultBox.FromValue<IEnumerable<TagInfo>>([]));
+        public Task<IEnumerable<TagInfo>> GetAllTagsAsync(string? tagGroup = null) =>
+            Task.FromResult<IEnumerable<TagInfo>>([]);
 
-        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(
+        public Task<IEnumerable<SerializableEvent>> ReadAllSerializableEventsAsync(
             SortableUniqueId? since = null) =>
-            Task.FromResult(ResultBox.FromValue<IEnumerable<SerializableEvent>>([]));
+            Task.FromResult<IEnumerable<SerializableEvent>>([]);
 
-        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(
+        public Task<IEnumerable<SerializableEvent>> ReadAllSerializableEventsAsync(
             SortableUniqueId? since,
             int? maxCount) =>
-            Task.FromResult(ResultBox.FromValue<IEnumerable<SerializableEvent>>([]));
+            Task.FromResult<IEnumerable<SerializableEvent>>([]);
 
-        public Task<ResultBox<SerializableEvent>> ReadSerializableEventAsync(Guid eventId) =>
-            Task.FromResult(ResultBox.Error<SerializableEvent>(new NotSupportedException()));
+        public Task<SerializableEvent?> ReadSerializableEventAsync(Guid eventId) =>
+            Task.FromException<SerializableEvent?>(new NotSupportedException());
 
-        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadSerializableEventsByTagAsync(
+        public Task<IEnumerable<SerializableEvent>> ReadSerializableEventsByTagAsync(
             ITag tag,
             SortableUniqueId? since = null) =>
-            Task.FromResult(ResultBox.FromValue<IEnumerable<SerializableEvent>>([]));
+            Task.FromResult<IEnumerable<SerializableEvent>>([]);
 
-        public Task<ResultBox<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>>
+        public Task<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>
             WriteSerializableEventsAsync(IEnumerable<SerializableEvent> events)
         {
             throw new InvalidOperationException("The size gate must run before the ordinary provider write.");
         }
 
-        public Task<ResultBox<string>> GetLatestSortableUniqueIdAsync() =>
-            Task.FromResult(ResultBox.FromValue(string.Empty));
+        public Task<string> GetLatestSortableUniqueIdAsync() =>
+            Task.FromResult(string.Empty);
 
-        public Task<ResultBox<ConditionalAppendReceipt>> AppendIfUniqueAsync(
+        public Task<ConditionalAppendReceipt> AppendIfUniqueAsync(
             ConditionalAppendRequest request,
             CancellationToken cancellationToken = default)
         {
@@ -836,11 +836,11 @@ public sealed class ExecutorSizeGateTests
             throw new InvalidOperationException("The size gate must run before conditional append.");
         }
 
-        public Task<ResultBox<bool>> EnsureExpectedTagPositionEnforcementEnabledAsync(
+        public Task<bool> EnsureExpectedTagPositionEnforcementEnabledAsync(
             CancellationToken cancellationToken = default) =>
-            Task.FromResult(ResultBox.FromValue(true));
+            Task.FromResult(true);
 
-        public Task<ResultBox<ExpectedTagPositionWriteResult>> WriteSerializableEventsWithExpectedTagPositionsAsync(
+        public Task<ExpectedTagPositionWriteResult> WriteSerializableEventsWithExpectedTagPositionsAsync(
             IReadOnlyList<SerializableEvent> events,
             ExpectedTagPositionSpecification specification,
             CancellationToken cancellationToken = default)

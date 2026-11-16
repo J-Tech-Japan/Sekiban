@@ -6,6 +6,7 @@ using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
 using CoreInMemoryEventStore = Sekiban.Dcb.Testing.InMemoryEventStore;
+using Sekiban.Dcb.TestSupport;
 namespace Sekiban.Dcb.Tests;
 
 /// <summary>
@@ -32,10 +33,10 @@ public class GeneralTagConsistentActorTests
 
         // Write some events to create tag state
         var event1 = EventTestHelper.CreateEvent(new StudentCreated(studentId, "John Doe"), studentTag);
-        await _eventStore.WriteEventAsync(event1, _domainTypes.EventTypes);
+        await _eventStore.WriteEventAsync(event1, _domainTypes.EventTypes).AsResultBoxAsync();
 
         var event2 = EventTestHelper.CreateEvent(new StudentEnrolledInClassRoom(studentId, Guid.NewGuid()), studentTag);
-        await _eventStore.WriteEventAsync(event2, _domainTypes.EventTypes);
+        await _eventStore.WriteEventAsync(event2, _domainTypes.EventTypes).AsResultBoxAsync();
 
         // Create actor (it should catch up lazily)
         var actor = new GeneralTagConsistentActor(tagName, _eventStore, new TagConsistentActorOptions(), _domainTypes.TagTypes);
@@ -111,7 +112,7 @@ public class GeneralTagConsistentActorTests
         var studentId = Guid.NewGuid();
         var tag = new StudentTag(studentId);
         var committed = EventTestHelper.CreateEvent(new StudentCreated(studentId, "existing"), tag);
-        await _eventStore.WriteEventAsync(committed, _domainTypes.EventTypes);
+        await _eventStore.WriteEventAsync(committed, _domainTypes.EventTypes).AsResultBoxAsync();
         var actor = new GeneralTagConsistentActor(
             tag.GetTag(),
             _eventStore,
@@ -141,7 +142,7 @@ public class GeneralTagConsistentActorTests
 
         // Write initial event
         var event1 = EventTestHelper.CreateEvent(new StudentCreated(studentId, "John Doe"), studentTag);
-        await _eventStore.WriteEventAsync(event1, _domainTypes.EventTypes);
+        await _eventStore.WriteEventAsync(event1, _domainTypes.EventTypes).AsResultBoxAsync();
 
         // Create actor and trigger catch-up
         var actor = new GeneralTagConsistentActor(tagName, _eventStore, new TagConsistentActorOptions(), _domainTypes.TagTypes);
@@ -149,7 +150,7 @@ public class GeneralTagConsistentActorTests
 
         // Write another event after actor creation
         var event2 = EventTestHelper.CreateEvent(new StudentEnrolledInClassRoom(studentId, Guid.NewGuid()), studentTag);
-        await _eventStore.WriteEventAsync(event2, _domainTypes.EventTypes);
+        await _eventStore.WriteEventAsync(event2, _domainTypes.EventTypes).AsResultBoxAsync();
 
         // Act - Get latest ID again (should not catch up again)
         var secondIdResult = await actor.GetLatestSortableUniqueIdAsync();
@@ -171,7 +172,7 @@ public class GeneralTagConsistentActorTests
 
         // Write event
         var event1 = EventTestHelper.CreateEvent(new StudentCreated(studentId, "John Doe"), studentTag);
-        await _eventStore.WriteEventAsync(event1, _domainTypes.EventTypes);
+        await _eventStore.WriteEventAsync(event1, _domainTypes.EventTypes).AsResultBoxAsync();
 
         // Create actor - it will catch up from event store
         var actor = new GeneralTagConsistentActor(tagName, _eventStore, new TagConsistentActorOptions(), _domainTypes.TagTypes);
@@ -194,7 +195,7 @@ public class GeneralTagConsistentActorTests
 
         // Write event
         var event1 = EventTestHelper.CreateEvent(new StudentCreated(studentId, "John Doe"), studentTag);
-        await _eventStore.WriteEventAsync(event1, _domainTypes.EventTypes);
+        await _eventStore.WriteEventAsync(event1, _domainTypes.EventTypes).AsResultBoxAsync();
 
         // Test each method triggers catch-up
 

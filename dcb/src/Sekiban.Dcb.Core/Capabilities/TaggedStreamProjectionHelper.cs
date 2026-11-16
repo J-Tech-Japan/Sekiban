@@ -89,7 +89,7 @@ internal static class TaggedStreamProjectionHelper
                 previousId = serializableEvent.SortableUniqueIdValue;
                 return ValueTask.CompletedTask;
             },
-            cancellationToken);
+            cancellationToken).ToResultBoxPropagatingCancellationAsync();
 
         cancellationToken.ThrowIfCancellationRequested();
         if (!streamResult.IsSuccess)

@@ -6,6 +6,7 @@ using Sekiban.Dcb.Postgres.DbModels;
 using Sekiban.Dcb.ServiceId;
 using Sekiban.Dcb.Storage;
 using Xunit;
+using Sekiban.Dcb.TestSupport;
 
 namespace Sekiban.Dcb.Postgres.Tests;
 
@@ -16,7 +17,7 @@ public sealed class PostgresAppendSavepointTests(PostgresTestFixture fixture) : 
     {
         var baselineCounter = new SavepointCounter();
         var baselineStore = Store(baselineCounter);
-        var baseline = await baselineStore.WriteSerializableEventsAsync([EventAt("0100", "Order:baseline")]);
+        var baseline = await baselineStore.WriteSerializableEventsAsync([EventAt("0100", "Order:baseline")]).AsResultBoxAsync();
         Assert.True(baseline.IsSuccess, baseline.IsSuccess ? "" : baseline.GetException().ToString());
         Assert.True(baselineCounter.Count > 0, "The ordinary append must prove the interceptor observes savepoints.");
 
@@ -36,7 +37,7 @@ public sealed class PostgresAppendSavepointTests(PostgresTestFixture fixture) : 
             new TagHeadExpectationEntry(DefaultServiceIdProvider.DefaultServiceId, tag, TagHeadExpectation.AssertEmpty()))
             .ToArray());
         var expected = await Store(expectedCounter).WriteSerializableEventsWithExpectedTagPositionsAsync(
-            [EventAt("0200", tags)], specification);
+            [EventAt("0200", tags)], specification).AsResultBoxAsync();
         Assert.True(expected.IsSuccess, expected.IsSuccess ? "" : expected.GetException().ToString());
         Assert.Equal(0, expectedCounter.Count);
     }

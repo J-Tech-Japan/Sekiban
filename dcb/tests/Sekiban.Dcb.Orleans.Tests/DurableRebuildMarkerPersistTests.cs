@@ -23,6 +23,7 @@ using Sekiban.Dcb.Storage.Checkpoints;
 using Sekiban.Dcb.Tags;
 using Sekiban.Dcb.Testing;
 using Xunit;
+using Sekiban.Dcb.TestSupport;
 namespace Sekiban.Dcb.Orleans.Tests;
 
 /// <summary>SEK-G95: marker clearing, stuck-marker repair, and the failed-reset live-host guard.</summary>
@@ -77,7 +78,7 @@ public class DurableRebuildMarkerPersistTests : IAsyncLifetime
         await MultiProjectionGrainWatermarkRetirementTests.ReplaceCheckpointCountAsync(Env.StateStore, active.Record!, 10_000);
         var events = Enumerable.Range(0, 8)
             .Select(i => ToSerializable(CreateEvent(new Counted($"tail{i}"), t0.AddSeconds(-29 + i)))).ToArray();
-        await Env.EventStore.WriteSerializableEventsAsync(events);
+        await Env.EventStore.WriteSerializableEventsAsync(events).AsResultBoxAsync();
         if (route == "operator")
         {
             await AddEarlierAsync(grain, t0);
@@ -442,7 +443,7 @@ public class DurableRebuildMarkerPersistTests : IAsyncLifetime
         MarkerGrainStorage.RetainMarkerOnCheckpointWrites = marker;
         var events = Enumerable.Range(0, 8)
             .Select(i => ToSerializable(CreateEvent(new Counted($"e{i}"), t0.AddSeconds(-60 + i)))).ToArray();
-        await Env.EventStore.WriteSerializableEventsAsync(events);
+        await Env.EventStore.WriteSerializableEventsAsync(events).AsResultBoxAsync();
         var grain = Client.GetGrain<IMultiProjectionGrain>(CountProjector.MultiProjectorName);
         await AssertCountAndIdleAsync(grain, 8);
         Assert.True((await grain.PersistStateAsync()).IsSuccess);
@@ -524,7 +525,7 @@ public class DurableRebuildMarkerPersistTests : IAsyncLifetime
             await Env.EventStore.WriteSerializableEventsAsync(new[]
             {
                 ToSerializable(CreateEvent(new Counted("earlier"), t0.AddSeconds(-31)))
-            });
+            }).AsResultBoxAsync();
         }
         else
         {
@@ -576,7 +577,7 @@ public class DurableRebuildMarkerPersistTests : IAsyncLifetime
     {
         var grain = Client.GetGrain<IMultiProjectionGrain>(CountProjector.MultiProjectorName);
         var later = ToSerializable(CreateEvent(new Counted("later"), t0.AddSeconds(-30)));
-        await Env.EventStore.WriteSerializableEventsAsync(new[] { later });
+        await Env.EventStore.WriteSerializableEventsAsync(new[] { later }).AsResultBoxAsync();
         // Activation/query can start catch-up. Refresh is a no-op until that catch-up finishes.
         await AssertCountAndIdleAsync(grain, 1);
         await grain.RefreshAsync();
@@ -589,7 +590,7 @@ public class DurableRebuildMarkerPersistTests : IAsyncLifetime
     {
         await WaitForIdleAsync(grain);
         var earlier = ToSerializable(CreateEvent(new Counted("earlier"), t0.AddSeconds(-31)));
-        await Env.EventStore.WriteSerializableEventsAsync(new[] { earlier });
+        await Env.EventStore.WriteSerializableEventsAsync(new[] { earlier }).AsResultBoxAsync();
         await grain.AddEventsAsync(new[] { earlier });
     }
 
@@ -647,7 +648,7 @@ public class DurableRebuildMarkerPersistTests : IAsyncLifetime
     }
 
     private static async Task<CheckpointSlot> SlotAsync() =>
-        (await Env.StateStore.ReadCheckpointSlotAsync(CountProjector.MultiProjectorName, "1.0.0")).GetValue();
+        (await Env.StateStore.ReadCheckpointSlotAsync(CountProjector.MultiProjectorName, "1.0.0").AsResultBoxAsync()).GetValue();
 
     private static Event CreateEvent(IEventPayload payload, DateTime timestamp) => new(
         payload, SortableUniqueId.Generate(timestamp, Guid.NewGuid()), payload.GetType().Name,
@@ -781,9 +782,9 @@ public class DurableRebuildMarkerPersistTests : IAsyncLifetime
             _pause = pause;
             return pause;
         }
-        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null) =>
+        public Task<IEnumerable<SerializableEvent>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null) =>
             ReadAllSerializableEventsAsync(since, null);
-        public async Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(SortableUniqueId? since, int? maxCount)
+        public async Task<IEnumerable<SerializableEvent>> ReadAllSerializableEventsAsync(SortableUniqueId? since, int? maxCount)
         {
             if (since is null)
             {
@@ -797,20 +798,18 @@ public class DurableRebuildMarkerPersistTests : IAsyncLifetime
             }
             // In-memory storage returns insertion order; full G18 replay must read event position order.
             var result = await inner.ReadAllSerializableEventsAsync(since, null);
-            if (!result.IsSuccess) return result;
-            var sorted = result.GetValue().OrderBy(e => e.SortableUniqueIdValue, StringComparer.Ordinal);
-            return ResultBox.FromValue<IEnumerable<SerializableEvent>>(
-                (maxCount is { } count ? sorted.Take(count) : sorted).ToArray());
+            var sorted = result.OrderBy(e => e.SortableUniqueIdValue, StringComparer.Ordinal);
+            return (maxCount is { } count ? sorted.Take(count) : sorted).ToArray();
         }
-        public Task<ResultBox<IEnumerable<TagStream>>> ReadTagsAsync(ITag tag) => inner.ReadTagsAsync(tag);
-        public Task<ResultBox<TagState>> GetLatestTagAsync(ITag tag) => inner.GetLatestTagAsync(tag);
-        public Task<ResultBox<bool>> TagExistsAsync(ITag tag) => inner.TagExistsAsync(tag);
-        public Task<ResultBox<long>> GetEventCountAsync(SortableUniqueId? since = null) => inner.GetEventCountAsync(since);
-        public Task<ResultBox<IEnumerable<TagInfo>>> GetAllTagsAsync(string? tagGroup = null) => inner.GetAllTagsAsync(tagGroup);
-        public Task<ResultBox<SerializableEvent>> ReadSerializableEventAsync(Guid id) => inner.ReadSerializableEventAsync(id);
-        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadSerializableEventsByTagAsync(ITag tag, SortableUniqueId? since = null) => inner.ReadSerializableEventsByTagAsync(tag, since);
-        public Task<ResultBox<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>> WriteSerializableEventsAsync(IEnumerable<SerializableEvent> events) => inner.WriteSerializableEventsAsync(events);
-        public Task<ResultBox<string>> GetLatestSortableUniqueIdAsync() => inner.GetLatestSortableUniqueIdAsync();
+        public Task<IEnumerable<TagStream>> ReadTagsAsync(ITag tag) => inner.ReadTagsAsync(tag);
+        public Task<TagState> GetLatestTagAsync(ITag tag) => inner.GetLatestTagAsync(tag);
+        public Task<bool> TagExistsAsync(ITag tag) => inner.TagExistsAsync(tag);
+        public Task<long> GetEventCountAsync(SortableUniqueId? since = null) => inner.GetEventCountAsync(since);
+        public Task<IEnumerable<TagInfo>> GetAllTagsAsync(string? tagGroup = null) => inner.GetAllTagsAsync(tagGroup);
+        public Task<SerializableEvent?> ReadSerializableEventAsync(Guid id) => inner.ReadSerializableEventAsync(id);
+        public Task<IEnumerable<SerializableEvent>> ReadSerializableEventsByTagAsync(ITag tag, SortableUniqueId? since = null) => inner.ReadSerializableEventsByTagAsync(tag, since);
+        public Task<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)> WriteSerializableEventsAsync(IEnumerable<SerializableEvent> events) => inner.WriteSerializableEventsAsync(events);
+        public Task<string> GetLatestSortableUniqueIdAsync() => inner.GetLatestSortableUniqueIdAsync();
     }
 
     internal sealed class CountingStateStore : IMultiProjectionStateStore, IGenerationAwareCheckpointStore
@@ -841,9 +840,9 @@ public class DurableRebuildMarkerPersistTests : IAsyncLifetime
             Interlocked.Exchange(ref _nextSave, gate);
             return gate;
         }
-        public async Task<ResultBox<OptionalValue<MultiProjectionStateRecord>>> GetLatestForVersionAsync(string p, string v, CancellationToken ct = default)
+        public async Task<MultiProjectionStateRecord?> GetLatestForVersionAsync(string p, string v, CancellationToken ct = default)
         {
-            if (AheadRecord is { } ahead) return ResultBox.FromValue(OptionalValue<MultiProjectionStateRecord>.FromValue(ahead));
+            if (AheadRecord is { } ahead) return ahead;
             var gate = Interlocked.Exchange(ref _nextSave, null);
             if (gate is not null)
             {
@@ -860,20 +859,19 @@ public class DurableRebuildMarkerPersistTests : IAsyncLifetime
                 return captured;
             }
             if (RejectOtherSaves)
-                return ResultBox.Error<OptionalValue<MultiProjectionStateRecord>>(
-                    new InvalidOperationException("injected: prevent subsequent marker repair"));
+                throw new InvalidOperationException("injected: prevent subsequent marker repair");
             return await _inner.GetLatestForVersionAsync(p, v, ct);
         }
-        public Task<ResultBox<OptionalValue<MultiProjectionStateRecord>>> GetLatestAnyVersionAsync(string p, CancellationToken ct = default) => _inner.GetLatestAnyVersionAsync(p, ct);
-        public Task<ResultBox<bool>> UpsertAsync(MultiProjectionStateRecord r, int off = 1_000_000, CancellationToken ct = default) { Interlocked.Increment(ref _writeCount); return _inner.UpsertAsync(r, off, ct); }
-        public Task<ResultBox<IReadOnlyList<ProjectorStateInfo>>> ListAllAsync(CancellationToken ct = default) => _inner.ListAllAsync(ct);
-        public Task<ResultBox<bool>> DeleteAsync(string p, string v, CancellationToken ct = default) => _inner.DeleteAsync(p, v, ct);
-        public Task<ResultBox<int>> DeleteAllAsync(string? p = null, CancellationToken ct = default) => _inner.DeleteAllAsync(p, ct);
-        public Task<ResultBox<Stream>> OpenStateDataReadStreamAsync(MultiProjectionStateRecord r, CancellationToken ct = default) => _inner.OpenStateDataReadStreamAsync(r, ct);
-        public Task<ResultBox<bool>> UpsertFromStreamAsync(MultiProjectionStateWriteRequest req, Stream s, int off, CancellationToken ct = default) { Interlocked.Increment(ref _writeCount); return _inner.UpsertFromStreamAsync(req, s, off, ct); }
+        public Task<MultiProjectionStateRecord?> GetLatestAnyVersionAsync(string p, CancellationToken ct = default) => _inner.GetLatestAnyVersionAsync(p, ct);
+        public Task<bool> UpsertAsync(MultiProjectionStateRecord r, int off = 1_000_000, CancellationToken ct = default) { Interlocked.Increment(ref _writeCount); return _inner.UpsertAsync(r, off, ct); }
+        public Task<IReadOnlyList<ProjectorStateInfo>> ListAllAsync(CancellationToken ct = default) => _inner.ListAllAsync(ct);
+        public Task<bool> DeleteAsync(string p, string v, CancellationToken ct = default) => _inner.DeleteAsync(p, v, ct);
+        public Task<int> DeleteAllAsync(string? p = null, CancellationToken ct = default) => _inner.DeleteAllAsync(p, ct);
+        public Task<Stream> OpenStateDataReadStreamAsync(MultiProjectionStateRecord r, CancellationToken ct = default) => _inner.OpenStateDataReadStreamAsync(r, ct);
+        public Task<bool> UpsertFromStreamAsync(MultiProjectionStateWriteRequest req, Stream s, int off, CancellationToken ct = default) { Interlocked.Increment(ref _writeCount); return _inner.UpsertFromStreamAsync(req, s, off, ct); }
 
         public CheckpointStoreCapabilityDescriptor DescribeCheckpointCapability() => _inner.DescribeCheckpointCapability();
-        public Task<ResultBox<CheckpointSlot>> ReadCheckpointSlotAsync(string p, string v, CancellationToken ct = default)
+        public Task<CheckpointSlot> ReadCheckpointSlotAsync(string p, string v, CancellationToken ct = default)
         {
             Interlocked.Increment(ref SlotReads);
             return _inner.ReadCheckpointSlotAsync(p, v, ct);

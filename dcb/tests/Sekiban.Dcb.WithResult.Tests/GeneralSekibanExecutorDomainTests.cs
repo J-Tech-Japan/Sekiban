@@ -11,6 +11,7 @@ using Sekiban.Dcb.Testing;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
 using CoreInMemoryEventStore = Sekiban.Dcb.Testing.InMemoryEventStore;
+using Sekiban.Dcb.TestSupport;
 namespace Sekiban.Dcb.Tests;
 
 /// <summary>
@@ -59,11 +60,11 @@ public class GeneralSekibanExecutorDomainTests
 
         // Verify teacher was created
         var teacherTag = new TeacherTag(teacherId);
-        var tagExists = await _eventStore.TagExistsAsync(teacherTag);
+        var tagExists = await _eventStore.TagExistsAsync(teacherTag).AsResultBoxAsync();
         Assert.True(tagExists.GetValue());
 
         // Verify event was written
-        var events = await _eventStore.ReadEventsByTagAsync(teacherTag, _domainTypes.EventTypes);
+        var events = await _eventStore.ReadEventsByTagAsync(teacherTag, _domainTypes.EventTypes).AsResultBoxAsync();
         var eventsList = events.GetValue().ToList();
         Assert.Single(eventsList);
         var payload = eventsList[0].Payload as TeacherCreated;
@@ -92,11 +93,11 @@ public class GeneralSekibanExecutorDomainTests
 
         // Verify student was created
         var studentTag = new StudentTag(studentId);
-        var tagExists = await _eventStore.TagExistsAsync(studentTag);
+        var tagExists = await _eventStore.TagExistsAsync(studentTag).AsResultBoxAsync();
         Assert.True(tagExists.GetValue());
 
         // Verify the event
-        var events = await _eventStore.ReadEventsByTagAsync(studentTag, _domainTypes.EventTypes);
+        var events = await _eventStore.ReadEventsByTagAsync(studentTag, _domainTypes.EventTypes).AsResultBoxAsync();
         var eventsList = events.GetValue().ToList();
         Assert.Single(eventsList);
         var payload = eventsList[0].Payload as StudentCreated;
@@ -157,7 +158,7 @@ public class GeneralSekibanExecutorDomainTests
 
         // Verify student was created
         var studentTag = new StudentTag(studentId);
-        var tagExists = await _eventStore.TagExistsAsync(studentTag);
+        var tagExists = await _eventStore.TagExistsAsync(studentTag).AsResultBoxAsync();
         Assert.True(tagExists.GetValue());
     }
 
@@ -180,11 +181,11 @@ public class GeneralSekibanExecutorDomainTests
 
         // Verify student was created
         var studentTag = new StudentTag(studentId);
-        var tagExists = await _eventStore.TagExistsAsync(studentTag);
+        var tagExists = await _eventStore.TagExistsAsync(studentTag).AsResultBoxAsync();
         Assert.True(tagExists.GetValue());
 
         // Verify events
-        var events = await _eventStore.ReadEventsByTagAsync(studentTag, _domainTypes.EventTypes);
+        var events = await _eventStore.ReadEventsByTagAsync(studentTag, _domainTypes.EventTypes).AsResultBoxAsync();
         var eventsList = events.GetValue().ToList();
         Assert.Single(eventsList);
         var payload = eventsList[0].Payload as StudentCreated;
@@ -231,7 +232,7 @@ public class GeneralSekibanExecutorDomainTests
 
         // Verify classroom was created
         var classRoomTag = new ClassRoomTag(classRoomId);
-        var tagExists = await _eventStore.TagExistsAsync(classRoomTag);
+        var tagExists = await _eventStore.TagExistsAsync(classRoomTag).AsResultBoxAsync();
         Assert.True(tagExists.GetValue());
     }
 
@@ -261,7 +262,7 @@ public class GeneralSekibanExecutorDomainTests
 
         // Verify the enrollment event exists
         var studentTag = new StudentTag(studentId);
-        var events = await _eventStore.ReadEventsByTagAsync(studentTag, _domainTypes.EventTypes);
+        var events = await _eventStore.ReadEventsByTagAsync(studentTag, _domainTypes.EventTypes).AsResultBoxAsync();
         var eventsList = events.GetValue().ToList();
         Assert.Equal(2, eventsList.Count); // StudentCreated + StudentEnrolledInClassRoom
 
@@ -413,7 +414,7 @@ public class GeneralSekibanExecutorDomainTests
 
         // Verify the drop event
         var studentTag = new StudentTag(studentId);
-        var events = await _eventStore.ReadEventsByTagAsync(studentTag, _domainTypes.EventTypes);
+        var events = await _eventStore.ReadEventsByTagAsync(studentTag, _domainTypes.EventTypes).AsResultBoxAsync();
         var eventsList = events.GetValue().ToList();
         Assert.Equal(3, eventsList.Count); // Created + Enrolled + Dropped
 
@@ -484,11 +485,11 @@ public class GeneralSekibanExecutorDomainTests
             EnrollStudentInClassRoomHandler.HandleAsync);
 
         // Verify all enrollments succeeded
-        var mathEvents = await _eventStore.ReadEventsByTagAsync(new ClassRoomTag(classRoom1), _domainTypes.EventTypes);
+        var mathEvents = await _eventStore.ReadEventsByTagAsync(new ClassRoomTag(classRoom1), _domainTypes.EventTypes).AsResultBoxAsync();
         var mathEventsList = mathEvents.GetValue().ToList();
         Assert.Equal(3, mathEventsList.Count); // Created + 2 enrollments
 
-        var scienceEvents = await _eventStore.ReadEventsByTagAsync(new ClassRoomTag(classRoom2), _domainTypes.EventTypes);
+        var scienceEvents = await _eventStore.ReadEventsByTagAsync(new ClassRoomTag(classRoom2), _domainTypes.EventTypes).AsResultBoxAsync();
         var scienceEventsList = scienceEvents.GetValue().ToList();
         Assert.Equal(3, scienceEventsList.Count); // Created + 2 enrollments
 
@@ -497,7 +498,7 @@ public class GeneralSekibanExecutorDomainTests
             new DropStudentFromClassRoom(student1, classRoom1),
             DropStudentFromClassRoomHandler.HandleAsync);
 
-        var aliceEvents = await _eventStore.ReadEventsByTagAsync(new StudentTag(student1), _domainTypes.EventTypes);
+        var aliceEvents = await _eventStore.ReadEventsByTagAsync(new StudentTag(student1), _domainTypes.EventTypes).AsResultBoxAsync();
         var aliceEventsList = aliceEvents.GetValue().ToList();
         Assert.Equal(4, aliceEventsList.Count); // Created + 2 enrollments + 1 drop
     }

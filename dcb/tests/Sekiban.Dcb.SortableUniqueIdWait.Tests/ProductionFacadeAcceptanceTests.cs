@@ -14,6 +14,7 @@ using Sekiban.Dcb.ServiceId;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
 using Sekiban.Dcb.Testing;
+using Sekiban.Dcb.TestSupport;
 
 namespace Sekiban.Dcb.SortableUniqueIdWait.Tests;
 
@@ -128,7 +129,7 @@ public sealed class ProductionFacadeAcceptanceTests
                     new EventMetadata("event", "command", "test"),
                     [],
                     nameof(AcceptanceEvent))
-            ]);
+            ]).AsResultBoxAsync();
         Assert.True(write.IsSuccess, write.IsSuccess ? "" : write.GetException().ToString());
 
         var result = await executor.QueryAsync<AcceptanceResult>(

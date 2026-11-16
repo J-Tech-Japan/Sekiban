@@ -1,4 +1,5 @@
 using System.Text;
+using Sekiban.Dcb.TestSupport;
 
 namespace Sekiban.Dcb.ColdEvents.Tests;
 
@@ -31,7 +32,7 @@ public sealed class ColdObjectStorageFactoryTests
                 "control/default/manifest.json",
                 Encoding.UTF8.GetBytes("{}"),
                 expectedETag: null,
-                CancellationToken.None);
+                CancellationToken.None).AsResultBoxAsync();
 
             Assert.True(writeResult.IsSuccess);
             Assert.True(

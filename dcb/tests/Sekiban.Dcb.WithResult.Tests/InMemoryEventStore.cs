@@ -16,7 +16,7 @@ public class InMemoryEventStore : IEventStore
     private readonly List<Event> _events = new();
     private readonly object _lock = new();
 
-    public Task<ResultBox<IEnumerable<Event>>> ReadAllEventsAsync(SortableUniqueId? since = null, int? maxCount = null)
+    public Task<IEnumerable<Event>> ReadAllEventsAsync(SortableUniqueId? since = null, int? maxCount = null)
     {
         lock (_lock)
         {
@@ -37,11 +37,11 @@ public class InMemoryEventStore : IEventStore
                 events = events.Take(maxCount.Value);
             }
 
-            return Task.FromResult(ResultBox.FromValue(events));
+            return Task.FromResult(events);
         }
     }
 
-    public Task<ResultBox<IEnumerable<Event>>> ReadEventsByTagAsync(ITag tag, SortableUniqueId? since = null)
+    public Task<IEnumerable<Event>> ReadEventsByTagAsync(ITag tag, SortableUniqueId? since = null)
     {
         lock (_lock)
         {
@@ -59,23 +59,19 @@ public class InMemoryEventStore : IEventStore
 
             events = events.OrderBy(e => e.SortableUniqueIdValue);
 
-            return Task.FromResult(ResultBox.FromValue(events.AsEnumerable()));
+            return Task.FromResult(events.AsEnumerable());
         }
     }
 
-    public Task<ResultBox<Event>> ReadEventAsync(Guid eventId)
+    public Task<Event?> ReadEventAsync(Guid eventId)
     {
         lock (_lock)
         {
-            var evt = _events.FirstOrDefault(e => e.Id == eventId);
-            if (evt != null)
-                return Task.FromResult(ResultBox.FromValue(evt));
-
-            return Task.FromResult(ResultBox.Error<Event>(new KeyNotFoundException($"Event {eventId} not found")));
+            return Task.FromResult<Event?>(_events.FirstOrDefault(e => e.Id == eventId));
         }
     }
 
-    public Task<ResultBox<(IReadOnlyList<Event> Events, IReadOnlyList<TagWriteResult> TagWrites)>> WriteEventsAsync(
+    public Task<(IReadOnlyList<Event> Events, IReadOnlyList<TagWriteResult> TagWrites)> WriteEventsAsync(
         IEnumerable<Event> events)
     {
         lock (_lock)
@@ -102,23 +98,13 @@ public class InMemoryEventStore : IEventStore
                 }
             }
 
-            return Task.FromResult(
-                ResultBox.FromValue<(IReadOnlyList<Event>, IReadOnlyList<TagWriteResult>)>((eventList, tagWrites)));
+            return Task.FromResult<(IReadOnlyList<Event>, IReadOnlyList<TagWriteResult>)>((eventList, tagWrites));
         }
     }
 
-    public async Task<ResultBox<Event>> WriteEventAsync(Event evt)
-    {
-        var result = await WriteEventsAsync(new[] { evt });
-        if (!result.IsSuccess)
-        {
-            return ResultBox.Error<Event>(result.GetException());
-        }
+    public async Task<Event> WriteEventAsync(Event evt) => (await WriteEventsAsync(new[] { evt })).Events[0];
 
-        return ResultBox.FromValue(result.GetValue().Events[0]);
-    }
-
-    public Task<ResultBox<IEnumerable<TagStream>>> ReadTagsAsync(ITag tag)
+    public Task<IEnumerable<TagStream>> ReadTagsAsync(ITag tag)
     {
         lock (_lock)
         {
@@ -127,16 +113,16 @@ public class InMemoryEventStore : IEventStore
                 = _events.Where(e => e.Tags.Contains(tagString)).OrderBy(e => e.SortableUniqueIdValue).ToList();
 
             if (!tagEvents.Any())
-                return Task.FromResult(ResultBox.FromValue(Enumerable.Empty<TagStream>()));
+                return Task.FromResult(Enumerable.Empty<TagStream>());
 
             // Create TagStream for each event with this tag
             var tagStreams = tagEvents.Select(e => new TagStream(tagString, e.Id, e.SortableUniqueIdValue));
 
-            return Task.FromResult(ResultBox.FromValue(tagStreams));
+            return Task.FromResult(tagStreams);
         }
     }
 
-    public Task<ResultBox<TagState>> GetLatestTagAsync(ITag tag)
+    public Task<TagState> GetLatestTagAsync(ITag tag)
     {
         lock (_lock)
         {
@@ -149,7 +135,7 @@ public class InMemoryEventStore : IEventStore
             if (!tagEvents.Any())
             {
                 var emptyState = TagState.GetEmpty(tagStateId);
-                return Task.FromResult(ResultBox.FromValue(emptyState));
+                return Task.FromResult(emptyState);
             }
 
             var lastEvent = tagEvents.Last();
@@ -161,17 +147,17 @@ public class InMemoryEventStore : IEventStore
                 tagStateId.TagContent,
                 tagStateId.TagProjectorName);
 
-            return Task.FromResult(ResultBox.FromValue(state));
+            return Task.FromResult(state);
         }
     }
 
-    public Task<ResultBox<bool>> TagExistsAsync(ITag tag)
+    public Task<bool> TagExistsAsync(ITag tag)
     {
         lock (_lock)
         {
             var tagString = tag.GetTag();
             var exists = _events.Any(e => e.Tags.Contains(tagString));
-            return Task.FromResult(ResultBox.FromValue(exists));
+            return Task.FromResult(exists);
         }
     }
 
@@ -184,7 +170,7 @@ public class InMemoryEventStore : IEventStore
         return Task.CompletedTask;
     }
 
-    public Task<ResultBox<long>> GetEventCountAsync(SortableUniqueId? since = null)
+    public Task<long> GetEventCountAsync(SortableUniqueId? since = null)
     {
         lock (_lock)
         {
@@ -198,11 +184,11 @@ public class InMemoryEventStore : IEventStore
                     StringComparison.Ordinal) > 0);
             }
 
-            return Task.FromResult(ResultBox.FromValue((long)events.Count()));
+            return Task.FromResult((long)events.Count());
         }
     }
 
-    public Task<ResultBox<string>> GetLatestSortableUniqueIdAsync()
+    public Task<string> GetLatestSortableUniqueIdAsync()
     {
         lock (_lock)
         {
@@ -214,11 +200,11 @@ public class InMemoryEventStore : IEventStore
                     latest = evt.SortableUniqueIdValue;
                 }
             }
-            return Task.FromResult(ResultBox.FromValue(latest));
+            return Task.FromResult(latest);
         }
     }
 
-    public Task<ResultBox<IEnumerable<TagInfo>>> GetAllTagsAsync(string? tagGroup = null)
+    public Task<IEnumerable<TagInfo>> GetAllTagsAsync(string? tagGroup = null)
     {
         lock (_lock)
         {
@@ -246,14 +232,14 @@ public class InMemoryEventStore : IEventStore
             .ThenBy(t => t.Tag)
             .ToList();
 
-            return Task.FromResult(ResultBox.FromValue(tagInfos.AsEnumerable()));
+            return Task.FromResult(tagInfos.AsEnumerable());
         }
     }
 
-    public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null) =>
+    public Task<IEnumerable<SerializableEvent>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null) =>
         ReadAllSerializableEventsAsync(since, null);
 
-    public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(
+    public Task<IEnumerable<SerializableEvent>> ReadAllSerializableEventsAsync(
         SortableUniqueId? since,
         int? maxCount)
     {
@@ -275,11 +261,11 @@ public class InMemoryEventStore : IEventStore
             }
 
             var serializable = events.Select(ToSerializableEvent).ToList();
-            return Task.FromResult(ResultBox.FromValue<IEnumerable<SerializableEvent>>(serializable));
+            return Task.FromResult<IEnumerable<SerializableEvent>>(serializable);
         }
     }
 
-    public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadSerializableEventsByTagAsync(
+    public Task<IEnumerable<SerializableEvent>> ReadSerializableEventsByTagAsync(
         ITag tag,
         SortableUniqueId? since = null)
     {
@@ -299,31 +285,24 @@ public class InMemoryEventStore : IEventStore
                 .OrderBy(e => e.SortableUniqueIdValue)
                 .Select(ToSerializableEvent)
                 .ToList();
-            return Task.FromResult(ResultBox.FromValue<IEnumerable<SerializableEvent>>(serializable));
+            return Task.FromResult<IEnumerable<SerializableEvent>>(serializable);
         }
     }
 
-    public Task<ResultBox<SerializableEvent>> ReadSerializableEventAsync(Guid eventId)
+    public Task<SerializableEvent?> ReadSerializableEventAsync(Guid eventId)
     {
         lock (_lock)
         {
             var evt = _events.FirstOrDefault(e => e.Id == eventId);
-            if (evt is null)
-            {
-                return Task.FromResult(
-                    ResultBox.Error<SerializableEvent>(new KeyNotFoundException($"Event {eventId} not found")));
-            }
-
-            return Task.FromResult(ResultBox.FromValue(ToSerializableEvent(evt)));
+            return Task.FromResult(evt is null ? null : ToSerializableEvent(evt));
         }
     }
 
-    public Task<ResultBox<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>> WriteSerializableEventsAsync(
+    public Task<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)> WriteSerializableEventsAsync(
         IEnumerable<SerializableEvent> events)
     {
-        return Task.FromResult(
-            ResultBox.Error<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>(
-                new NotSupportedException("InMemoryEventStore test double does not support WriteSerializableEventsAsync.")));
+        return Task.FromException<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>(
+                new NotSupportedException("InMemoryEventStore test double does not support WriteSerializableEventsAsync."));
     }
 
     private static SerializableEvent ToSerializableEvent(Event ev)

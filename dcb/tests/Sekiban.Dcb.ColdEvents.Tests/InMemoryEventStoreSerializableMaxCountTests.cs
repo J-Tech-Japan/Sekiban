@@ -5,6 +5,7 @@ using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.Testing;
 using Sekiban.Dcb.Storage;
+using Sekiban.Dcb.TestSupport;
 namespace Sekiban.Dcb.ColdEvents.Tests;
 
 /// <summary>
@@ -42,7 +43,7 @@ public class InMemoryEventStoreSerializableMaxCountTests
                 eventId,
                 new EventMetadata("cause", "corr", "user"),
                 [$"test:{i}"]);
-            await _concreteStore.WriteEventAsync(evt, _eventTypes);
+            await _concreteStore.WriteEventAsync(evt, _eventTypes).AsResultBoxAsync();
             sortableIds.Add(sortableId);
         }
         return sortableIds;
@@ -55,7 +56,7 @@ public class InMemoryEventStoreSerializableMaxCountTests
         await WriteTestEvents(5);
 
         // When: reading with maxCount = 3
-        var result = await _store.ReadAllSerializableEventsAsync(since: null, maxCount: 3);
+        var result = await _store.ReadAllSerializableEventsAsync(since: null, maxCount: 3).AsResultBoxAsync();
 
         // Then: only 3 events are returned
         Assert.True(result.IsSuccess);
@@ -71,7 +72,7 @@ public class InMemoryEventStoreSerializableMaxCountTests
 
         // When: reading since the 2nd event with maxCount = 2
         var since = new SortableUniqueId(sortableIds[1]);
-        var result = await _store.ReadAllSerializableEventsAsync(since, maxCount: 2);
+        var result = await _store.ReadAllSerializableEventsAsync(since, maxCount: 2).AsResultBoxAsync();
 
         // Then: 2 events after the 2nd event are returned (events 3 and 4)
         Assert.True(result.IsSuccess);
@@ -90,7 +91,7 @@ public class InMemoryEventStoreSerializableMaxCountTests
         await WriteTestEvents(5);
 
         // When: reading with null maxCount
-        var result = await _store.ReadAllSerializableEventsAsync(since: null, maxCount: null);
+        var result = await _store.ReadAllSerializableEventsAsync(since: null, maxCount: null).AsResultBoxAsync();
 
         // Then: all 5 events are returned
         Assert.True(result.IsSuccess);
@@ -105,7 +106,7 @@ public class InMemoryEventStoreSerializableMaxCountTests
         await WriteTestEvents(3);
 
         // When: maxCount is larger than total event count
-        var result = await _store.ReadAllSerializableEventsAsync(since: null, maxCount: 100);
+        var result = await _store.ReadAllSerializableEventsAsync(since: null, maxCount: 100).AsResultBoxAsync();
 
         // Then: all 3 events are returned
         Assert.True(result.IsSuccess);
@@ -120,7 +121,7 @@ public class InMemoryEventStoreSerializableMaxCountTests
         await WriteTestEvents(5);
 
         // When: reading with maxCount
-        var result = await _store.ReadAllSerializableEventsAsync(since: null, maxCount: 3);
+        var result = await _store.ReadAllSerializableEventsAsync(since: null, maxCount: 3).AsResultBoxAsync();
 
         // Then: returned events are in SortableUniqueId order
         Assert.True(result.IsSuccess);
@@ -144,7 +145,7 @@ public class InMemoryEventStoreSerializableMaxCountTests
 
         // When: since is the last event
         var since = new SortableUniqueId(sortableIds[^1]);
-        var result = await _store.ReadAllSerializableEventsAsync(since, maxCount: 10);
+        var result = await _store.ReadAllSerializableEventsAsync(since, maxCount: 10).AsResultBoxAsync();
 
         // Then: no events returned
         Assert.True(result.IsSuccess);

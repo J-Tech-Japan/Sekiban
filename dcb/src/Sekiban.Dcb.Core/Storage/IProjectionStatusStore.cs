@@ -1,5 +1,3 @@
-using ResultBoxes;
-
 namespace Sekiban.Dcb.Storage;
 
 /// <summary>
@@ -9,7 +7,7 @@ namespace Sekiban.Dcb.Storage;
 /// </summary>
 public interface IProjectionStatusStore
 {
-    Task<ResultBox<ProjectionStatusWriteResult>> UpsertAsync(
+    Task<ProjectionStatusWriteResult> UpsertAsync(
         ProjectionStatusHeartbeat heartbeat,
         long expectedSequence,
         CancellationToken cancellationToken = default);
@@ -17,12 +15,12 @@ public interface IProjectionStatusStore
     /// <summary>
     ///     Convenience overload for a heartbeat whose sequence is the next sequence after the caller's last write.
     /// </summary>
-    Task<ResultBox<ProjectionStatusWriteResult>> UpsertAsync(
+    Task<ProjectionStatusWriteResult> UpsertAsync(
         ProjectionStatusHeartbeat heartbeat,
         CancellationToken cancellationToken = default) =>
         UpsertAsync(heartbeat, Math.Max(0, heartbeat.Sequence - 1), cancellationToken);
 
-    Task<ResultBox<IReadOnlyList<ProjectionStatusHeartbeat>>> ListAsync(
+    Task<IReadOnlyList<ProjectionStatusHeartbeat>> ListAsync(
         string? projectorName = null,
         string? projectorVersion = null,
         CancellationToken cancellationToken = default);
@@ -30,7 +28,7 @@ public interface IProjectionStatusStore
     /// <summary>
     ///     Compatibility alias for providers and hosts that call the read operation <c>ListAllAsync</c>.
     /// </summary>
-    Task<ResultBox<IReadOnlyList<ProjectionStatusHeartbeat>>> ListAllAsync(
+    Task<IReadOnlyList<ProjectionStatusHeartbeat>> ListAllAsync(
         CancellationToken cancellationToken = default) =>
         ListAsync(cancellationToken: cancellationToken);
 }

@@ -12,6 +12,7 @@ using Sekiban.Dcb.Sqlite;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
 using Sekiban.Dcb.Testing;
+using Sekiban.Dcb.TestSupport;
 
 namespace Sekiban.Dcb.Tests;
 
@@ -72,7 +73,7 @@ public class SortableUniqueIdProductionPathTests
 
         Assert.Equal(6, generator.GenerateCalls);
         Assert.Equal(1, store.HeadReads);
-        var written = (await store.ReadAllSerializableEventsAsync()).GetValue().ToArray();
+        var written = (await store.ReadAllSerializableEventsAsync().AsResultBoxAsync()).GetValue().ToArray();
         Assert.Equal(6, written.Length);
         Assert.Equal(generator.GeneratedIds.Order(StringComparer.Ordinal), written.Select(e => e.SortableUniqueIdValue));
     }
@@ -175,9 +176,9 @@ public class SortableUniqueIdProductionPathTests
         var inner = new InMemoryConditionalEventStore(domain.EventTypes, service);
         var headA = new DateTime(2030, 1, 1, 0, 0, 0, DateTimeKind.Utc).Ticks;
         var headB = new DateTime(2040, 1, 1, 0, 0, 0, DateTimeKind.Utc).Ticks;
-        await inner.WriteSerializableEventsAsync([Persisted(domain, "head-a", headA)]);
+        await inner.WriteSerializableEventsAsync([Persisted(domain, "head-a", headA)]).AsResultBoxAsync();
         service.Current = "service-b";
-        await inner.WriteSerializableEventsAsync([Persisted(domain, "head-b", headB)]);
+        await inner.WriteSerializableEventsAsync([Persisted(domain, "head-b", headB)]).AsResultBoxAsync();
 
         var store = new CountingConditionalStore(inner, service);
         var accessor = new InMemoryObjectAccessor(store, domain);
@@ -243,7 +244,7 @@ public class SortableUniqueIdProductionPathTests
             (_, _) => Task.FromResult(EventOrNone.Event(new PathEvent("after"), new PathTag("after"))));
         Assert.True(afterRollback.IsSuccess);
 
-        var catchUp = (await store.ReadAllSerializableEventsAsync(new SortableUniqueId(checkpoint))).GetValue().ToArray();
+        var catchUp = (await store.ReadAllSerializableEventsAsync(new SortableUniqueId(checkpoint)).AsResultBoxAsync()).GetValue().ToArray();
         Assert.Single(catchUp);
         Assert.Equal(afterRollback.GetValue().SortableUniqueId, catchUp[0].SortableUniqueIdValue);
     }
@@ -294,7 +295,7 @@ public class SortableUniqueIdProductionPathTests
                 afterRestart.GetValue().SortableUniqueId,
                 first.GetValue().SortableUniqueId) > 0);
             var catchUp = (await restartedStore.ReadAllSerializableEventsAsync(
-                new SortableUniqueId(first.GetValue().SortableUniqueId!))).GetValue().ToArray();
+                new SortableUniqueId(first.GetValue().SortableUniqueId!)).AsResultBoxAsync()).GetValue().ToArray();
             Assert.Single(catchUp);
             Assert.Equal(afterRestart.GetValue().SortableUniqueId, catchUp[0].SortableUniqueIdValue);
         }
@@ -443,10 +444,10 @@ public class SortableUniqueIdProductionPathTests
         public Dictionary<string, int> HeadReadsByService { get; } = new(StringComparer.Ordinal);
 
         public WriteConditionCapabilityDescriptor DescribeWriteConditions() => inner.DescribeWriteConditions();
-        public Task<ResultBox<ConditionalAppendReceipt>> AppendIfUniqueAsync(
+        public Task<ConditionalAppendReceipt> AppendIfUniqueAsync(
             ConditionalAppendRequest request,
             CancellationToken cancellationToken = default) => inner.AppendIfUniqueAsync(request, cancellationToken);
-        public Task<ResultBox<string>> GetLatestSortableUniqueIdAsync()
+        public Task<string> GetLatestSortableUniqueIdAsync()
         {
             Interlocked.Increment(ref _headReads);
             if (serviceIdProvider is not null)
@@ -458,30 +459,30 @@ public class SortableUniqueIdProductionPathTests
                 }
             }
             return FailHeadReads
-                ? Task.FromResult(ResultBox.Error<string>(new InvalidOperationException("head unavailable")))
+                ? Task.FromException<string>(new InvalidOperationException("head unavailable"))
                 : HeadOverride is not null
-                    ? Task.FromResult(ResultBox.FromValue(HeadOverride))
+                    ? Task.FromResult(HeadOverride)
                     : inner.GetLatestSortableUniqueIdAsync();
         }
-        public Task<ResultBox<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>>
+        public Task<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>
             WriteSerializableEventsAsync(IEnumerable<SerializableEvent> events)
         {
             Interlocked.Increment(ref _writeCalls);
             return inner.WriteSerializableEventsAsync(events);
         }
-        public Task<ResultBox<IEnumerable<TagStream>>> ReadTagsAsync(ITag tag) => inner.ReadTagsAsync(tag);
-        public Task<ResultBox<TagState>> GetLatestTagAsync(ITag tag) => inner.GetLatestTagAsync(tag);
-        public Task<ResultBox<bool>> TagExistsAsync(ITag tag) => inner.TagExistsAsync(tag);
-        public Task<ResultBox<long>> GetEventCountAsync(SortableUniqueId? since = null) => inner.GetEventCountAsync(since);
-        public Task<ResultBox<IEnumerable<TagInfo>>> GetAllTagsAsync(string? tagGroup = null) => inner.GetAllTagsAsync(tagGroup);
-        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null) =>
+        public Task<IEnumerable<TagStream>> ReadTagsAsync(ITag tag) => inner.ReadTagsAsync(tag);
+        public Task<TagState> GetLatestTagAsync(ITag tag) => inner.GetLatestTagAsync(tag);
+        public Task<bool> TagExistsAsync(ITag tag) => inner.TagExistsAsync(tag);
+        public Task<long> GetEventCountAsync(SortableUniqueId? since = null) => inner.GetEventCountAsync(since);
+        public Task<IEnumerable<TagInfo>> GetAllTagsAsync(string? tagGroup = null) => inner.GetAllTagsAsync(tagGroup);
+        public Task<IEnumerable<SerializableEvent>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null) =>
             inner.ReadAllSerializableEventsAsync(since);
-        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(
+        public Task<IEnumerable<SerializableEvent>> ReadAllSerializableEventsAsync(
             SortableUniqueId? since,
             int? maxCount) => inner.ReadAllSerializableEventsAsync(since, maxCount);
-        public Task<ResultBox<SerializableEvent>> ReadSerializableEventAsync(Guid eventId) =>
+        public Task<SerializableEvent?> ReadSerializableEventAsync(Guid eventId) =>
             inner.ReadSerializableEventAsync(eventId);
-        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadSerializableEventsByTagAsync(
+        public Task<IEnumerable<SerializableEvent>> ReadSerializableEventsByTagAsync(
             ITag tag,
             SortableUniqueId? since = null) => inner.ReadSerializableEventsByTagAsync(tag, since);
     }

@@ -16,6 +16,7 @@ using Sekiban.Dcb.Testing;
 using System.Text;
 using Xunit;
 using CoreInMemoryEventStore = Sekiban.Dcb.Testing.InMemoryEventStore;
+using Sekiban.Dcb.TestSupport;
 namespace Sekiban.Dcb.Tests.ConditionalAppend;
 
 /// <summary>
@@ -97,9 +98,9 @@ public class ConditionalAppendContractTests
         Assert.NotEqual(canonicalJson, reformatted); // genuinely different bytes going in
 
         var f1 = OperationFingerprint.ComputeCanonical("svc", "k", domain.EventTypes, nameof(GoldenEvent),
-            Encoding.UTF8.GetBytes(canonicalJson), new[] { "Marker:m" }).GetValue();
+            Encoding.UTF8.GetBytes(canonicalJson), new[] { "Marker:m" });
         var f2 = OperationFingerprint.ComputeCanonical("svc", "k", domain.EventTypes, nameof(GoldenEvent),
-            Encoding.UTF8.GetBytes(reformatted), new[] { "Marker:m" }).GetValue();
+            Encoding.UTF8.GetBytes(reformatted), new[] { "Marker:m" });
         Assert.Equal(f1, f2); // ...but the same fingerprint out
     }
 
@@ -108,9 +109,9 @@ public class ConditionalAppendContractTests
     {
         var domain = BuildDomainTypes();
         var f1 = OperationFingerprint.ComputeCanonical("svc", "k", domain.EventTypes, nameof(GoldenEvent),
-            Encoding.UTF8.GetBytes(domain.EventTypes.SerializeEventPayload(new GoldenEvent("x", 1))), new[] { "Marker:m" }).GetValue();
+            Encoding.UTF8.GetBytes(domain.EventTypes.SerializeEventPayload(new GoldenEvent("x", 1))), new[] { "Marker:m" });
         var f2 = OperationFingerprint.ComputeCanonical("svc", "k", domain.EventTypes, nameof(GoldenEvent),
-            Encoding.UTF8.GetBytes(domain.EventTypes.SerializeEventPayload(new GoldenEvent("x", 2))), new[] { "Marker:m" }).GetValue();
+            Encoding.UTF8.GetBytes(domain.EventTypes.SerializeEventPayload(new GoldenEvent("x", 2))), new[] { "Marker:m" });
         Assert.NotEqual(f1, f2);
     }
 
@@ -118,10 +119,8 @@ public class ConditionalAppendContractTests
     public void ComputeCanonical_UnregisteredType_FailsClosed()
     {
         var domain = BuildDomainTypes();
-        var result = OperationFingerprint.ComputeCanonical("svc", "k", domain.EventTypes, "NotRegisteredEvent",
-            Encoding.UTF8.GetBytes("{}"), Array.Empty<string>());
-        Assert.False(result.IsSuccess);
-        Assert.IsType<OperationCanonicalizationException>(result.GetException());
+        Assert.Throws<OperationCanonicalizationException>(() => OperationFingerprint.ComputeCanonical("svc", "k", domain.EventTypes, "NotRegisteredEvent",
+            Encoding.UTF8.GetBytes("{}"), Array.Empty<string>()));
     }
 
     // ---------------- InMemory reference outcome machine ----------------
@@ -139,7 +138,7 @@ public class ConditionalAppendContractTests
         var exec = result.GetValue();
         Assert.Equal("Appended", exec.Metadata!["ConditionalAppendStatus"]);
         Assert.NotEqual(Guid.Empty, exec.EventId);
-        var stored = (await store.ReadAllSerializableEventsAsync()).GetValue().ToList();
+        var stored = (await store.ReadAllSerializableEventsAsync().AsResultBoxAsync()).GetValue().ToList();
         Assert.Single(stored);
     }
 
@@ -157,7 +156,7 @@ public class ConditionalAppendContractTests
         Assert.Equal(first.EventId, second.EventId); // the ORIGINAL winner
         Assert.Equal(first.SortableUniqueId, second.SortableUniqueId);
         Assert.Equal(first.Metadata!["OperationFingerprint"], second.Metadata!["OperationFingerprint"]);
-        Assert.Single((await store.ReadAllSerializableEventsAsync()).GetValue()); // still only one durable event
+        Assert.Single((await store.ReadAllSerializableEventsAsync().AsResultBoxAsync()).GetValue()); // still only one durable event
     }
 
     [Fact]
@@ -173,7 +172,7 @@ public class ConditionalAppendContractTests
         var ex = Assert.IsType<KeyReuseConflictException>(conflict.GetException());
         Assert.Equal(ConditionalAppendStatus.KeyReuseConflict, ex.Status);
         Assert.Null(ex.InnerException); // conflict discovered by read — no provider exception fabricated
-        Assert.Single((await store.ReadAllSerializableEventsAsync()).GetValue());
+        Assert.Single((await store.ReadAllSerializableEventsAsync().AsResultBoxAsync()).GetValue());
     }
 
     [Fact]
@@ -185,13 +184,13 @@ public class ConditionalAppendContractTests
             Guid.CreateVersion7(), new EventMetadata("c", "c", "u"), new List<string> { "Marker:m" });
         var serializable = evt.ToSerializableEvent(domain.EventTypes);
 
-        var appended = (await store.AppendIfUniqueAsync(new ConditionalAppendRequest("k", serializable))).GetValue();
+        var appended = (await store.AppendIfUniqueAsync(new ConditionalAppendRequest("k", serializable)).AsResultBoxAsync()).GetValue();
         Assert.Equal(ConditionalAppendStatus.Appended, appended.Status);
         Assert.Equal(evt.Id, appended.WinnerEventId);
 
         // Same key, same content but freshly-allocated ids => still recognised as the same operation.
         var retryEvt = serializable with { Id = Guid.CreateVersion7(), SortableUniqueIdValue = SortableUniqueId.GenerateNew() };
-        var retry = (await store.AppendIfUniqueAsync(new ConditionalAppendRequest("k", retryEvt))).GetValue();
+        var retry = (await store.AppendIfUniqueAsync(new ConditionalAppendRequest("k", retryEvt)).AsResultBoxAsync()).GetValue();
         Assert.Equal(ConditionalAppendStatus.AlreadyCommittedSameOperation, retry.Status);
         Assert.Equal(appended.WinnerEventId, retry.WinnerEventId); // original winner, not the retry's id
     }
@@ -205,12 +204,12 @@ public class ConditionalAppendContractTests
         var store = new InMemoryConditionalEventStore(domain.EventTypes);
         var serializable = SampleSerializable(domain);
 
-        var appended = (await store.AppendIfUniqueAsync(new ConditionalAppendRequest("k", serializable))).GetValue();
+        var appended = (await store.AppendIfUniqueAsync(new ConditionalAppendRequest("k", serializable)).AsResultBoxAsync()).GetValue();
         Assert.Equal(ConditionalAppendStatus.Appended, appended.Status);
         Assert.Equal(1, store.WriteCalls);   // one successful durable write
         Assert.Equal(1, store.AppendAttempts);
 
-        var retry = (await store.AppendIfUniqueAsync(new ConditionalAppendRequest("k", serializable))).GetValue();
+        var retry = (await store.AppendIfUniqueAsync(new ConditionalAppendRequest("k", serializable)).AsResultBoxAsync()).GetValue();
         Assert.Equal(ConditionalAppendStatus.AlreadyCommittedSameOperation, retry.Status);
         Assert.Equal(1, store.WriteCalls);   // retry writes nothing durable
     }
@@ -224,30 +223,30 @@ public class ConditionalAppendContractTests
 
         // Injected base-write failure: nothing durable happened.
         store.FailNextDurableWrite = true;
-        var failed = await store.AppendIfUniqueAsync(new ConditionalAppendRequest("k", serializable));
+        var failed = await store.AppendIfUniqueAsync(new ConditionalAppendRequest("k", serializable)).AsResultBoxAsync();
         Assert.False(failed.IsSuccess);
-        Assert.Empty((await store.ReadAllSerializableEventsAsync()).GetValue()); // no event
+        Assert.Empty((await store.ReadAllSerializableEventsAsync().AsResultBoxAsync()).GetValue()); // no event
         Assert.Equal(1, store.AppendAttempts);                                  // reached the write step
         Assert.Equal(0, store.WriteCalls);                                      // but not a durable success — no claim/receipt
 
         // Retry wins with a real durable write, exactly once.
-        var retry = (await store.AppendIfUniqueAsync(new ConditionalAppendRequest("k", serializable))).GetValue();
+        var retry = (await store.AppendIfUniqueAsync(new ConditionalAppendRequest("k", serializable)).AsResultBoxAsync()).GetValue();
         Assert.Equal(ConditionalAppendStatus.Appended, retry.Status);
         Assert.Equal(2, store.AppendAttempts);
         Assert.Equal(1, store.WriteCalls);
-        var stored = (await store.ReadAllSerializableEventsAsync()).GetValue().ToList();
+        var stored = (await store.ReadAllSerializableEventsAsync().AsResultBoxAsync()).GetValue().ToList();
         Assert.Single(stored);
         Assert.Equal(serializable.Id, retry.WinnerEventId);                     // receipt names the stored winner
         Assert.Equal(stored[0].Id, retry.WinnerEventId);
 
         // A further same-operation retry returns the SAME receipt and increments neither counter.
-        var sameOp = (await store.AppendIfUniqueAsync(new ConditionalAppendRequest("k", serializable))).GetValue();
+        var sameOp = (await store.AppendIfUniqueAsync(new ConditionalAppendRequest("k", serializable)).AsResultBoxAsync()).GetValue();
         Assert.Equal(ConditionalAppendStatus.AlreadyCommittedSameOperation, sameOp.Status);
         Assert.Equal(retry.WinnerEventId, sameOp.WinnerEventId);
         Assert.Equal(retry.OperationFingerprint, sameOp.OperationFingerprint);
         Assert.Equal(2, store.AppendAttempts); // unchanged
         Assert.Equal(1, store.WriteCalls);     // unchanged
-        Assert.Single((await store.ReadAllSerializableEventsAsync()).GetValue());
+        Assert.Single((await store.ReadAllSerializableEventsAsync().AsResultBoxAsync()).GetValue());
     }
 
     private static SerializableEvent SampleSerializable(DcbDomainTypes domain)
@@ -355,7 +354,7 @@ public class ConditionalAppendContractTests
         Assert.False(result.IsSuccess);
         Assert.IsType<ConditionNotSupportedException>(result.GetException());
         Assert.False(handlerInvoked); // fail-closed BEFORE the handler runs
-        Assert.Empty((await plain.ReadAllSerializableEventsAsync()).GetValue()); // nothing allocated or written
+        Assert.Empty((await plain.ReadAllSerializableEventsAsync().AsResultBoxAsync()).GetValue()); // nothing allocated or written
     }
 
     [Fact]
@@ -384,7 +383,7 @@ public class ConditionalAppendContractTests
         Assert.False(result.IsSuccess);
         Assert.IsType<ConditionNotSupportedException>(result.GetException());
         Assert.False(handlerInvoked);
-        Assert.Empty((await plain.ReadAllSerializableEventsAsync()).GetValue());
+        Assert.Empty((await plain.ReadAllSerializableEventsAsync().AsResultBoxAsync()).GetValue());
     }
 
     [Fact]
@@ -430,7 +429,7 @@ public class ConditionalAppendContractTests
 
         Assert.False(result.IsSuccess);
         Assert.IsType<ConditionNotSupportedException>(result.GetException());
-        Assert.Empty((await plain.ReadAllSerializableEventsAsync()).GetValue());
+        Assert.Empty((await plain.ReadAllSerializableEventsAsync().AsResultBoxAsync()).GetValue());
     }
 
     [Fact]
@@ -455,7 +454,7 @@ public class ConditionalAppendContractTests
         Assert.False(result.IsSuccess);
         Assert.IsType<TagHeadExpectationValidationException>(result.GetException());
         Assert.False(handlerInvoked);
-        Assert.Empty((await store.ReadAllSerializableEventsAsync()).GetValue());
+        Assert.Empty((await store.ReadAllSerializableEventsAsync().AsResultBoxAsync()).GetValue());
     }
 
     // ---------------- Single-event contract (zero and multi both fail closed, before any store call) ----------------
@@ -473,7 +472,7 @@ public class ConditionalAppendContractTests
         Assert.False(result.IsSuccess);
         var ex = Assert.IsType<SingleEventConditionalAppendException>(result.GetException());
         Assert.Equal(0, ex.AppendedEventCount);
-        Assert.Empty((await store.ReadAllSerializableEventsAsync()).GetValue()); // no store call / no receipt
+        Assert.Empty((await store.ReadAllSerializableEventsAsync().AsResultBoxAsync()).GetValue()); // no store call / no receipt
     }
 
     [Fact]
@@ -493,7 +492,7 @@ public class ConditionalAppendContractTests
         Assert.False(result.IsSuccess);
         var ex = Assert.IsType<SingleEventConditionalAppendException>(result.GetException());
         Assert.Equal(2, ex.AppendedEventCount);
-        Assert.Empty((await store.ReadAllSerializableEventsAsync()).GetValue());
+        Assert.Empty((await store.ReadAllSerializableEventsAsync().AsResultBoxAsync()).GetValue());
     }
 
     // ---------------- Serialized (WASM) conditional path ----------------
@@ -510,7 +509,7 @@ public class ConditionalAppendContractTests
 
         Assert.False(result.IsSuccess);
         Assert.IsType<UnsupportedSerializedCommitVersionException>(result.GetException());
-        Assert.Empty((await store.ReadAllSerializableEventsAsync()).GetValue()); // rejected before any write
+        Assert.Empty((await store.ReadAllSerializableEventsAsync().AsResultBoxAsync()).GetValue()); // rejected before any write
     }
 
     [Fact]
@@ -544,7 +543,7 @@ public class ConditionalAppendContractTests
         // No options overload => the legacy behaviour; a plain store that cannot condition writes is perfectly fine here.
         var result = await executor.ExecuteAsync(new MarkerCommand(), AppendMarker("legacy"));
         Assert.True(result.IsSuccess);
-        Assert.Single((await plain.ReadAllSerializableEventsAsync()).GetValue());
+        Assert.Single((await plain.ReadAllSerializableEventsAsync().AsResultBoxAsync()).GetValue());
     }
 
     // Re-emits JSON with object properties in REVERSE order and indented, so the bytes differ while the meaning does not.

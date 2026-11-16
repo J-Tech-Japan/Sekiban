@@ -8,6 +8,7 @@ using Sekiban.Dcb.ServiceId;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
 using Xunit;
+using Sekiban.Dcb.TestSupport;
 namespace Sekiban.Dcb.Postgres.Tests;
 
 public class PostgresTagBasedEventTests : PostgresTestBase
@@ -43,14 +44,14 @@ public class PostgresTagBasedEventTests : PostgresTestBase
             classRoomTag);
 
         // Act - Write events
-        var writeResult = await Fixture.EventStore.WriteEventsAsync(new[] { event1, event2, event3 });
+        var writeResult = await Fixture.EventStore.WriteEventsAsync(new[] { event1, event2, event3 }).AsResultBoxAsync();
 
         // Assert - Write was successful
         Assert.True(writeResult.IsSuccess);
         Assert.Equal(3, writeResult.GetValue().Events.Count);
 
         // Act - Read all events
-        var allEventsResult = await Fixture.EventStore.ReadAllEventsAsync();
+        var allEventsResult = await Fixture.EventStore.ReadAllEventsAsync().AsResultBoxAsync();
 
         // Assert - All events are returned in order
         Assert.True(allEventsResult.IsSuccess);
@@ -61,7 +62,7 @@ public class PostgresTagBasedEventTests : PostgresTestBase
         Assert.Equal(event3.Id, allEvents[2].Id);
 
         // Act - Read events by student tag
-        var studentEventsResult = await Fixture.EventStore.ReadEventsByTagAsync(studentTag);
+        var studentEventsResult = await Fixture.EventStore.ReadEventsByTagAsync(studentTag).AsResultBoxAsync();
 
         // Assert - Only student-related events are returned
         Assert.True(studentEventsResult.IsSuccess);
@@ -71,7 +72,7 @@ public class PostgresTagBasedEventTests : PostgresTestBase
         Assert.Equal(event3.Id, studentEvents[1].Id);
 
         // Act - Read events by classroom tag
-        var classRoomEventsResult = await Fixture.EventStore.ReadEventsByTagAsync(classRoomTag);
+        var classRoomEventsResult = await Fixture.EventStore.ReadEventsByTagAsync(classRoomTag).AsResultBoxAsync();
 
         // Assert - Only classroom-related events are returned
         Assert.True(classRoomEventsResult.IsSuccess);
@@ -96,11 +97,11 @@ public class PostgresTagBasedEventTests : PostgresTestBase
         }
 
         // Write all events
-        await Fixture.EventStore.WriteEventsAsync(events);
+        await Fixture.EventStore.WriteEventsAsync(events).AsResultBoxAsync();
 
         // Act - Read events since the second event
         var sinceId = new SortableUniqueId(events[1].SortableUniqueIdValue);
-        var eventsResult = await Fixture.EventStore.ReadEventsByTagAsync(studentTag, sinceId);
+        var eventsResult = await Fixture.EventStore.ReadEventsByTagAsync(studentTag, sinceId).AsResultBoxAsync();
 
         // Assert - Only events after the second one are returned
         Assert.True(eventsResult.IsSuccess);
@@ -154,7 +155,7 @@ public class PostgresTagBasedEventTests : PostgresTestBase
                 new EventMetadata("cause", "correlation", "user"),
                 new List<string> { tag.GetTag() })
         };
-        var write = await Fixture.EventStore.WriteEventsAsync(events);
+        var write = await Fixture.EventStore.WriteEventsAsync(events).AsResultBoxAsync();
         Assert.True(write.IsSuccess, write.IsSuccess ? string.Empty : write.GetException().ToString());
 
         var stream = Assert.IsAssignableFrom<IStreamingTaggedSerializableEventStore>(Fixture.EventStore);
@@ -167,7 +168,7 @@ public class PostgresTagBasedEventTests : PostgresTestBase
             {
                 emitted.Add(serializableEvent.SortableUniqueIdValue);
                 return ValueTask.CompletedTask;
-            });
+            }).AsResultBoxAsync();
 
         Assert.True(result.IsSuccess, result.IsSuccess ? string.Empty : result.GetException().ToString());
         Assert.Equal(new[] { TaggedStreamP2, TaggedStreamP3 }, emitted);
@@ -187,10 +188,10 @@ public class PostgresTagBasedEventTests : PostgresTestBase
             TaggedStreamEvent(studentId, tag, "middle", TaggedStreamP2),
             TaggedStreamEvent(studentId, tag, "until", TaggedStreamP3)
         };
-        var initialWrite = await Fixture.EventStore.WriteEventsAsync(initial);
+        var initialWrite = await Fixture.EventStore.WriteEventsAsync(initial).AsResultBoxAsync();
         Assert.True(initialWrite.IsSuccess, initialWrite.IsSuccess ? string.Empty : initialWrite.GetException().ToString());
 
-        var head = await Fixture.EventStore.GetLatestSortableUniqueIdAsync();
+        var head = await Fixture.EventStore.GetLatestSortableUniqueIdAsync().AsResultBoxAsync();
         Assert.True(head.IsSuccess, head.IsSuccess ? string.Empty : head.GetException().ToString());
         Assert.Equal(TaggedStreamP3, head.GetValue());
         var capturedHead = new SortableUniqueId(head.GetValue());
@@ -198,7 +199,7 @@ public class PostgresTagBasedEventTests : PostgresTestBase
         // The five-point after-until boundary is already durable before the real query begins. A second above-head event
         // is appended only after its first callback proves the native query/reader is active.
         var afterUntilWrite = await Fixture.EventStore.WriteEventsAsync(
-            new[] { TaggedStreamEvent(studentId, tag, "after-until", TaggedStreamP4) });
+            new[] { TaggedStreamEvent(studentId, tag, "after-until", TaggedStreamP4) }).AsResultBoxAsync();
         Assert.True(afterUntilWrite.IsSuccess, afterUntilWrite.IsSuccess ? string.Empty : afterUntilWrite.GetException().ToString());
 
         var nativeQueryStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -224,7 +225,7 @@ public class PostgresTagBasedEventTests : PostgresTestBase
         {
             await nativeQueryStarted.Task.WaitAsync(TimeSpan.FromSeconds(10));
             var aboveHeadWrite = await Fixture.EventStore.WriteEventsAsync(
-                    new[] { TaggedStreamEvent(studentId, tag, "appended-above-head", TaggedStreamP5) })
+                    new[] { TaggedStreamEvent(studentId, tag, "appended-above-head", TaggedStreamP5) }).AsResultBoxAsync()
                 .WaitAsync(TimeSpan.FromSeconds(10));
             Assert.True(aboveHeadWrite.IsSuccess, aboveHeadWrite.IsSuccess ? string.Empty : aboveHeadWrite.GetException().ToString());
         }
@@ -233,7 +234,7 @@ public class PostgresTagBasedEventTests : PostgresTestBase
             releaseCallback.TrySetResult();
         }
 
-        var result = await streamTask;
+        var result = await streamTask.AsResultBoxAsync();
         Assert.True(result.IsSuccess, result.IsSuccess ? string.Empty : result.GetException().ToString());
         Assert.Equal(new[] { TaggedStreamP2, TaggedStreamP3 }, emitted);
         Assert.Equal(emitted.OrderBy(id => id, StringComparer.Ordinal), emitted);
@@ -254,7 +255,7 @@ public class PostgresTagBasedEventTests : PostgresTestBase
         {
             TaggedStreamEvent(studentId, tag, "one", TaggedStreamP1),
             TaggedStreamEvent(studentId, tag, "two", TaggedStreamP2)
-        });
+        }).AsResultBoxAsync();
         Assert.True(write.IsSuccess, write.IsSuccess ? string.Empty : write.GetException().ToString());
 
         var readerStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -318,7 +319,7 @@ public class PostgresTagBasedEventTests : PostgresTestBase
         {
             TaggedStreamEvent(studentId, tag, "one", TaggedStreamP1),
             TaggedStreamEvent(studentId, tag, "two", TaggedStreamP2)
-        });
+        }).AsResultBoxAsync();
         Assert.True(write.IsSuccess, write.IsSuccess ? string.Empty : write.GetException().ToString());
 
         var readerStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -392,7 +393,7 @@ public class PostgresTagBasedEventTests : PostgresTestBase
                 new EventMetadata("cause", "correlation", "user"),
                 new List<string> { tag.GetTag() }))
             .ToArray();
-        var write = await Fixture.EventStore.WriteEventsAsync(events);
+        var write = await Fixture.EventStore.WriteEventsAsync(events).AsResultBoxAsync();
         Assert.True(write.IsSuccess, write.IsSuccess ? string.Empty : write.GetException().ToString());
 
         using var cancellation = new CancellationTokenSource();
@@ -431,7 +432,7 @@ public class PostgresTagBasedEventTests : PostgresTestBase
         var nonExistentTag = new StudentTag(Guid.NewGuid());
 
         // Act - Check before writing any events
-        var existsBeforeResult = await Fixture.EventStore.TagExistsAsync(studentTag);
+        var existsBeforeResult = await Fixture.EventStore.TagExistsAsync(studentTag).AsResultBoxAsync();
 
         // Assert
         Assert.True(existsBeforeResult.IsSuccess);
@@ -440,11 +441,11 @@ public class PostgresTagBasedEventTests : PostgresTestBase
         // Arrange - Write an event with the tag
         var event1 = EventTestHelper.CreateEvent(new StudentCreated(studentId, "Jane Doe", 3), studentTag);
 
-        await Fixture.EventStore.WriteEventsAsync(new[] { event1 });
+        await Fixture.EventStore.WriteEventsAsync(new[] { event1 }).AsResultBoxAsync();
 
         // Act - Check after writing event
-        var existsAfterResult = await Fixture.EventStore.TagExistsAsync(studentTag);
-        var nonExistentResult = await Fixture.EventStore.TagExistsAsync(nonExistentTag);
+        var existsAfterResult = await Fixture.EventStore.TagExistsAsync(studentTag).AsResultBoxAsync();
+        var nonExistentResult = await Fixture.EventStore.TagExistsAsync(nonExistentTag).AsResultBoxAsync();
 
         // Assert
         Assert.True(existsAfterResult.IsSuccess);
@@ -465,10 +466,10 @@ public class PostgresTagBasedEventTests : PostgresTestBase
 
         var event2 = EventTestHelper.CreateEvent(new StudentEnrolledInClassRoom(studentId, Guid.NewGuid()), studentTag);
 
-        await Fixture.EventStore.WriteEventsAsync(new[] { event1, event2 });
+        await Fixture.EventStore.WriteEventsAsync(new[] { event1, event2 }).AsResultBoxAsync();
 
         // Act
-        var tagStreamsResult = await Fixture.EventStore.ReadTagsAsync(studentTag);
+        var tagStreamsResult = await Fixture.EventStore.ReadTagsAsync(studentTag).AsResultBoxAsync();
 
         // Assert
         Assert.True(tagStreamsResult.IsSuccess);
@@ -492,7 +493,7 @@ public class PostgresTagBasedEventTests : PostgresTestBase
         var studentTag = new StudentTag(studentId);
 
         // Act - Get state before any events
-        var beforeResult = await Fixture.EventStore.GetLatestTagAsync(studentTag);
+        var beforeResult = await Fixture.EventStore.GetLatestTagAsync(studentTag).AsResultBoxAsync();
 
         // Assert - Should return empty state
         Assert.True(beforeResult.IsSuccess);
@@ -508,10 +509,10 @@ public class PostgresTagBasedEventTests : PostgresTestBase
 
         var event2 = EventTestHelper.CreateEvent(new StudentEnrolledInClassRoom(studentId, Guid.NewGuid()), studentTag);
 
-        await Fixture.EventStore.WriteEventsAsync(new[] { event1, event2 });
+        await Fixture.EventStore.WriteEventsAsync(new[] { event1, event2 }).AsResultBoxAsync();
 
         // Act - Get state after events
-        var afterResult = await Fixture.EventStore.GetLatestTagAsync(studentTag);
+        var afterResult = await Fixture.EventStore.GetLatestTagAsync(studentTag).AsResultBoxAsync();
 
         // Assert - Should return state with latest sortable unique ID
         Assert.True(afterResult.IsSuccess);

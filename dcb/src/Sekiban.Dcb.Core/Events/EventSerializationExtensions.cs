@@ -32,29 +32,32 @@ public static class EventSerializationExtensions
     {
         try
         {
-            var payloadJson = Encoding.UTF8.GetString(serializable.Payload);
-            var payload = eventTypes.DeserializeEventPayload(serializable.EventPayloadName, payloadJson);
-
-            if (payload == null)
-            {
-                return ResultBox.Error<Event>(
-                    new InvalidOperationException(
-                        $"Failed to deserialize event payload of type {serializable.EventPayloadName}. " +
-                        "Make sure the event type is registered in DcbDomainTypes."));
-            }
-
-            return ResultBox.FromValue(
-                new Event(
-                    payload,
-                    serializable.SortableUniqueIdValue,
-                    serializable.EventPayloadName,
-                    serializable.Id,
-                    serializable.EventMetadata,
-                    serializable.Tags));
+            return ResultBox.FromValue(serializable.ToEventOrThrow(eventTypes));
         }
         catch (Exception ex)
         {
             return ResultBox.Error<Event>(ex);
         }
+    }
+
+    /// <summary>
+    ///     Exception-based form of <see cref="ToEvent" />: returns the event or throws the same exception
+    ///     <see cref="ToEvent" /> would carry in its failed box.
+    /// </summary>
+    internal static Event ToEventOrThrow(this SerializableEvent serializable, IEventTypes eventTypes)
+    {
+        var payloadJson = Encoding.UTF8.GetString(serializable.Payload);
+        var payload = eventTypes.DeserializeEventPayload(serializable.EventPayloadName, payloadJson)
+            ?? throw new InvalidOperationException(
+                $"Failed to deserialize event payload of type {serializable.EventPayloadName}. " +
+                "Make sure the event type is registered in DcbDomainTypes.");
+
+        return new Event(
+            payload,
+            serializable.SortableUniqueIdValue,
+            serializable.EventPayloadName,
+            serializable.Id,
+            serializable.EventMetadata,
+            serializable.Tags);
     }
 }

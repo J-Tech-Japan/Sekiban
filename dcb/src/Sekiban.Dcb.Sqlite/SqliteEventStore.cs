@@ -2,7 +2,6 @@ using System.Text;
 using System.Text.Json;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging;
-using ResultBoxes;
 using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Events;
@@ -52,7 +51,7 @@ public class SqliteEventStore : IHotEventStore, IStorageDurabilityDescriptorProv
     ///     wins; a second writer hits the primary-key constraint and is classified by fingerprint against the stored
     ///     winner. All shared semantics live in <see cref="ConditionalAppendExecution" />.
     /// </summary>
-    public Task<ResultBox<ConditionalAppendReceipt>> AppendIfUniqueAsync(
+    public Task<ConditionalAppendReceipt> AppendIfUniqueAsync(
         ConditionalAppendRequest request,
         CancellationToken cancellationToken = default) =>
         _conditionalAppend.AppendIfUniqueAsync(request, cancellationToken);
@@ -451,7 +450,7 @@ public class SqliteEventStore : IHotEventStore, IStorageDurabilityDescriptorProv
         }
     }
 
-    public async Task<ResultBox<IEnumerable<Event>>> ReadAllEventsAsync(SortableUniqueId? since = null, int? maxCount = null)
+    public async Task<IEnumerable<Event>> ReadAllEventsAsync(SortableUniqueId? since = null, int? maxCount = null)
     {
         try
         {
@@ -506,16 +505,16 @@ public class SqliteEventStore : IHotEventStore, IStorageDurabilityDescriptorProv
                 }
             }
 
-            return ResultBox.FromValue<IEnumerable<Event>>(events);
+            return events;
         }
         catch (Exception ex)
         {
             _logger?.LogError(ex, "Error reading all events from SQLite");
-            return ResultBox.Error<IEnumerable<Event>>(ex);
+            throw;
         }
     }
 
-    public async Task<ResultBox<IEnumerable<Event>>> ReadEventsByTagAsync(ITag tag, SortableUniqueId? since = null)
+    public async Task<IEnumerable<Event>> ReadEventsByTagAsync(ITag tag, SortableUniqueId? since = null)
     {
         try
         {
@@ -563,16 +562,21 @@ public class SqliteEventStore : IHotEventStore, IStorageDurabilityDescriptorProv
                 }
             }
 
-            return ResultBox.FromValue<IEnumerable<Event>>(events);
+            return events;
         }
         catch (Exception ex)
         {
             _logger?.LogError(ex, "Error reading events by tag from SQLite: {Tag}", tag.GetTag());
-            return ResultBox.Error<IEnumerable<Event>>(ex);
+            throw;
         }
     }
 
-    public async Task<ResultBox<Event>> ReadEventAsync(Guid eventId)
+    /// <summary>
+    ///     Returns the event, or <c>null</c> when no event with <paramref name="eventId" /> exists. A stored row that
+    ///     cannot be read (unregistered type, unreadable payload or tags) is a failure: it throws the same
+    ///     <see cref="KeyNotFoundException" /> the 10.x store reported for it.
+    /// </summary>
+    public async Task<Event?> ReadEventAsync(Guid eventId)
     {
         try
         {
@@ -591,32 +595,34 @@ public class SqliteEventStore : IHotEventStore, IStorageDurabilityDescriptorProv
 
             await using var reader = await cmd.ExecuteReaderAsync();
 
-            if (await reader.ReadAsync())
+            if (!await reader.ReadAsync())
             {
-                var evt = ReadEvent(reader);
-                if (evt != null)
-                {
-                    return ResultBox.FromValue(evt);
-                }
+                return null;
             }
 
-            return ResultBox.Error<Event>(new KeyNotFoundException($"Event not found: {eventId}"));
+            var evt = ReadEvent(reader);
+            if (evt != null)
+            {
+                return evt;
+            }
         }
         catch (Exception ex)
         {
             _logger?.LogError(ex, "Error reading event from SQLite: {EventId}", eventId);
-            return ResultBox.Error<Event>(ex);
+            throw;
         }
+
+        // Only reached when the row exists but ReadEvent could not read it (it has already logged why).
+        throw new KeyNotFoundException($"Event not found: {eventId}");
     }
 
-    public async Task<ResultBox<(IReadOnlyList<Event> Events, IReadOnlyList<TagWriteResult> TagWrites)>> WriteEventsAsync(
+    public async Task<(IReadOnlyList<Event> Events, IReadOnlyList<TagWriteResult> TagWrites)> WriteEventsAsync(
         IEnumerable<Event> events)
     {
         var eventList = events.ToList();
         if (eventList.Count == 0)
         {
-            return ResultBox.FromValue<(IReadOnlyList<Event>, IReadOnlyList<TagWriteResult>)>(
-                (Array.Empty<Event>(), Array.Empty<TagWriteResult>()));
+            return (Array.Empty<Event>(), Array.Empty<TagWriteResult>());
         }
 
         var serviceId = CurrentServiceId;
@@ -687,8 +693,7 @@ public class SqliteEventStore : IHotEventStore, IStorageDurabilityDescriptorProv
 
                 await transaction.CommitAsync();
 
-                return ResultBox.FromValue<(IReadOnlyList<Event>, IReadOnlyList<TagWriteResult>)>(
-                    (eventList, tagWrites));
+                return (eventList, tagWrites);
             }
             catch
             {
@@ -699,7 +704,7 @@ public class SqliteEventStore : IHotEventStore, IStorageDurabilityDescriptorProv
         catch (Exception ex)
         {
             _logger?.LogError(ex, "Error writing events to SQLite");
-            return ResultBox.Error<(IReadOnlyList<Event>, IReadOnlyList<TagWriteResult>)>(ex);
+            throw;
         }
         finally
         {
@@ -707,7 +712,7 @@ public class SqliteEventStore : IHotEventStore, IStorageDurabilityDescriptorProv
         }
     }
 
-    public async Task<ResultBox<IEnumerable<TagStream>>> ReadTagsAsync(ITag tag)
+    public async Task<IEnumerable<TagStream>> ReadTagsAsync(ITag tag)
     {
         try
         {
@@ -738,16 +743,16 @@ public class SqliteEventStore : IHotEventStore, IStorageDurabilityDescriptorProv
                 streams.Add(new TagStream(tagString, eventId, sortableUniqueId));
             }
 
-            return ResultBox.FromValue<IEnumerable<TagStream>>(streams);
+            return streams;
         }
         catch (Exception ex)
         {
             _logger?.LogError(ex, "Error reading tags from SQLite: {Tag}", tag.GetTag());
-            return ResultBox.Error<IEnumerable<TagStream>>(ex);
+            throw;
         }
     }
 
-    public async Task<ResultBox<TagState>> GetLatestTagAsync(ITag tag)
+    public async Task<TagState> GetLatestTagAsync(ITag tag)
     {
         try
         {
@@ -782,34 +787,34 @@ public class SqliteEventStore : IHotEventStore, IStorageDurabilityDescriptorProv
             if (await reader.ReadAsync())
             {
                 var sortableUniqueId = reader.GetString(1);
-                return ResultBox.FromValue(new TagState(
+                return new TagState(
                     new EmptyTagStatePayload(),
                     version,
                     sortableUniqueId,
                     tagGroup,
                     tagContent,
                     "SqliteProjector",
-                    string.Empty));
+                    string.Empty);
             }
 
             // No events found - return empty state
-            return ResultBox.FromValue(new TagState(
+            return new TagState(
                 new EmptyTagStatePayload(),
                 0,
                 string.Empty,
                 tagGroup,
                 tagContent,
                 "SqliteProjector",
-                string.Empty));
+                string.Empty);
         }
         catch (Exception ex)
         {
             _logger?.LogError(ex, "Error getting latest tag from SQLite: {Tag}", tag.GetTag());
-            return ResultBox.Error<TagState>(ex);
+            throw;
         }
     }
 
-    public async Task<ResultBox<bool>> TagExistsAsync(ITag tag)
+    public async Task<bool> TagExistsAsync(ITag tag)
     {
         try
         {
@@ -825,16 +830,16 @@ public class SqliteEventStore : IHotEventStore, IStorageDurabilityDescriptorProv
             cmd.Parameters.AddWithValue(ParamServiceId, serviceId);
 
             var count = Convert.ToInt64(await cmd.ExecuteScalarAsync());
-            return ResultBox.FromValue(count > 0);
+            return count > 0;
         }
         catch (Exception ex)
         {
             _logger?.LogError(ex, "Error checking tag existence in SQLite: {Tag}", tag.GetTag());
-            return ResultBox.Error<bool>(ex);
+            throw;
         }
     }
 
-    public async Task<ResultBox<long>> GetEventCountAsync(SortableUniqueId? since = null)
+    public async Task<long> GetEventCountAsync(SortableUniqueId? since = null)
     {
         try
         {
@@ -855,16 +860,16 @@ public class SqliteEventStore : IHotEventStore, IStorageDurabilityDescriptorProv
             cmd.Parameters.AddWithValue(ParamServiceId, serviceId);
 
             var count = Convert.ToInt64(await cmd.ExecuteScalarAsync());
-            return ResultBox.FromValue(count);
+            return count;
         }
         catch (Exception ex)
         {
             _logger?.LogError(ex, "Error getting event count from SQLite");
-            return ResultBox.Error<long>(ex);
+            throw;
         }
     }
 
-    public async Task<ResultBox<string>> GetLatestSortableUniqueIdAsync()
+    public async Task<string> GetLatestSortableUniqueIdAsync()
     {
         try
         {
@@ -878,16 +883,16 @@ public class SqliteEventStore : IHotEventStore, IStorageDurabilityDescriptorProv
 
             var result = await cmd.ExecuteScalarAsync();
             var latest = result as string ?? string.Empty;
-            return ResultBox.FromValue(latest);
+            return latest;
         }
         catch (Exception ex)
         {
             _logger?.LogError(ex, "Error getting latest SortableUniqueId from SQLite");
-            return ResultBox.Error<string>(ex);
+            throw;
         }
     }
 
-    public async Task<ResultBox<IEnumerable<TagInfo>>> GetAllTagsAsync(string? tagGroup = null)
+    public async Task<IEnumerable<TagInfo>> GetAllTagsAsync(string? tagGroup = null)
     {
         try
         {
@@ -948,12 +953,12 @@ public class SqliteEventStore : IHotEventStore, IStorageDurabilityDescriptorProv
                 tags.Add(new TagInfo(tag, group, eventCount, firstId, lastId, firstEventAt, lastEventAt));
             }
 
-            return ResultBox.FromValue<IEnumerable<TagInfo>>(tags);
+            return tags;
         }
         catch (Exception ex)
         {
             _logger?.LogError(ex, "Error getting all tags from SQLite");
-            return ResultBox.Error<IEnumerable<TagInfo>>(ex);
+            throw;
         }
     }
 
@@ -1092,7 +1097,7 @@ public class SqliteEventStore : IHotEventStore, IStorageDurabilityDescriptorProv
         }
     }
 
-    public async Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null)
+    public async Task<IEnumerable<SerializableEvent>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null)
     {
         try
         {
@@ -1135,16 +1140,16 @@ public class SqliteEventStore : IHotEventStore, IStorageDurabilityDescriptorProv
                 }
             }
 
-            return ResultBox.FromValue<IEnumerable<SerializableEvent>>(events);
+            return events;
         }
         catch (Exception ex)
         {
             _logger?.LogError(ex, "Error reading all serializable events from SQLite");
-            return ResultBox.Error<IEnumerable<SerializableEvent>>(ex);
+            throw;
         }
     }
 
-    public async Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(
+    public async Task<IEnumerable<SerializableEvent>> ReadAllSerializableEventsAsync(
         SortableUniqueId? since,
         int? maxCount)
     {
@@ -1208,16 +1213,16 @@ public class SqliteEventStore : IHotEventStore, IStorageDurabilityDescriptorProv
                 }
             }
 
-            return ResultBox.FromValue<IEnumerable<SerializableEvent>>(events);
+            return events;
         }
         catch (Exception ex)
         {
             _logger?.LogError(ex, "Error reading all serializable events from SQLite with maxCount");
-            return ResultBox.Error<IEnumerable<SerializableEvent>>(ex);
+            throw;
         }
     }
 
-    public async Task<ResultBox<IEnumerable<SerializableEvent>>> ReadSerializableEventsByTagAsync(ITag tag, SortableUniqueId? since = null)
+    public async Task<IEnumerable<SerializableEvent>> ReadSerializableEventsByTagAsync(ITag tag, SortableUniqueId? since = null)
     {
         try
         {
@@ -1265,12 +1270,12 @@ public class SqliteEventStore : IHotEventStore, IStorageDurabilityDescriptorProv
                 }
             }
 
-            return ResultBox.FromValue<IEnumerable<SerializableEvent>>(events);
+            return events;
         }
         catch (Exception ex)
         {
             _logger?.LogError(ex, "Error reading serializable events by tag from SQLite: {Tag}", tag.GetTag());
-            return ResultBox.Error<IEnumerable<SerializableEvent>>(ex);
+            throw;
         }
     }
 
@@ -1278,7 +1283,7 @@ public class SqliteEventStore : IHotEventStore, IStorageDurabilityDescriptorProv
     ///     Streams a tag from the SQLite reader. Bounds stay in SQL; cancellation reaches opening the connection,
     ///     executing the command, and reading every row.
     /// </summary>
-    public async Task<ResultBox<SerializableEventStreamReadResult>> StreamSerializableEventsByTagAsync(
+    public async Task<SerializableEventStreamReadResult> StreamSerializableEventsByTagAsync(
         ITag tag,
         SortableUniqueId? since,
         SortableUniqueId? until,
@@ -1344,7 +1349,7 @@ public class SqliteEventStore : IHotEventStore, IStorageDurabilityDescriptorProv
                 lastSortableUniqueId = serializableEvent.SortableUniqueIdValue;
             }
 
-            return ResultBox.FromValue(new SerializableEventStreamReadResult(count, lastSortableUniqueId));
+            return new SerializableEventStreamReadResult(count, lastSortableUniqueId);
         }
         catch (OperationCanceledException)
         {
@@ -1353,29 +1358,20 @@ public class SqliteEventStore : IHotEventStore, IStorageDurabilityDescriptorProv
         catch (Exception ex)
         {
             _logger?.LogError(ex, "Error streaming serializable events by tag from SQLite: {Tag}", tag.GetTag());
-            return ResultBox.Error<SerializableEventStreamReadResult>(ex);
+            throw;
         }
     }
 
-    public async Task<ResultBox<SerializableEvent>> ReadSerializableEventAsync(Guid eventId)
-    {
-        var typedResult = await ReadEventAsync(eventId);
-        if (!typedResult.IsSuccess)
-        {
-            return ResultBox.Error<SerializableEvent>(typedResult.GetException());
-        }
+    public async Task<SerializableEvent?> ReadSerializableEventAsync(Guid eventId) =>
+        (await ReadEventAsync(eventId))?.ToSerializableEvent(_eventTypes);
 
-        return ResultBox.FromValue(typedResult.GetValue().ToSerializableEvent(_eventTypes));
-    }
-
-    public async Task<ResultBox<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>> WriteSerializableEventsAsync(
+    public async Task<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)> WriteSerializableEventsAsync(
         IEnumerable<SerializableEvent> events)
     {
         var eventList = events.ToList();
         if (eventList.Count == 0)
         {
-            return ResultBox.FromValue<(IReadOnlyList<SerializableEvent>, IReadOnlyList<TagWriteResult>)>(
-                (Array.Empty<SerializableEvent>(), Array.Empty<TagWriteResult>()));
+            return (Array.Empty<SerializableEvent>(), Array.Empty<TagWriteResult>());
         }
 
         var serviceId = CurrentServiceId;
@@ -1443,8 +1439,7 @@ public class SqliteEventStore : IHotEventStore, IStorageDurabilityDescriptorProv
 
                 await transaction.CommitAsync();
 
-                return ResultBox.FromValue<(IReadOnlyList<SerializableEvent>, IReadOnlyList<TagWriteResult>)>(
-                    (eventList, tagWrites));
+                return (eventList, tagWrites);
             }
             catch
             {
@@ -1455,7 +1450,7 @@ public class SqliteEventStore : IHotEventStore, IStorageDurabilityDescriptorProv
         catch (Exception ex)
         {
             _logger?.LogError(ex, "Error writing serializable events to SQLite");
-            return ResultBox.Error<(IReadOnlyList<SerializableEvent>, IReadOnlyList<TagWriteResult>)>(ex);
+            throw;
         }
         finally
         {

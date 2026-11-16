@@ -1,7 +1,6 @@
 using Amazon.DynamoDBv2;
 using Amazon.DynamoDBv2.Model;
 using Microsoft.Extensions.Logging;
-using ResultBoxes;
 using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.DynamoDB.Models;
@@ -42,7 +41,7 @@ public partial class DynamoDbEventStore : IHotEventStore, IStorageDurabilityDesc
     ///     read-back rather than being silently idempotency-collapsed by DynamoDB. The unconditional write path is
     ///     untouched.
     /// </summary>
-    public Task<ResultBox<ConditionalAppendReceipt>> AppendIfUniqueAsync(
+    public Task<ConditionalAppendReceipt> AppendIfUniqueAsync(
         ConditionalAppendRequest request,
         CancellationToken cancellationToken = default) =>
         _conditionalAppend.AppendIfUniqueAsync(request, cancellationToken);
@@ -231,7 +230,7 @@ public partial class DynamoDbEventStore : IHotEventStore, IStorageDurabilityDesc
     /// <summary>
     ///     Reads all events ordered by sortable unique ID.
     /// </summary>
-    public async Task<ResultBox<IEnumerable<Event>>> ReadAllEventsAsync(SortableUniqueId? since = null, int? maxCount = null)
+    public async Task<IEnumerable<Event>> ReadAllEventsAsync(SortableUniqueId? since = null, int? maxCount = null)
     {
         try
         {
@@ -261,22 +260,25 @@ public partial class DynamoDbEventStore : IHotEventStore, IStorageDurabilityDesc
                 ordered = ordered.Take(maxCount.Value).ToList();
             }
 
-            return ResultBox.FromValue<IEnumerable<Event>>(ordered);
+            return ordered;
         }
         catch (Exception ex)
         {
             if (_logger != null)
                 LogReadFailed(_logger, ex.Message, ex);
-            return ResultBox.Error<IEnumerable<Event>>(ex);
+            throw;
         }
     }
 
     /// <summary>
     ///     Reads events for a given tag.
     /// </summary>
-    public async Task<ResultBox<IEnumerable<Event>>> ReadEventsByTagAsync(ITag tag, SortableUniqueId? since = null)
+    public async Task<IEnumerable<Event>> ReadEventsByTagAsync(ITag tag, SortableUniqueId? since = null)
     {
         ArgumentNullException.ThrowIfNull(tag);
+        // Failures 10.x returned as a failed result without logging (a dangling tag entry, an unreadable payload)
+        // keep their exception but are not logged as read failures.
+        Exception? unloggedFailure = null;
         try
         {
             await _context.EnsureTablesAsync().ConfigureAwait(false);
@@ -287,7 +289,7 @@ public partial class DynamoDbEventStore : IHotEventStore, IStorageDurabilityDesc
             var tagItems = await QueryTagsAsync(tagPk, since).ConfigureAwait(false);
 
             if (tagItems.Count == 0)
-                return ResultBox.FromValue<IEnumerable<Event>>(Array.Empty<Event>());
+                return Array.Empty<Event>();
 
             var eventIds = tagItems.Select(t => t.EventId).Distinct().ToList();
             var eventsById = await BatchGetEventsAsync(serviceId, eventIds).ConfigureAwait(false);
@@ -297,32 +299,41 @@ public partial class DynamoDbEventStore : IHotEventStore, IStorageDurabilityDesc
             {
                 if (!eventsById.TryGetValue(tagItem.EventId, out var dynEvent))
                 {
-                    return ResultBox.Error<IEnumerable<Event>>(
-                        new InvalidOperationException($"Event not found for tag entry: {tagItem.EventId}"));
+                    throw unloggedFailure = new InvalidOperationException($"Event not found for tag entry: {tagItem.EventId}");
                 }
 
-                var payloadResult = DeserializeEventPayload(dynEvent.EventType, dynEvent.Payload);
-                if (!payloadResult.IsSuccess)
-                    return ResultBox.Error<IEnumerable<Event>>(payloadResult.GetException());
+                IEventPayload payload;
+                try
+                {
+                    payload = DeserializeEventPayload(dynEvent.EventType, dynEvent.Payload);
+                }
+                catch (Exception deserializeFailure)
+                {
+                    unloggedFailure = deserializeFailure;
+                    throw;
+                }
 
-                result.Add(dynEvent.ToEvent(payloadResult.GetValue()));
+                result.Add(dynEvent.ToEvent(payload));
             }
 
-            return ResultBox.FromValue<IEnumerable<Event>>(result);
+            return result;
         }
         catch (Exception ex)
         {
-            if (_logger != null)
+            if (_logger != null && !ReferenceEquals(ex, unloggedFailure))
                 LogReadFailed(_logger, ex.Message, ex);
-            return ResultBox.Error<IEnumerable<Event>>(ex);
+            throw;
         }
     }
 
     /// <summary>
-    ///     Reads a single event by ID.
+    ///     Reads a single event by ID. Returns <c>null</c> when no event with <paramref name="eventId" /> exists.
     /// </summary>
-    public async Task<ResultBox<Event>> ReadEventAsync(Guid eventId)
+    public async Task<Event?> ReadEventAsync(Guid eventId)
     {
+        // Failures 10.x returned as a failed result without logging (a dangling tag entry, an unreadable payload)
+        // keep their exception but are not logged as read failures.
+        Exception? unloggedFailure = null;
         try
         {
             await _context.EnsureTablesAsync().ConfigureAwait(false);
@@ -337,27 +348,34 @@ public partial class DynamoDbEventStore : IHotEventStore, IStorageDurabilityDesc
             }).ConfigureAwait(false);
 
             if (response.Item == null || response.Item.Count == 0)
-                return ResultBox.Error<Event>(new InvalidOperationException($"Event with ID {eventId} not found"));
+                return null;
 
             var dynEvent = DynamoEvent.FromAttributeValues(response.Item);
-            var payloadResult = DeserializeEventPayload(dynEvent.EventType, dynEvent.Payload);
-            if (!payloadResult.IsSuccess)
-                return ResultBox.Error<Event>(payloadResult.GetException());
+            IEventPayload payload;
+            try
+            {
+                payload = DeserializeEventPayload(dynEvent.EventType, dynEvent.Payload);
+            }
+            catch (Exception deserializeFailure)
+            {
+                unloggedFailure = deserializeFailure;
+                throw;
+            }
 
-            return ResultBox.FromValue(dynEvent.ToEvent(payloadResult.GetValue()));
+            return dynEvent.ToEvent(payload);
         }
         catch (Exception ex)
         {
-            if (_logger != null)
+            if (_logger != null && !ReferenceEquals(ex, unloggedFailure))
                 LogReadFailed(_logger, ex.Message, ex);
-            return ResultBox.Error<Event>(ex);
+            throw;
         }
     }
 
     /// <summary>
     ///     Writes events and associated tag records.
     /// </summary>
-    public async Task<ResultBox<(IReadOnlyList<Event> Events, IReadOnlyList<TagWriteResult> TagWrites)>> WriteEventsAsync(
+    public async Task<(IReadOnlyList<Event> Events, IReadOnlyList<TagWriteResult> TagWrites)> WriteEventsAsync(
         IEnumerable<Event> events)
     {
         try
@@ -368,9 +386,8 @@ public partial class DynamoDbEventStore : IHotEventStore, IStorageDurabilityDesc
             var eventsList = events.ToList();
             if (eventsList.Count == 0)
             {
-                return ResultBox.FromValue(
-                    (Events: (IReadOnlyList<Event>)Array.Empty<Event>(),
-                        TagWrites: (IReadOnlyList<TagWriteResult>)Array.Empty<TagWriteResult>()));
+                return (Events: (IReadOnlyList<Event>)Array.Empty<Event>(),
+                        TagWrites: (IReadOnlyList<TagWriteResult>)Array.Empty<TagWriteResult>());
             }
 
             var eventItems = eventsList
@@ -393,22 +410,22 @@ public partial class DynamoDbEventStore : IHotEventStore, IStorageDurabilityDesc
             }
 
             var tagWrites = BuildTagWriteResults(eventsList);
-            return ResultBox.FromValue((
+            return (
                 Events: (IReadOnlyList<Event>)eventsList,
-                TagWrites: (IReadOnlyList<TagWriteResult>)tagWrites));
+                TagWrites: (IReadOnlyList<TagWriteResult>)tagWrites);
         }
         catch (Exception ex)
         {
             if (_logger != null)
                 LogWriteFailed(_logger, ex.Message, ex);
-            return ResultBox.Error<(IReadOnlyList<Event> Events, IReadOnlyList<TagWriteResult> TagWrites)>(ex);
+            throw;
         }
     }
 
     /// <summary>
     ///     Reads tag streams for the specified tag.
     /// </summary>
-    public async Task<ResultBox<IEnumerable<TagStream>>> ReadTagsAsync(ITag tag)
+    public async Task<IEnumerable<TagStream>> ReadTagsAsync(ITag tag)
     {
         ArgumentNullException.ThrowIfNull(tag);
         try
@@ -424,20 +441,20 @@ public partial class DynamoDbEventStore : IHotEventStore, IStorageDurabilityDesc
                 .Select(t => new TagStream(t.TagString, Guid.Parse(t.EventId), t.SortableUniqueId))
                 .ToList();
 
-            return ResultBox.FromValue<IEnumerable<TagStream>>(streams);
+            return streams;
         }
         catch (Exception ex)
         {
             if (_logger != null)
                 LogReadFailed(_logger, ex.Message, ex);
-            return ResultBox.Error<IEnumerable<TagStream>>(ex);
+            throw;
         }
     }
 
     /// <summary>
     ///     Gets the latest tag state for the specified tag.
     /// </summary>
-    public async Task<ResultBox<TagState>> GetLatestTagAsync(ITag tag)
+    public async Task<TagState> GetLatestTagAsync(ITag tag)
     {
         ArgumentNullException.ThrowIfNull(tag);
         try
@@ -466,40 +483,38 @@ public partial class DynamoDbEventStore : IHotEventStore, IStorageDurabilityDesc
 
             if (latest == null)
             {
-                return ResultBox.FromValue(
-                    new TagState(
+                return new TagState(
                         new EmptyTagStatePayload(),
                         0,
                         string.Empty,
                         tag.GetTagGroup(),
                         tag.GetTagContent(),
                         string.Empty,
-                        string.Empty));
+                        string.Empty);
             }
 
             var dynTag = DynamoTag.FromAttributeValues(latest);
-            return ResultBox.FromValue(
-                new TagState(
+            return new TagState(
                     new EmptyTagStatePayload(),
                     0,
                     dynTag.SortableUniqueId,
                     tag.GetTagGroup(),
                     tag.GetTagContent(),
                     string.Empty,
-                    string.Empty));
+                    string.Empty);
         }
         catch (Exception ex)
         {
             if (_logger != null)
                 LogReadFailed(_logger, ex.Message, ex);
-            return ResultBox.Error<TagState>(ex);
+            throw;
         }
     }
 
     /// <summary>
     ///     Checks whether a tag exists.
     /// </summary>
-    public async Task<ResultBox<bool>> TagExistsAsync(ITag tag)
+    public async Task<bool> TagExistsAsync(ITag tag)
     {
         ArgumentNullException.ThrowIfNull(tag);
         try
@@ -522,20 +537,20 @@ public partial class DynamoDbEventStore : IHotEventStore, IStorageDurabilityDesc
                 ConsistentRead = _options.UseConsistentReads
             }).ConfigureAwait(false);
 
-            return ResultBox.FromValue(response.Count > 0);
+            return response.Count > 0;
         }
         catch (Exception ex)
         {
             if (_logger != null)
                 LogReadFailed(_logger, ex.Message, ex);
-            return ResultBox.Error<bool>(ex);
+            throw;
         }
     }
 
     /// <summary>
     ///     Returns the total event count optionally after a specific sortable ID.
     /// </summary>
-    public async Task<ResultBox<long>> GetEventCountAsync(SortableUniqueId? since = null)
+    public async Task<long> GetEventCountAsync(SortableUniqueId? since = null)
     {
         try
         {
@@ -556,17 +571,17 @@ public partial class DynamoDbEventStore : IHotEventStore, IStorageDurabilityDesc
                 total += count;
             }
 
-            return ResultBox.FromValue(total);
+            return total;
         }
         catch (Exception ex)
         {
             if (_logger != null)
                 LogReadFailed(_logger, ex.Message, ex);
-            return ResultBox.Error<long>(ex);
+            throw;
         }
     }
 
-    public async Task<ResultBox<string>> GetLatestSortableUniqueIdAsync()
+    public async Task<string> GetLatestSortableUniqueIdAsync()
     {
         try
         {
@@ -611,20 +626,20 @@ public partial class DynamoDbEventStore : IHotEventStore, IStorageDurabilityDesc
                 .DefaultIfEmpty(string.Empty)
                 .Max(StringComparer.Ordinal) ?? string.Empty;
 
-            return ResultBox.FromValue(latest);
+            return latest;
         }
         catch (Exception ex)
         {
             if (_logger != null)
                 LogReadFailed(_logger, ex.Message, ex);
-            return ResultBox.Error<string>(ex);
+            throw;
         }
     }
 
     /// <summary>
     ///     Returns all tag infos, optionally filtered by tag group.
     /// </summary>
-    public async Task<ResultBox<IEnumerable<TagInfo>>> GetAllTagsAsync(string? tagGroup = null)
+    public async Task<IEnumerable<TagInfo>> GetAllTagsAsync(string? tagGroup = null)
     {
         try
         {
@@ -656,13 +671,13 @@ public partial class DynamoDbEventStore : IHotEventStore, IStorageDurabilityDesc
                 .ThenBy(t => t.Tag)
                 .ToList();
 
-            return ResultBox.FromValue<IEnumerable<TagInfo>>(grouped);
+            return grouped;
         }
         catch (Exception ex)
         {
             if (_logger != null)
                 LogReadFailed(_logger, ex.Message, ex);
-            return ResultBox.Error<IEnumerable<TagInfo>>(ex);
+            throw;
         }
     }
 
@@ -703,10 +718,8 @@ public partial class DynamoDbEventStore : IHotEventStore, IStorageDurabilityDesc
             foreach (var item in response.Items)
             {
                 var dynEvent = DynamoEvent.FromAttributeValues(item);
-                var payloadResult = DeserializeEventPayload(dynEvent.EventType, dynEvent.Payload);
-                if (!payloadResult.IsSuccess)
-                    throw payloadResult.GetException();
-                events.Add(dynEvent.ToEvent(payloadResult.GetValue()));
+                var payload = DeserializeEventPayload(dynEvent.EventType, dynEvent.Payload);
+                events.Add(dynEvent.ToEvent(payload));
             }
 
             totalRead += response.Count ?? 0;
@@ -1118,26 +1131,11 @@ public partial class DynamoDbEventStore : IHotEventStore, IStorageDurabilityDesc
     private string SerializeEventPayload(IEventPayload payload) =>
         _eventTypes.SerializeEventPayload(payload);
 
-    private ResultBox<IEventPayload> DeserializeEventPayload(string eventType, string json)
-    {
-        try
-        {
-            var payload = _eventTypes.DeserializeEventPayload(eventType, json);
-            if (payload == null)
-            {
-                return ResultBox.Error<IEventPayload>(
-                    new InvalidOperationException(
-                        $"Failed to deserialize event payload of type {eventType}. " +
-                        "Make sure the event type is registered in DcbDomainTypes."));
-            }
-
-            return ResultBox.FromValue(payload);
-        }
-        catch (Exception ex)
-        {
-            return ResultBox.Error<IEventPayload>(ex);
-        }
-    }
+    private IEventPayload DeserializeEventPayload(string eventType, string json) =>
+        _eventTypes.DeserializeEventPayload(eventType, json)
+        ?? throw new InvalidOperationException(
+            $"Failed to deserialize event payload of type {eventType}. " +
+            "Make sure the event type is registered in DcbDomainTypes.");
 
     private string GetGsiPartitionKey(string sortableUniqueId, string serviceId)
     {
@@ -1192,7 +1190,7 @@ public partial class DynamoDbEventStore : IHotEventStore, IStorageDurabilityDesc
     /// <summary>
     ///     Reads all events as SerializableEvent (no payload deserialization).
     /// </summary>
-    public async Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null)
+    public async Task<IEnumerable<SerializableEvent>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null)
         => await ReadAllSerializableEventsAsync(since, maxCount: null).ConfigureAwait(false);
 
     /// <summary>
@@ -1200,7 +1198,7 @@ public partial class DynamoDbEventStore : IHotEventStore, IStorageDurabilityDesc
     /// </summary>
     /// <param name="since">Optional: only return events after this ID.</param>
     /// <param name="maxCount">Optional: maximum number of events to return.</param>
-    public async Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(
+    public async Task<IEnumerable<SerializableEvent>> ReadAllSerializableEventsAsync(
         SortableUniqueId? since,
         int? maxCount)
     {
@@ -1232,22 +1230,25 @@ public partial class DynamoDbEventStore : IHotEventStore, IStorageDurabilityDesc
                 ordered = ordered.Take(maxCount.Value).ToList();
             }
 
-            return ResultBox.FromValue<IEnumerable<SerializableEvent>>(ordered);
+            return ordered;
         }
         catch (Exception ex)
         {
             if (_logger != null)
                 LogReadFailed(_logger, ex.Message, ex);
-            return ResultBox.Error<IEnumerable<SerializableEvent>>(ex);
+            throw;
         }
     }
 
     /// <summary>
     ///     Reads events for a given tag as SerializableEvent (no payload deserialization).
     /// </summary>
-    public async Task<ResultBox<IEnumerable<SerializableEvent>>> ReadSerializableEventsByTagAsync(ITag tag, SortableUniqueId? since = null)
+    public async Task<IEnumerable<SerializableEvent>> ReadSerializableEventsByTagAsync(ITag tag, SortableUniqueId? since = null)
     {
         ArgumentNullException.ThrowIfNull(tag);
+        // Failures 10.x returned as a failed result without logging (a dangling tag entry, an unreadable payload)
+        // keep their exception but are not logged as read failures.
+        Exception? unloggedFailure = null;
         try
         {
             await _context.EnsureTablesAsync().ConfigureAwait(false);
@@ -1258,7 +1259,7 @@ public partial class DynamoDbEventStore : IHotEventStore, IStorageDurabilityDesc
             var tagItems = await QueryTagsAsync(tagPk, since).ConfigureAwait(false);
 
             if (tagItems.Count == 0)
-                return ResultBox.FromValue<IEnumerable<SerializableEvent>>(Array.Empty<SerializableEvent>());
+                return Array.Empty<SerializableEvent>();
 
             var eventIds = tagItems.Select(t => t.EventId).Distinct().ToList();
             var eventsById = await BatchGetEventsAsync(serviceId, eventIds).ConfigureAwait(false);
@@ -1268,8 +1269,7 @@ public partial class DynamoDbEventStore : IHotEventStore, IStorageDurabilityDesc
             {
                 if (!eventsById.TryGetValue(tagItem.EventId, out var dynEvent))
                 {
-                    return ResultBox.Error<IEnumerable<SerializableEvent>>(
-                        new InvalidOperationException($"Event not found for tag entry: {tagItem.EventId}"));
+                    throw unloggedFailure = new InvalidOperationException($"Event not found for tag entry: {tagItem.EventId}");
                 }
 
                 result.Add(new SerializableEvent(
@@ -1284,34 +1284,27 @@ public partial class DynamoDbEventStore : IHotEventStore, IStorageDurabilityDesc
                     dynEvent.EventType));
             }
 
-            return ResultBox.FromValue<IEnumerable<SerializableEvent>>(result);
+            return result;
         }
         catch (Exception ex)
         {
-            if (_logger != null)
+            if (_logger != null && !ReferenceEquals(ex, unloggedFailure))
                 LogReadFailed(_logger, ex.Message, ex);
-            return ResultBox.Error<IEnumerable<SerializableEvent>>(ex);
+            throw;
         }
     }
 
     /// <summary>
     ///     Reads a single event as <see cref="SerializableEvent" /> without exposing typed payload conversion to callers.
+    ///     Returns <c>null</c> when no event with <paramref name="eventId" /> exists.
     /// </summary>
-    public async Task<ResultBox<SerializableEvent>> ReadSerializableEventAsync(Guid eventId)
-    {
-        var typedResult = await ReadEventAsync(eventId).ConfigureAwait(false);
-        if (!typedResult.IsSuccess)
-        {
-            return ResultBox.Error<SerializableEvent>(typedResult.GetException());
-        }
-
-        return ResultBox.FromValue(typedResult.GetValue().ToSerializableEvent(_eventTypes));
-    }
+    public async Task<SerializableEvent?> ReadSerializableEventAsync(Guid eventId) =>
+        (await ReadEventAsync(eventId).ConfigureAwait(false))?.ToSerializableEvent(_eventTypes);
 
     /// <summary>
     ///     Writes pre-serialized events and associated tag records.
     /// </summary>
-    public async Task<ResultBox<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>> WriteSerializableEventsAsync(
+    public async Task<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)> WriteSerializableEventsAsync(
         IEnumerable<SerializableEvent> events)
     {
         try
@@ -1322,9 +1315,8 @@ public partial class DynamoDbEventStore : IHotEventStore, IStorageDurabilityDesc
             var eventsList = events.ToList();
             if (eventsList.Count == 0)
             {
-                return ResultBox.FromValue(
-                    (Events: (IReadOnlyList<SerializableEvent>)Array.Empty<SerializableEvent>(),
-                        TagWrites: (IReadOnlyList<TagWriteResult>)Array.Empty<TagWriteResult>()));
+                return (Events: (IReadOnlyList<SerializableEvent>)Array.Empty<SerializableEvent>(),
+                        TagWrites: (IReadOnlyList<TagWriteResult>)Array.Empty<TagWriteResult>());
             }
 
             var eventItems = eventsList
@@ -1351,15 +1343,15 @@ public partial class DynamoDbEventStore : IHotEventStore, IStorageDurabilityDesc
                 .Select(tag => new TagWriteResult(tag, 1, DateTimeOffset.UtcNow))
                 .ToList();
 
-            return ResultBox.FromValue((
+            return (
                 Events: (IReadOnlyList<SerializableEvent>)eventsList,
-                TagWrites: (IReadOnlyList<TagWriteResult>)tagWrites));
+                TagWrites: (IReadOnlyList<TagWriteResult>)tagWrites);
         }
         catch (Exception ex)
         {
             if (_logger != null)
                 LogWriteFailed(_logger, ex.Message, ex);
-            return ResultBox.Error<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>(ex);
+            throw;
         }
     }
 

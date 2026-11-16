@@ -8,6 +8,7 @@ using Sekiban.Dcb.Events;
 using Sekiban.Dcb.ServiceId;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
+using Sekiban.Dcb.TestSupport;
 
 namespace Sekiban.Dcb.Tests;
 
@@ -31,7 +32,7 @@ public sealed class HybridTaggedStreamCapabilityTests
             HybridTag.Instance,
             null,
             null,
-            _ => ValueTask.CompletedTask);
+            _ => ValueTask.CompletedTask).AsResultBoxAsync();
 
         Assert.False(result.IsSuccess);
         Assert.Equal(0, hot.StreamCalls);
@@ -57,7 +58,7 @@ public sealed class HybridTaggedStreamCapabilityTests
             {
                 callbackCount++;
                 return ValueTask.CompletedTask;
-            });
+            }).AsResultBoxAsync();
 
         Assert.True(result.IsSuccess, result.IsSuccess ? string.Empty : result.GetException().ToString());
         Assert.Equal(1, hot.StreamCalls);
@@ -87,36 +88,36 @@ public sealed class HybridTaggedStreamCapabilityTests
     // that scope boundary explicit without importing the unrun ColdEvents.Tests-only test double.
     private sealed class UnusedColdObjectStorage : IColdObjectStorage
     {
-        public Task<ResultBox<ColdStorageObject>> GetAsync(string path, CancellationToken ct) =>
-            Task.FromResult(ResultBox.Error<ColdStorageObject>(new InvalidOperationException("Cold storage is out of route.")));
-        public Task<ResultBox<bool>> PutAsync(string path, Stream data, string? expectedETag, CancellationToken ct) =>
-            Task.FromResult(ResultBox.Error<bool>(new InvalidOperationException("Cold storage is out of route.")));
-        public Task<ResultBox<bool>> PutAsync(string path, byte[] data, string? expectedETag, CancellationToken ct) =>
-            Task.FromResult(ResultBox.Error<bool>(new InvalidOperationException("Cold storage is out of route.")));
-        public Task<ResultBox<IReadOnlyList<string>>> ListAsync(string prefix, CancellationToken ct) =>
-            Task.FromResult(ResultBox.Error<IReadOnlyList<string>>(new InvalidOperationException("Cold storage is out of route.")));
-        public Task<ResultBox<bool>> DeleteAsync(string path, CancellationToken ct) =>
-            Task.FromResult(ResultBox.Error<bool>(new InvalidOperationException("Cold storage is out of route.")));
+        public Task<ColdStorageObject?> GetAsync(string path, CancellationToken ct) =>
+            Task.FromException<ColdStorageObject?>(new InvalidOperationException("Cold storage is out of route."));
+        public Task<bool> PutAsync(string path, Stream data, string? expectedETag, CancellationToken ct) =>
+            Task.FromException<bool>(new InvalidOperationException("Cold storage is out of route."));
+        public Task<bool> PutAsync(string path, byte[] data, string? expectedETag, CancellationToken ct) =>
+            Task.FromException<bool>(new InvalidOperationException("Cold storage is out of route."));
+        public Task<IReadOnlyList<string>> ListAsync(string prefix, CancellationToken ct) =>
+            Task.FromException<IReadOnlyList<string>>(new InvalidOperationException("Cold storage is out of route."));
+        public Task<bool> DeleteAsync(string path, CancellationToken ct) =>
+            Task.FromException<bool>(new InvalidOperationException("Cold storage is out of route."));
     }
 
     private class SilentStore : IEventStore
     {
-        public Task<ResultBox<IEnumerable<TagStream>>> ReadTagsAsync(ITag tag) => throw new NotSupportedException();
-        public Task<ResultBox<TagState>> GetLatestTagAsync(ITag tag) => throw new NotSupportedException();
-        public Task<ResultBox<bool>> TagExistsAsync(ITag tag) => throw new NotSupportedException();
-        public Task<ResultBox<long>> GetEventCountAsync(SortableUniqueId? since = null) => throw new NotSupportedException();
-        public Task<ResultBox<IEnumerable<TagInfo>>> GetAllTagsAsync(string? tagGroup = null) => throw new NotSupportedException();
-        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null) =>
+        public Task<IEnumerable<TagStream>> ReadTagsAsync(ITag tag) => throw new NotSupportedException();
+        public Task<TagState> GetLatestTagAsync(ITag tag) => throw new NotSupportedException();
+        public Task<bool> TagExistsAsync(ITag tag) => throw new NotSupportedException();
+        public Task<long> GetEventCountAsync(SortableUniqueId? since = null) => throw new NotSupportedException();
+        public Task<IEnumerable<TagInfo>> GetAllTagsAsync(string? tagGroup = null) => throw new NotSupportedException();
+        public Task<IEnumerable<SerializableEvent>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null) =>
             throw new NotSupportedException();
-        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(SortableUniqueId? since, int? maxCount) =>
+        public Task<IEnumerable<SerializableEvent>> ReadAllSerializableEventsAsync(SortableUniqueId? since, int? maxCount) =>
             throw new NotSupportedException();
-        public Task<ResultBox<SerializableEvent>> ReadSerializableEventAsync(Guid eventId) => throw new NotSupportedException();
-        public virtual Task<ResultBox<IEnumerable<SerializableEvent>>> ReadSerializableEventsByTagAsync(
+        public Task<SerializableEvent?> ReadSerializableEventAsync(Guid eventId) => throw new NotSupportedException();
+        public virtual Task<IEnumerable<SerializableEvent>> ReadSerializableEventsByTagAsync(
             ITag tag,
             SortableUniqueId? since = null) => throw new NotSupportedException();
-        public Task<ResultBox<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>>
+        public Task<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>
             WriteSerializableEventsAsync(IEnumerable<SerializableEvent> events) => throw new NotSupportedException();
-        public Task<ResultBox<string>> GetLatestSortableUniqueIdAsync() => throw new NotSupportedException();
+        public Task<string> GetLatestSortableUniqueIdAsync() => throw new NotSupportedException();
     }
 
     private sealed class ListTripwireStreamingStore : SilentStore, IStreamingTaggedSerializableEventStore
@@ -124,7 +125,7 @@ public sealed class HybridTaggedStreamCapabilityTests
         public int StreamCalls { get; private set; }
         public int ListReadCalls { get; private set; }
 
-        public override Task<ResultBox<IEnumerable<SerializableEvent>>> ReadSerializableEventsByTagAsync(
+        public override Task<IEnumerable<SerializableEvent>> ReadSerializableEventsByTagAsync(
             ITag tag,
             SortableUniqueId? since = null)
         {
@@ -132,7 +133,7 @@ public sealed class HybridTaggedStreamCapabilityTests
             throw new InvalidOperationException("Unsupported Hybrid must not call its hot list API.");
         }
 
-        public Task<ResultBox<SerializableEventStreamReadResult>> StreamSerializableEventsByTagAsync(
+        public Task<SerializableEventStreamReadResult> StreamSerializableEventsByTagAsync(
             ITag tag,
             SortableUniqueId? since,
             SortableUniqueId? until,
@@ -153,7 +154,7 @@ public sealed class HybridTaggedStreamCapabilityTests
         public TaggedStreamCapabilityDescriptor DescribeTaggedStream() =>
             TaggedStreamCapabilityDescriptor.Native("honest Hybrid hot store");
 
-        public override Task<ResultBox<IEnumerable<SerializableEvent>>> ReadSerializableEventsByTagAsync(
+        public override Task<IEnumerable<SerializableEvent>> ReadSerializableEventsByTagAsync(
             ITag tag,
             SortableUniqueId? since = null)
         {
@@ -161,7 +162,7 @@ public sealed class HybridTaggedStreamCapabilityTests
             throw new InvalidOperationException("The honest Hybrid stream path must not call its hot list API.");
         }
 
-        public async Task<ResultBox<SerializableEventStreamReadResult>> StreamSerializableEventsByTagAsync(
+        public async Task<SerializableEventStreamReadResult> StreamSerializableEventsByTagAsync(
             ITag tag,
             SortableUniqueId? since,
             SortableUniqueId? until,
@@ -177,7 +178,7 @@ public sealed class HybridTaggedStreamCapabilityTests
                 new List<string> { tag.GetTag() },
                 "HybridEvent");
             await onEvent(@event);
-            return ResultBox.FromValue(new SerializableEventStreamReadResult(1, @event.SortableUniqueIdValue));
+            return new SerializableEventStreamReadResult(1, @event.SortableUniqueIdValue);
         }
     }
 }

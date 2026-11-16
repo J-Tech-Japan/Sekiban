@@ -389,7 +389,7 @@ public class CoreGeneralSekibanExecutor
                 if (deriveFence || expectedTagPositions?.RequiresEnforcement == true)
                 {
                     var enabled = await expectedPositionStore
-                        .EnsureExpectedTagPositionEnforcementEnabledAsync(cancellationToken);
+                        .EnsureExpectedTagPositionEnforcementEnabledAsync(cancellationToken).ToResultBoxAsync();
                     if (!enabled.IsSuccess || !enabled.GetValue())
                     {
                         return ResultBox.Error<ExecutionResult>(enabled.IsSuccess
@@ -554,7 +554,7 @@ public class CoreGeneralSekibanExecutor
                 {
                     var serialized = preparedEvents.Select(e => e.SerializedEvent).ToList();
                     var writeResult = await expectedPositionStore.WriteSerializableEventsWithExpectedTagPositionsAsync(
-                        serialized, expectedTagPositions, cancellationToken);
+                        serialized, expectedTagPositions, cancellationToken).ToResultBoxAsync();
                     if (!writeResult.IsSuccess)
                     {
                         await TagReservationHelper.CancelReservationsAsync(_actorAccessor, reservations);
@@ -570,7 +570,7 @@ public class CoreGeneralSekibanExecutor
                 }
                 else
                 {
-                    var writeResult = await _eventStore.WriteEventsAsync(events, _domainTypes.EventTypes);
+                    var writeResult = await _eventStore.WriteEventsAsync(events, _domainTypes.EventTypes).ToResultBoxAsync();
                     if (!writeResult.IsSuccess)
                     {
                         await TagReservationHelper.CancelReservationsAsync(_actorAccessor, reservations);
@@ -802,7 +802,7 @@ public class CoreGeneralSekibanExecutor
                 if (deriveFence || expectedTagPositions?.RequiresEnforcement == true)
                 {
                     var enabled = await expectedPositionStore
-                        .EnsureExpectedTagPositionEnforcementEnabledAsync(cancellationToken);
+                        .EnsureExpectedTagPositionEnforcementEnabledAsync(cancellationToken).ToResultBoxAsync();
                     if (!enabled.IsSuccess || !enabled.GetValue())
                     {
                         return ResultBox.Error<SerializedCommitResult>(enabled.IsSuccess
@@ -971,7 +971,7 @@ public class CoreGeneralSekibanExecutor
                 if (expectedPositionStore is not null && expectedTagPositions is not null)
                 {
                     var writeResult = await expectedPositionStore.WriteSerializableEventsWithExpectedTagPositionsAsync(
-                        serializableEvents, expectedTagPositions, cancellationToken);
+                        serializableEvents, expectedTagPositions, cancellationToken).ToResultBoxAsync();
                     if (!writeResult.IsSuccess)
                     {
                         await TagReservationHelper.CancelReservationsAsync(_actorAccessor, reservations);
@@ -985,7 +985,7 @@ public class CoreGeneralSekibanExecutor
                 }
                 else
                 {
-                    var writeResult = await _eventStore.WriteSerializableEventsAsync(serializableEvents);
+                    var writeResult = await _eventStore.WriteSerializableEventsAsync(serializableEvents).ToResultBoxAsync();
                     if (!writeResult.IsSuccess)
                     {
                         await TagReservationHelper.CancelReservationsAsync(_actorAccessor, reservations);
@@ -1271,7 +1271,7 @@ public class CoreGeneralSekibanExecutor
     }
 
     public Task<ResultBox<string>> GetLatestSortableUniqueIdAsync() =>
-        _eventStore.GetLatestSortableUniqueIdAsync();
+        _eventStore.GetLatestSortableUniqueIdAsync().ToResultBoxAsync();
 
     public async Task<ResultBox<ProjectionHeadStatus>> GetProjectionHeadStatusAsync(
         string projectorName,
@@ -1365,7 +1365,7 @@ public class CoreGeneralSekibanExecutor
     {
         try
         {
-            var latestSortableUniqueIdResult = await _eventStore.GetLatestSortableUniqueIdAsync();
+            var latestSortableUniqueIdResult = await _eventStore.GetLatestSortableUniqueIdAsync().ToResultBoxAsync();
             if (!latestSortableUniqueIdResult.IsSuccess)
             {
                 return ResultBox.Error<EventStoreHeadStatus>(latestSortableUniqueIdResult.GetException());
@@ -1374,7 +1374,7 @@ public class CoreGeneralSekibanExecutor
             long? totalEventCount = null;
             if (includeTotalEventCount)
             {
-                var totalEventCountResult = await _eventStore.GetEventCountAsync();
+                var totalEventCountResult = await _eventStore.GetEventCountAsync().ToResultBoxAsync();
                 if (!totalEventCountResult.IsSuccess)
                 {
                     return ResultBox.Error<EventStoreHeadStatus>(totalEventCountResult.GetException());
@@ -1533,7 +1533,7 @@ public class CoreGeneralSekibanExecutor
 
             var appendResult = await conditionalStore.AppendIfUniqueAsync(
                 new ConditionalAppendRequest(conditional.IdempotencyKey, serializable),
-                cancellationToken);
+                cancellationToken).ToResultBoxAsync();
             if (!appendResult.IsSuccess)
             {
                 return ResultBox.Error<ExecutionResult>(appendResult.GetException());
@@ -1667,7 +1667,7 @@ public class CoreGeneralSekibanExecutor
 
             var appendResult = await conditionalStore.AppendIfUniqueAsync(
                 new ConditionalAppendRequest(request.IdempotencyKey, serializable),
-                cancellationToken);
+                cancellationToken).ToResultBoxAsync();
             if (!appendResult.IsSuccess)
             {
                 return ResultBox.Error<SerializedConditionalCommitResult>(appendResult.GetException());

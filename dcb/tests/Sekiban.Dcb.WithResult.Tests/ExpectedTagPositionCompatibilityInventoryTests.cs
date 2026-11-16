@@ -116,12 +116,12 @@ public sealed class ExpectedTagPositionCompatibilityInventoryTests
         AssertMethod(
             typeof(IExpectedTagPositionEventStore),
             nameof(IExpectedTagPositionEventStore.EnsureExpectedTagPositionEnforcementEnabledAsync),
-            typeof(Task<ResultBox<bool>>),
+            typeof(Task<bool>),
             typeof(CancellationToken));
         AssertMethod(
             typeof(IExpectedTagPositionEventStore),
             nameof(IExpectedTagPositionEventStore.WriteSerializableEventsWithExpectedTagPositionsAsync),
-            typeof(Task<ResultBox<ExpectedTagPositionWriteResult>>),
+            typeof(Task<ExpectedTagPositionWriteResult>),
             typeof(IReadOnlyList<SerializableEvent>), typeof(ExpectedTagPositionSpecification), typeof(CancellationToken));
     }
 

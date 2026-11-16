@@ -6,6 +6,7 @@ using Sekiban.Dcb.Events;
 using Sekiban.Dcb.ServiceId;
 using Sekiban.Dcb.Tags;
 using Xunit;
+using Sekiban.Dcb.TestSupport;
 
 namespace Sekiban.Dcb.Tests.Cosmos;
 
@@ -35,12 +36,12 @@ public class CosmosLatestTagPagingTests
         var position = SortableUniqueId.GenerateNew();
         var ev = new Event(new StudentCreated(Guid.NewGuid(), "n", 5), position,
             nameof(StudentCreated), Guid.NewGuid(), new EventMetadata("c", "c", "test"), [((ITag)tag).GetTag()]);
-        Assert.True((await store.WriteEventsAsync([ev])).IsSuccess);
+        Assert.True((await store.WriteEventsAsync([ev]).AsResultBoxAsync()).IsSuccess);
         var container = client.Container(options.TagsContainerName);
         container.EmptyFirstQueryPage = true;
         var readsBefore = container.QueryReadTokens.Count;
 
-        var result = await store.GetLatestTagAsync(tag);
+        var result = await store.GetLatestTagAsync(tag).AsResultBoxAsync();
 
         Assert.True(result.IsSuccess);
         Assert.Equal(position, result.GetValue().LastSortedUniqueId);

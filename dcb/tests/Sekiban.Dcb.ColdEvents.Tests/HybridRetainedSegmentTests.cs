@@ -9,6 +9,7 @@ using Sekiban.Dcb.Events;
 using Sekiban.Dcb.ServiceId;
 using Sekiban.Dcb.Storage;
 using Xunit.Abstractions;
+using Sekiban.Dcb.TestSupport;
 
 namespace Sekiban.Dcb.ColdEvents.Tests;
 
@@ -18,12 +19,8 @@ public class HybridRetainedSegmentTests(ITestOutputHelper output)
         "{}"u8.ToArray(), Id(n), Guid.NewGuid(), new EventMetadata("test", "test", "test"), [], service);
     private static string Id(int n) => SortableUniqueId.Generate(new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc).AddSeconds(n), Guid.Empty);
     private static SortableUniqueId? Since(int? n) => n.HasValue ? new(Id(n.Value)) : null;
-    private static async Task<SerializableEvent[]> Read(IEventStore store, int? since, int? count)
-    {
-        var result = await store.ReadAllSerializableEventsAsync(Since(since), count);
-        Assert.True(result.IsSuccess, result.IsSuccess ? null : result.GetException().ToString());
-        return result.GetValue().ToArray();
-    }
+    private static async Task<SerializableEvent[]> Read(IEventStore store, int? since, int? count) =>
+        (await store.ReadAllSerializableEventsAsync(Since(since), count)).ToArray();
 
     [Fact]
     public async Task Counting_100000_events_in_batches_of_100()
@@ -95,7 +92,7 @@ public class HybridRetainedSegmentTests(ITestOutputHelper output)
         SortableUniqueId? since = null;
         while (true)
         {
-            var batch = (await f.Singleton.ReadAllSerializableEventsAsync(since, 3)).GetValue().ToArray();
+            var batch = (await f.Singleton.ReadAllSerializableEventsAsync(since, 3).AsResultBoxAsync()).GetValue().ToArray();
             if (batch.Length == 0) break;
             batches.AddRange(batch);
             since = new(batch[^1].SortableUniqueIdValue);
@@ -282,7 +279,7 @@ public class HybridRetainedSegmentTests(ITestOutputHelper output)
         await f.Seed("a", Enumerable.Range(1, 10).Select(n => Event(n)).ToArray());
         await Read(f.Singleton, null, 2);
         var replacement = Enumerable.Range(1, 15).Select(n => Event(n, "merged")).ToArray();
-        await f.Storage.PutAsync("segments/a/merged", JsonlSegmentWriter.Write(replacement), null, default);
+        await f.Storage.PutAsync("segments/a/merged", JsonlSegmentWriter.Write(replacement), null, default).AsResultBoxAsync();
         var entry = f.Entries["a"][0] with { Path = "segments/a/merged", ToSortableUniqueId = Id(15), EventCount = 15 };
         await f.WriteManifest("a", [entry]);
         await f.Compare(f.Singleton, 8, 20);
@@ -381,10 +378,10 @@ public class HybridRetainedSegmentTests(ITestOutputHelper output)
         await f.Seed("a", Enumerable.Range(1, 10).Select(n => Event(n)).ToArray());
         var stream = (IStreamingSerializableEventStore)f.Singleton;
         for (var i = 0; i < 3; i++)
-            Assert.True((await stream.StreamAllSerializableEventsAsync(Since(i * 2), 2, _ => ValueTask.CompletedTask)).IsSuccess);
+            Assert.True((await stream.StreamAllSerializableEventsAsync(Since(i * 2), 2, _ => ValueTask.CompletedTask).AsResultBoxAsync()).IsSuccess);
         Assert.Equal(3, f.Storage.Opens);
         await Read(f.Singleton, null, 2);
-        await stream.StreamAllSerializableEventsAsync(null, null, _ => ValueTask.CompletedTask);
+        await stream.StreamAllSerializableEventsAsync(null, null, _ => ValueTask.CompletedTask).AsResultBoxAsync();
         var opens = f.Storage.Opens;
         await f.Compare(f.Singleton, 2, 2);
         Assert.Equal(opens, f.Storage.Opens);
@@ -401,8 +398,8 @@ public class HybridRetainedSegmentTests(ITestOutputHelper output)
         await f.Seed("a", cold);
         var path = f.Entries["a"][0].Path;
         if (brokenLine)
-            await f.Storage.PutAsync(path, JsonlSegmentWriter.Write(cold.Take(5).ToArray()).Concat("broken\n"u8.ToArray()).ToArray(), null, default);
-        else await f.Storage.DeleteAsync(path, default);
+            await f.Storage.PutAsync(path, JsonlSegmentWriter.Write(cold.Take(5).ToArray()).Concat("broken\n"u8.ToArray()).ToArray(), null, default).AsResultBoxAsync();
+        else await f.Storage.DeleteAsync(path, default).AsResultBoxAsync();
         var store = f.Factory.CreateForService("a");
         Assert.Equal(hot.Take(2).Select(e => e.Id), (await Read(store, null, 2)).Select(e => e.Id));
         var opens = f.Storage.Opens;
@@ -543,7 +540,7 @@ public class HybridRetainedSegmentTests(ITestOutputHelper output)
                     await stream.CopyToAsync(memory);
                     data = memory.ToArray();
                 }
-                await Storage.PutAsync(path, data, null, default);
+                await Storage.PutAsync(path, data, null, default).AsResultBoxAsync();
                 // Deterministic entries remain equal when the same segment appears in a newer manifest.
                 entries.Add(new(path, events[0].SortableUniqueIdValue, events[^1].SortableUniqueIdValue, events.Length, data.Length, Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(data)), DateTimeOffset.UnixEpoch));
             }
@@ -553,7 +550,7 @@ public class HybridRetainedSegmentTests(ITestOutputHelper output)
         public async Task WriteManifest(string service, IReadOnlyList<ColdSegmentInfo> entries)
         {
             var manifest = new ColdManifest(service, "v1", entries[^1].ToSortableUniqueId, entries, DateTimeOffset.UtcNow);
-            await Storage.PutAsync(ColdStoragePaths.ManifestPath(service), JsonSerializer.SerializeToUtf8Bytes(manifest, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase }), null, default);
+            await Storage.PutAsync(ColdStoragePaths.ManifestPath(service), JsonSerializer.SerializeToUtf8Bytes(manifest, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase }), null, default).AsResultBoxAsync();
         }
         public void Dispose() => _sp.Dispose();
     }
@@ -566,19 +563,19 @@ internal sealed class CountingStorage : IColdObjectStorage
     public int Opens => _opens;
     public int Manifests => _manifests;
     public Func<Task>? BeforeOpen { get; set; }
-    public Task<ResultBox<ColdStorageObject>> GetAsync(string path, CancellationToken ct)
+    public Task<ColdStorageObject?> GetAsync(string path, CancellationToken ct)
     {
         if (path.EndsWith("manifest.json", StringComparison.Ordinal)) Interlocked.Increment(ref _manifests);
         return Inner.GetAsync(path, ct);
     }
-    public async Task<ResultBox<Stream>> OpenReadAsync(string path, CancellationToken ct)
+    public async Task<Stream> OpenReadAsync(string path, CancellationToken ct)
     {
         Interlocked.Increment(ref _opens);
         if (BeforeOpen is not null) await BeforeOpen();
         return await Inner.OpenReadAsync(path, ct);
     }
-    public Task<ResultBox<bool>> PutAsync(string path, Stream data, string? expectedETag, CancellationToken ct) => Inner.PutAsync(path, data, expectedETag, ct);
-    public Task<ResultBox<bool>> PutAsync(string path, byte[] data, string? expectedETag, CancellationToken ct) => Inner.PutAsync(path, data, expectedETag, ct);
-    public Task<ResultBox<IReadOnlyList<string>>> ListAsync(string prefix, CancellationToken ct) => Inner.ListAsync(prefix, ct);
-    public Task<ResultBox<bool>> DeleteAsync(string path, CancellationToken ct) => Inner.DeleteAsync(path, ct);
+    public Task<bool> PutAsync(string path, Stream data, string? expectedETag, CancellationToken ct) => Inner.PutAsync(path, data, expectedETag, ct);
+    public Task<bool> PutAsync(string path, byte[] data, string? expectedETag, CancellationToken ct) => Inner.PutAsync(path, data, expectedETag, ct);
+    public Task<IReadOnlyList<string>> ListAsync(string prefix, CancellationToken ct) => Inner.ListAsync(prefix, ct);
+    public Task<bool> DeleteAsync(string path, CancellationToken ct) => Inner.DeleteAsync(path, ct);
 }

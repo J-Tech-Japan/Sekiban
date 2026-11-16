@@ -16,29 +16,23 @@ public class NotSupportedColdEventStoreTests
     }
 
     [Fact]
-    public async Task GetProgressAsync_should_return_error()
+    public async Task GetProgressAsync_should_throw_not_supported()
     {
-        var result = await _sut.GetProgressAsync("test-service", CancellationToken.None);
-
-        Assert.False(result.IsSuccess);
-        Assert.IsType<NotSupportedException>(result.GetException());
+        await Assert.ThrowsAsync<NotSupportedException>(
+            () => _sut.GetProgressAsync("test-service", CancellationToken.None));
     }
 
     [Fact]
-    public async Task ExportIncrementalAsync_should_return_error()
+    public async Task ExportIncrementalAsync_should_throw_not_supported()
     {
-        var result = await _sut.ExportIncrementalAsync("test-service", CancellationToken.None);
-
-        Assert.False(result.IsSuccess);
-        Assert.IsType<NotSupportedException>(result.GetException());
+        await Assert.ThrowsAsync<NotSupportedException>(
+            () => _sut.ExportIncrementalAsync("test-service", CancellationToken.None));
     }
 
     [Fact]
-    public async Task GetDataRangeSummaryAsync_should_return_error()
+    public async Task GetDataRangeSummaryAsync_should_throw_not_supported()
     {
-        var result = await _sut.GetDataRangeSummaryAsync("test-service", CancellationToken.None);
-
-        Assert.False(result.IsSuccess);
-        Assert.IsType<NotSupportedException>(result.GetException());
+        await Assert.ThrowsAsync<NotSupportedException>(
+            () => _sut.GetDataRangeSummaryAsync("test-service", CancellationToken.None));
     }
 }

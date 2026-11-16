@@ -11,6 +11,7 @@ using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
 using System.Text.Json;
 using CoreInMemoryEventStore = Sekiban.Dcb.Testing.InMemoryEventStore;
+using Sekiban.Dcb.TestSupport;
 
 namespace Sekiban.Dcb.Tests;
 
@@ -66,7 +67,7 @@ public class GeneralTagStateActorPersistenceTests
                 CreateEvent(new TestEvent { Value = 10 }, tag, "001"),
                 CreateEvent(new IncrementEvent { Increment = 4 }, tag, "002")
             },
-            domainTypes.EventTypes);
+            domainTypes.EventTypes).AsResultBoxAsync();
 
         var initial = await actor.GetTagStateAsync();
         Assert.Equal(14, ((TestIncrementalState)initial.Payload).Total);
@@ -77,7 +78,7 @@ public class GeneralTagStateActorPersistenceTests
                 CreateEvent(new IncrementEvent { Increment = 3 }, tag, "003"),
                 CreateEvent(new IncrementEvent { Increment = 5 }, tag, "004")
             },
-            domainTypes.EventTypes);
+            domainTypes.EventTypes).AsResultBoxAsync();
 
         var updated = await actor.GetTagStateAsync();
         Assert.Equal(22, ((TestIncrementalState)updated.Payload).Total);
@@ -101,7 +102,7 @@ public class GeneralTagStateActorPersistenceTests
                 CreateEvent(new TestEvent { Value = 6 }, tag, "012"),
                 CreateEvent(new IncrementEvent { Increment = 8 }, tag, "014")
             },
-            domainTypes.EventTypes);
+            domainTypes.EventTypes).AsResultBoxAsync();
 
         var firstActor = new GeneralTagStateActor(
             "TestTag:r1:TestIncrementalProjector",
@@ -153,7 +154,7 @@ public class GeneralTagStateActorPersistenceTests
                 CreateEvent(new TestEvent { Value = 3 }, tag, "007"),
                 CreateEvent(new IncrementEvent { Increment = 6 }, tag, "009")
             },
-            domainTypesV1.EventTypes);
+            domainTypesV1.EventTypes).AsResultBoxAsync();
 
         var actorV1 = new GeneralTagStateActor(
             "TestTag:r2:TestIncrementalProjector",
@@ -203,7 +204,7 @@ public class GeneralTagStateActorPersistenceTests
                 CreateEvent(new TestEvent { Value = 10 }, tag, "001"),
                 CreateEvent(new IncrementEvent { Increment = 2 }, tag, "002")
             },
-            domainTypes.EventTypes);
+            domainTypes.EventTypes).AsResultBoxAsync();
 
         var actor = new GeneralTagStateActor(
             "TestTag:stream:TestIncrementalProjector",
@@ -244,7 +245,7 @@ public class GeneralTagStateActorPersistenceTests
                 CreateEvent(new TestEvent { Value = 10 }, tag, "001"),
                 CreateEvent(new IncrementEvent { Increment = 2 }, tag, "002")
             },
-            domainTypes.EventTypes);
+            domainTypes.EventTypes).AsResultBoxAsync();
 
         var actor = new GeneralTagStateActor(
             "TestTag:cancel:TestIncrementalProjector",
@@ -321,7 +322,7 @@ public class GeneralTagStateActorPersistenceTests
                 CreateEvent(new TestEvent { Value = 10 }, tag, "001"),
                 CreateEvent(new IncrementEvent { Increment = 2 }, tag, "002")
             ],
-            domainTypes.EventTypes);
+            domainTypes.EventTypes).AsResultBoxAsync();
 
         using var liveCancellation = new CancellationTokenSource();
         var results = new List<(SerializableTagState State, int StreamCalls, int ListCalls)>();
@@ -377,7 +378,7 @@ public class GeneralTagStateActorPersistenceTests
 
         await eventStore.WriteEventsAsync(
             [CreateEvent(new TestEvent { Value = 7 }, tag, "001")],
-            domainTypes.EventTypes);
+            domainTypes.EventTypes).AsResultBoxAsync();
 
         var actor = new GeneralTagStateActor(
             "TestTag:cancel-before-save:TestIncrementalProjector",
@@ -421,7 +422,7 @@ public class GeneralTagStateActorPersistenceTests
                 CreateEvent(new TestEvent { Value = 10 }, tag, "001"),
                 CreateEvent(new IncrementEvent { Increment = 2 }, tag, "002")
             },
-            domainTypes.EventTypes);
+            domainTypes.EventTypes).AsResultBoxAsync();
 
         var actor = new GeneralTagStateActor(
             "TestTag:out-of-order:TestIncrementalProjector",
@@ -467,7 +468,7 @@ public class GeneralTagStateActorPersistenceTests
         var tag = new TestTag("s1");
         await eventStore.WriteEventsAsync(
             new[] { CreateEvent(new TestEvent { Value = 4 }, tag, "001") },
-            domainTypes.EventTypes);
+            domainTypes.EventTypes).AsResultBoxAsync();
 
         var first = await actor.GetTagStateAsync();
         Assert.NotNull(first);
@@ -607,27 +608,27 @@ public class GeneralTagStateActorPersistenceTests
         protected IEventStore Inner => _inner;
         public int ReadEventsByTagCallCount { get; private set; }
 
-        public Task<ResultBox<IEnumerable<TagStream>>> ReadTagsAsync(ITag tag) => _inner.ReadTagsAsync(tag);
+        public Task<IEnumerable<TagStream>> ReadTagsAsync(ITag tag) => _inner.ReadTagsAsync(tag);
 
-        public Task<ResultBox<TagState>> GetLatestTagAsync(ITag tag) => _inner.GetLatestTagAsync(tag);
+        public Task<TagState> GetLatestTagAsync(ITag tag) => _inner.GetLatestTagAsync(tag);
 
-        public Task<ResultBox<bool>> TagExistsAsync(ITag tag) => _inner.TagExistsAsync(tag);
+        public Task<bool> TagExistsAsync(ITag tag) => _inner.TagExistsAsync(tag);
 
-        public Task<ResultBox<long>> GetEventCountAsync(SortableUniqueId? since = null) => _inner.GetEventCountAsync(since);
+        public Task<long> GetEventCountAsync(SortableUniqueId? since = null) => _inner.GetEventCountAsync(since);
 
-        public Task<ResultBox<IEnumerable<TagInfo>>> GetAllTagsAsync(string? tagGroup = null) => _inner.GetAllTagsAsync(tagGroup);
+        public Task<IEnumerable<TagInfo>> GetAllTagsAsync(string? tagGroup = null) => _inner.GetAllTagsAsync(tagGroup);
 
-        public Task<ResultBox<string>> GetLatestSortableUniqueIdAsync() => _inner.GetLatestSortableUniqueIdAsync();
+        public Task<string> GetLatestSortableUniqueIdAsync() => _inner.GetLatestSortableUniqueIdAsync();
 
-        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null) =>
+        public Task<IEnumerable<SerializableEvent>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null) =>
             _inner.ReadAllSerializableEventsAsync(since);
 
-        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(
+        public Task<IEnumerable<SerializableEvent>> ReadAllSerializableEventsAsync(
             SortableUniqueId? since,
             int? maxCount)
             => _inner.ReadAllSerializableEventsAsync(since, maxCount);
 
-        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadSerializableEventsByTagAsync(
+        public Task<IEnumerable<SerializableEvent>> ReadSerializableEventsByTagAsync(
             ITag tag,
             SortableUniqueId? since = null)
         {
@@ -635,10 +636,10 @@ public class GeneralTagStateActorPersistenceTests
             return _inner.ReadSerializableEventsByTagAsync(tag, since);
         }
 
-        public Task<ResultBox<SerializableEvent>> ReadSerializableEventAsync(Guid eventId)
+        public Task<SerializableEvent?> ReadSerializableEventAsync(Guid eventId)
             => _inner.ReadSerializableEventAsync(eventId);
 
-        public Task<ResultBox<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>> WriteSerializableEventsAsync(
+        public Task<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)> WriteSerializableEventsAsync(
             IEnumerable<SerializableEvent> events)
             => _inner.WriteSerializableEventsAsync(events);
     }
@@ -651,7 +652,7 @@ public class GeneralTagStateActorPersistenceTests
         public TaggedStreamCapabilityDescriptor DescribeTaggedStream() =>
             TaggedStreamCapabilityDescriptor.Native("test streaming wrapper");
 
-        public Task<ResultBox<SerializableEventStreamReadResult>> StreamSerializableEventsByTagAsync(
+        public Task<SerializableEventStreamReadResult> StreamSerializableEventsByTagAsync(
             ITag tag,
             SortableUniqueId? since,
             SortableUniqueId? until,
@@ -686,7 +687,7 @@ public class GeneralTagStateActorPersistenceTests
         public TaggedStreamCapabilityDescriptor DescribeTaggedStream() =>
             TaggedStreamCapabilityDescriptor.Native("cancellation gate");
 
-        public async Task<ResultBox<SerializableEventStreamReadResult>> StreamSerializableEventsByTagAsync(
+        public async Task<SerializableEventStreamReadResult> StreamSerializableEventsByTagAsync(
             ITag tag,
             SortableUniqueId? since,
             SortableUniqueId? until,
@@ -726,7 +727,7 @@ public class GeneralTagStateActorPersistenceTests
         public TaggedStreamCapabilityDescriptor DescribeTaggedStream() =>
             TaggedStreamCapabilityDescriptor.Native("out-of-order test double");
 
-        public async Task<ResultBox<SerializableEventStreamReadResult>> StreamSerializableEventsByTagAsync(
+        public async Task<SerializableEventStreamReadResult> StreamSerializableEventsByTagAsync(
             ITag tag,
             SortableUniqueId? since,
             SortableUniqueId? until,
@@ -734,34 +735,19 @@ public class GeneralTagStateActorPersistenceTests
             CancellationToken cancellationToken = default)
         {
             StreamCallCount++;
-            try
-            {
-                var source = await Inner.ReadSerializableEventsByTagAsync(tag, since);
-                if (!source.IsSuccess)
-                {
-                    return ResultBox.Error<SerializableEventStreamReadResult>(source.GetException());
-                }
+            var source = await Inner.ReadSerializableEventsByTagAsync(tag, since);
 
-                var count = 0;
-                string? lastSortableUniqueId = null;
-                foreach (var serializableEvent in source.GetValue().OrderByDescending(e => e.SortableUniqueIdValue))
-                {
-                    cancellationToken.ThrowIfCancellationRequested();
-                    await onEvent(serializableEvent);
-                    count++;
-                    lastSortableUniqueId = serializableEvent.SortableUniqueIdValue;
-                }
+            var count = 0;
+            string? lastSortableUniqueId = null;
+            foreach (var serializableEvent in source.OrderByDescending(e => e.SortableUniqueIdValue))
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                await onEvent(serializableEvent);
+                count++;
+                lastSortableUniqueId = serializableEvent.SortableUniqueIdValue;
+            }
 
-                return ResultBox.FromValue(new SerializableEventStreamReadResult(count, lastSortableUniqueId));
-            }
-            catch (OperationCanceledException)
-            {
-                throw;
-            }
-            catch (Exception ex)
-            {
-                return ResultBox.Error<SerializableEventStreamReadResult>(ex);
-            }
+            return new SerializableEventStreamReadResult(count, lastSortableUniqueId);
         }
     }
 

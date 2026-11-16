@@ -12,6 +12,7 @@ using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
 using Sekiban.Dcb.Testing;
 using Xunit;
+using Sekiban.Dcb.TestSupport;
 
 namespace Sekiban.Dcb.Postgres.Tests;
 
@@ -69,14 +70,14 @@ public sealed class PostgresTagHeadCasTests : PostgresTestBase
         // NoEnforcement is still a full head-protocol write even before the operator turns on enforcement.
         var noEnforcement = await store.WriteSerializableEventsWithExpectedTagPositionsAsync(
             [EventAt("0001", tag)],
-            Spec(DefaultService, (tag, TagHeadExpectation.NoEnforcement())));
+            Spec(DefaultService, (tag, TagHeadExpectation.NoEnforcement()))).AsResultBoxAsync();
         Assert.True(noEnforcement.IsSuccess, noEnforcement.IsSuccess ? "" : noEnforcement.GetException().ToString());
         Assert.Equal("0001", (await HeadAsync(tag))!.HeadPosition);
 
         // Exact is a durable fence and must fail before its provider write / head advance while the epoch is unset.
         var beforeEpoch = await store.WriteSerializableEventsWithExpectedTagPositionsAsync(
             [EventAt("0002", tag)],
-            Spec(DefaultService, (tag, TagHeadExpectation.Exact("0001"))));
+            Spec(DefaultService, (tag, TagHeadExpectation.Exact("0001")))).AsResultBoxAsync();
         Assert.False(beforeEpoch.IsSuccess);
         Assert.IsType<TagHeadEnforcementNotEnabledException>(beforeEpoch.GetException());
         Assert.Equal("0001", (await HeadAsync(tag))!.HeadPosition);
@@ -88,7 +89,7 @@ public sealed class PostgresTagHeadCasTests : PostgresTestBase
         await EnableEpochAsync();
         var exact = await store.WriteSerializableEventsWithExpectedTagPositionsAsync(
             [EventAt("0002", tag)],
-            Spec(DefaultService, (tag, TagHeadExpectation.Exact("0001"))));
+            Spec(DefaultService, (tag, TagHeadExpectation.Exact("0001")))).AsResultBoxAsync();
         Assert.True(exact.IsSuccess, exact.IsSuccess ? "" : exact.GetException().ToString());
         Assert.Equal("0002", (await HeadAsync(tag))!.HeadPosition);
     }
@@ -235,7 +236,7 @@ public sealed class PostgresTagHeadCasTests : PostgresTestBase
         var store = Store();
 
         // Simulate years of pre-epoch dcb_tags history: remove its protocol row after a legacy writer populated dcb_tags.
-        Assert.True((await store.WriteSerializableEventsAsync([EventAt("0010", historicalTag)])).IsSuccess);
+        Assert.True((await store.WriteSerializableEventsAsync([EventAt("0010", historicalTag)]).AsResultBoxAsync()).IsSuccess);
         await using (var prepare = await Fixture.GetDbContextAsync())
         {
             await prepare.Database.ExecuteSqlRawAsync(
@@ -245,7 +246,7 @@ public sealed class PostgresTagHeadCasTests : PostgresTestBase
 
         var staleEmpty = await store.WriteSerializableEventsWithExpectedTagPositionsAsync(
             [EventAt("0020", historicalTag)],
-            Spec(DefaultService, (historicalTag, TagHeadExpectation.AssertEmpty())));
+            Spec(DefaultService, (historicalTag, TagHeadExpectation.AssertEmpty()))).AsResultBoxAsync();
         Assert.False(staleEmpty.IsSuccess);
         var conflict = Assert.IsType<ExpectedTagPositionConflictException>(staleEmpty.GetException());
         var pair = Assert.Single(conflict.Pairs);
@@ -254,7 +255,7 @@ public sealed class PostgresTagHeadCasTests : PostgresTestBase
 
         var provenEmpty = await store.WriteSerializableEventsWithExpectedTagPositionsAsync(
             [EventAt("0030", emptyTag)],
-            Spec(DefaultService, (emptyTag, TagHeadExpectation.AssertEmpty())));
+            Spec(DefaultService, (emptyTag, TagHeadExpectation.AssertEmpty()))).AsResultBoxAsync();
         Assert.True(provenEmpty.IsSuccess, provenEmpty.IsSuccess ? "" : provenEmpty.GetException().ToString());
         Assert.Equal("0030", (await HeadAsync(emptyTag))!.HeadPosition);
     }
@@ -285,7 +286,7 @@ public sealed class PostgresTagHeadCasTests : PostgresTestBase
             Spec(DefaultService,
                 (a, TagHeadExpectation.Exact("0010")),
                 (b, TagHeadExpectation.Exact("wrong")),
-                (c, TagHeadExpectation.NoEnforcement())));
+                (c, TagHeadExpectation.NoEnforcement()))).AsResultBoxAsync();
 
         Assert.False(outcome.IsSuccess);
         var conflict = Assert.IsType<ExpectedTagPositionConflictException>(outcome.GetException());
@@ -323,7 +324,7 @@ public sealed class PostgresTagHeadCasTests : PostgresTestBase
 
         var result = await Store(service).WriteSerializableEventsWithExpectedTagPositionsAsync(
             [EventAt("0020", tag)],
-            Spec(service, (tag, TagHeadExpectation.Exact("0010"))));
+            Spec(service, (tag, TagHeadExpectation.Exact("0010")))).AsResultBoxAsync();
         Assert.True(result.IsSuccess, result.IsSuccess ? "" : result.GetException().ToString());
         Assert.Equal("0020", (await HeadAsync(tag, service))!.HeadPosition);
         await using var inspection = await Fixture.GetDbContextAsync();
@@ -349,7 +350,7 @@ public sealed class PostgresTagHeadCasTests : PostgresTestBase
 
         var result = await Store().WriteSerializableEventsWithExpectedTagPositionsAsync(
             [EventAt("0300", tag), EventAt("0400", tag)],
-            Spec(DefaultService, (tag, TagHeadExpectation.Exact("0100"))));
+            Spec(DefaultService, (tag, TagHeadExpectation.Exact("0100")))).AsResultBoxAsync();
 
         Assert.False(result.IsSuccess);
         var conflict = Assert.IsType<ExpectedTagPositionConflictException>(result.GetException());
@@ -392,7 +393,7 @@ public sealed class PostgresTagHeadCasTests : PostgresTestBase
         try
         {
             var failed = await store.WriteSerializableEventsWithExpectedTagPositionsAsync(
-                [EventAt("0300", tag)], Spec(DefaultService, (tag, TagHeadExpectation.Exact("0100"))));
+                [EventAt("0300", tag)], Spec(DefaultService, (tag, TagHeadExpectation.Exact("0100")))).AsResultBoxAsync();
             Assert.False(failed.IsSuccess);
         }
         finally
@@ -410,7 +411,7 @@ public sealed class PostgresTagHeadCasTests : PostgresTestBase
         Assert.Equal(0, logger.WarningCount); // a rolled-back audit must never produce a false committed-violation log
 
         var repaired = await store.WriteSerializableEventsWithExpectedTagPositionsAsync(
-            [EventAt("0300", tag)], Spec(DefaultService, (tag, TagHeadExpectation.Exact("0100"))));
+            [EventAt("0300", tag)], Spec(DefaultService, (tag, TagHeadExpectation.Exact("0100")))).AsResultBoxAsync();
         Assert.False(repaired.IsSuccess);
         Assert.IsType<ExpectedTagPositionConflictException>(repaired.GetException());
         Assert.Equal("0200", (await HeadAsync(tag))!.HeadPosition);
@@ -419,7 +420,7 @@ public sealed class PostgresTagHeadCasTests : PostgresTestBase
         // The same stale retry now has no new M to reconcile: it cannot create a second record and must not clean up the
         // append-only first one.
         var retry = await store.WriteSerializableEventsWithExpectedTagPositionsAsync(
-            [EventAt("0300", tag)], Spec(DefaultService, (tag, TagHeadExpectation.Exact("0100"))));
+            [EventAt("0300", tag)], Spec(DefaultService, (tag, TagHeadExpectation.Exact("0100")))).AsResultBoxAsync();
         Assert.False(retry.IsSuccess);
         await using var committed = await Fixture.GetDbContextAsync();
         Assert.Single(await committed.TagHeadViolations.AsNoTracking().ToListAsync());
@@ -447,12 +448,12 @@ public sealed class PostgresTagHeadCasTests : PostgresTestBase
         // the per-tag batch maximum 0200 without needing the enforcement epoch.
         var noEnforcement = await Store().WriteSerializableEventsWithExpectedTagPositionsAsync(
             [EventAt("0200", noEnforcementTag)],
-            Spec(DefaultService, (noEnforcementTag, TagHeadExpectation.NoEnforcement())));
+            Spec(DefaultService, (noEnforcementTag, TagHeadExpectation.NoEnforcement()))).AsResultBoxAsync();
         Assert.True(noEnforcement.IsSuccess, noEnforcement.IsSuccess ? "" : noEnforcement.GetException().ToString());
 
         // An unconditional legacy write likewise commits. Its older batch position may not regress the repaired 0500
         // head; its event remains durable, but the head is max(repaired head, batch maximum).
-        var legacy = await Store().WriteSerializableEventsAsync([EventAt("0300", legacyTag)]);
+        var legacy = await Store().WriteSerializableEventsAsync([EventAt("0300", legacyTag)]).AsResultBoxAsync();
         Assert.True(legacy.IsSuccess, legacy.IsSuccess ? "" : legacy.GetException().ToString());
 
         Assert.Equal("0200", (await HeadAsync(noEnforcementTag))!.HeadPosition);
@@ -483,7 +484,7 @@ public sealed class PostgresTagHeadCasTests : PostgresTestBase
             {
                 var failed = await store.WriteSerializableEventsWithExpectedTagPositionsAsync(
                     [EventAt("0100", "Order:partial")],
-                    Spec(DefaultService, ("Order:partial", TagHeadExpectation.NoEnforcement())));
+                    Spec(DefaultService, ("Order:partial", TagHeadExpectation.NoEnforcement()))).AsResultBoxAsync();
                 Assert.False(failed.IsSuccess);
             }
             finally
@@ -510,9 +511,9 @@ public sealed class PostgresTagHeadCasTests : PostgresTestBase
             emptyFirst,
             emptySecond,
             () => emptyFirst.WriteSerializableEventsWithExpectedTagPositionsAsync(
-                [EventAt("0200", emptyTag)], Spec(DefaultService, (emptyTag, TagHeadExpectation.AssertEmpty()))),
+                [EventAt("0200", emptyTag)], Spec(DefaultService, (emptyTag, TagHeadExpectation.AssertEmpty()))).AsResultBoxAsync(),
             () => emptySecond.WriteSerializableEventsWithExpectedTagPositionsAsync(
-                [EventAt("0201", emptyTag)], Spec(DefaultService, (emptyTag, TagHeadExpectation.AssertEmpty()))));
+                [EventAt("0201", emptyTag)], Spec(DefaultService, (emptyTag, TagHeadExpectation.AssertEmpty()))).AsResultBoxAsync());
         Assert.Single(emptyResults, result => result.IsSuccess);
         Assert.Single(emptyResults, result => !result.IsSuccess && result.GetException() is ExpectedTagPositionConflictException);
         Assert.Equal(1, await CountEventsAsync());
@@ -525,7 +526,7 @@ public sealed class PostgresTagHeadCasTests : PostgresTestBase
         var tag = "Order:race-nonempty";
         var bootstrap = Store();
         Assert.True((await bootstrap.WriteSerializableEventsWithExpectedTagPositionsAsync(
-            [EventAt("0300", tag)], Spec(DefaultService, (tag, TagHeadExpectation.NoEnforcement())))).IsSuccess);
+            [EventAt("0300", tag)], Spec(DefaultService, (tag, TagHeadExpectation.NoEnforcement()))).AsResultBoxAsync()).IsSuccess);
         await EnableEpochAsync();
         var nonemptyFirst = Store();
         var nonemptySecond = Store();
@@ -533,9 +534,9 @@ public sealed class PostgresTagHeadCasTests : PostgresTestBase
             nonemptyFirst,
             nonemptySecond,
             () => nonemptyFirst.WriteSerializableEventsWithExpectedTagPositionsAsync(
-                [EventAt("0301", tag)], Spec(DefaultService, (tag, TagHeadExpectation.Exact("0300")))),
+                [EventAt("0301", tag)], Spec(DefaultService, (tag, TagHeadExpectation.Exact("0300")))).AsResultBoxAsync(),
             () => nonemptySecond.WriteSerializableEventsWithExpectedTagPositionsAsync(
-                [EventAt("0302", tag)], Spec(DefaultService, (tag, TagHeadExpectation.Exact("0300")))));
+                [EventAt("0302", tag)], Spec(DefaultService, (tag, TagHeadExpectation.Exact("0300")))).AsResultBoxAsync());
         Assert.Single(nonemptyResults, result => result.IsSuccess);
         Assert.Single(nonemptyResults, result => !result.IsSuccess && result.GetException() is ExpectedTagPositionConflictException);
         Assert.Equal(2, await CountEventsAsync()); // bootstrap + exactly one current command, never merely at-most-one
@@ -546,7 +547,7 @@ public sealed class PostgresTagHeadCasTests : PostgresTestBase
     {
         const string tag = "Order:enforced-vs-legacy";
         var bootstrap = Store();
-        Assert.True((await bootstrap.WriteSerializableEventsAsync([EventAt("1000", tag)])).IsSuccess);
+        Assert.True((await bootstrap.WriteSerializableEventsAsync([EventAt("1000", tag)]).AsResultBoxAsync()).IsSuccess);
         await EnableEpochAsync();
 
         var fenced = Store();
@@ -570,8 +571,8 @@ public sealed class PostgresTagHeadCasTests : PostgresTestBase
         try
         {
             var fencedTask = fenced.WriteSerializableEventsWithExpectedTagPositionsAsync(
-                [EventAt("3000", tag)], Spec(DefaultService, (tag, TagHeadExpectation.Exact("1000"))));
-            var legacyTask = legacy.WriteSerializableEventsAsync([EventAt("2000", tag)]);
+                [EventAt("3000", tag)], Spec(DefaultService, (tag, TagHeadExpectation.Exact("1000")))).AsResultBoxAsync();
+            var legacyTask = legacy.WriteSerializableEventsAsync([EventAt("2000", tag)]).AsResultBoxAsync();
             await Task.WhenAll(fencedTask, legacyTask).WaitAsync(TimeSpan.FromSeconds(15));
             var fencedResult = await fencedTask;
             var legacyResult = await legacyTask;
@@ -626,8 +627,8 @@ public sealed class PostgresTagHeadCasTests : PostgresTestBase
         try
         {
             var results = await Task.WhenAll(
-                    first.WriteSerializableEventsAsync([EventAt("0400", z, a)]),
-                    second.WriteSerializableEventsAsync([EventAt("0401", a, z)]))
+                    first.WriteSerializableEventsAsync([EventAt("0400", z, a)]).AsResultBoxAsync(),
+                    second.WriteSerializableEventsAsync([EventAt("0401", a, z)]).AsResultBoxAsync())
                 .WaitAsync(TimeSpan.FromSeconds(15));
             Assert.DoesNotContain(results.Where(result => !result.IsSuccess).Select(result => result.GetException()), ContainsDeadlock);
             Assert.All(results, result => Assert.True(result.IsSuccess, result.IsSuccess ? "" : result.GetException().ToString()));
@@ -649,7 +650,7 @@ public sealed class PostgresTagHeadCasTests : PostgresTestBase
             [EventAt("0500", a), EventAt("0600", b), EventAt("0700", a)],
             Spec(DefaultService,
                 (a, TagHeadExpectation.NoEnforcement()),
-                (b, TagHeadExpectation.NoEnforcement())));
+                (b, TagHeadExpectation.NoEnforcement()))).AsResultBoxAsync();
         Assert.True(valid.IsSuccess, valid.IsSuccess ? "" : valid.GetException().ToString());
         Assert.Equal("0700", (await HeadAsync(a))!.HeadPosition);
         Assert.Equal("0600", (await HeadAsync(b))!.HeadPosition); // exact per-tag maximum, not global final 0700
@@ -661,7 +662,7 @@ public sealed class PostgresTagHeadCasTests : PostgresTestBase
             [EventAt("0800", b), EventAt("0900", a)],
             Spec(DefaultService,
                 (a, TagHeadExpectation.Exact("0700")),
-                (b, TagHeadExpectation.Exact("0600"))));
+                (b, TagHeadExpectation.Exact("0600")))).AsResultBoxAsync();
         Assert.True(continuation.IsSuccess, continuation.IsSuccess ? "" : continuation.GetException().ToString());
         Assert.Equal("0900", (await HeadAsync(a))!.HeadPosition);
         Assert.Equal("0800", (await HeadAsync(b))!.HeadPosition);
@@ -670,7 +671,7 @@ public sealed class PostgresTagHeadCasTests : PostgresTestBase
             [EventAt("0900", a), EventAt("0800", b)],
             Spec(DefaultService,
                 (a, TagHeadExpectation.NoEnforcement()),
-                (b, TagHeadExpectation.NoEnforcement())));
+                (b, TagHeadExpectation.NoEnforcement()))).AsResultBoxAsync();
         Assert.False(invalid.IsSuccess);
         Assert.IsType<TagHeadPositionValidationException>(invalid.GetException());
 
@@ -680,7 +681,7 @@ public sealed class PostgresTagHeadCasTests : PostgresTestBase
             [EventAt("0650", a), EventAt("0800", b)],
             Spec(DefaultService,
                 (a, TagHeadExpectation.NoEnforcement()),
-                (b, TagHeadExpectation.NoEnforcement())));
+                (b, TagHeadExpectation.NoEnforcement()))).AsResultBoxAsync();
         Assert.False(behindHead.IsSuccess);
         Assert.IsType<TagHeadPositionValidationException>(behindHead.GetException());
         Assert.Equal(5, await CountEventsAsync()); // neither invalid command left DML or lazy state behind
@@ -692,7 +693,7 @@ public sealed class PostgresTagHeadCasTests : PostgresTestBase
         const string tag = "Order:best-effort";
         var store = Store();
         Assert.True((await store.WriteSerializableEventsWithExpectedTagPositionsAsync(
-            [EventAt("1000", tag)], Spec(DefaultService, (tag, TagHeadExpectation.NoEnforcement())))).IsSuccess);
+            [EventAt("1000", tag)], Spec(DefaultService, (tag, TagHeadExpectation.NoEnforcement()))).AsResultBoxAsync()).IsSuccess);
         await EnableEpochAsync();
 
         var reconciliationReached = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -710,7 +711,7 @@ public sealed class PostgresTagHeadCasTests : PostgresTestBase
         try
         {
             var newWriter = store.WriteSerializableEventsWithExpectedTagPositionsAsync(
-                [EventAt("3000", tag)], Spec(DefaultService, (tag, TagHeadExpectation.NoEnforcement())));
+                [EventAt("3000", tag)], Spec(DefaultService, (tag, TagHeadExpectation.NoEnforcement()))).AsResultBoxAsync();
             await reconciliationReached.Task.WaitAsync(TimeSpan.FromSeconds(5));
 
             // This stands for an incorrectly undrained pre-epoch writer. It runs AFTER the authoritative MAX query, so
@@ -752,8 +753,8 @@ public sealed class PostgresTagHeadCasTests : PostgresTestBase
             Guid.CreateVersion7(),
             new EventMetadata("c", "r", "u"),
             [typedTag]);
-        Assert.True((await store.WriteEventsAsync([typed])).IsSuccess);
-        Assert.True((await store.WriteSerializableEventsAsync([EventAt("0810", serializedTag)])).IsSuccess);
+        Assert.True((await store.WriteEventsAsync([typed]).AsResultBoxAsync()).IsSuccess);
+        Assert.True((await store.WriteSerializableEventsAsync([EventAt("0810", serializedTag)]).AsResultBoxAsync()).IsSuccess);
         var conditionalEvent = new Event(
                 new StudentCreated(Guid.CreateVersion7(), "conditional"),
                 "0820",
@@ -763,7 +764,7 @@ public sealed class PostgresTagHeadCasTests : PostgresTestBase
                 [claimTag])
             .ToSerializableEvent(Fixture.DomainTypes.EventTypes);
         var claim = await ((IConditionalEventStore)store).AppendIfUniqueAsync(
-            new ConditionalAppendRequest("g40-common-seam", conditionalEvent));
+            new ConditionalAppendRequest("g40-common-seam", conditionalEvent)).AsResultBoxAsync();
         Assert.True(claim.IsSuccess, claim.IsSuccess ? "" : claim.GetException().ToString());
 
         Assert.Equal("0800", (await HeadAsync(typedTag))!.HeadPosition);

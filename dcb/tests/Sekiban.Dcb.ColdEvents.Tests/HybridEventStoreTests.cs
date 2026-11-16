@@ -10,6 +10,7 @@ using Sekiban.Dcb.Events;
 using Sekiban.Dcb.ServiceId;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
+using Sekiban.Dcb.TestSupport;
 namespace Sekiban.Dcb.ColdEvents.Tests;
 
 public class HybridEventStoreTests
@@ -84,7 +85,7 @@ public class HybridEventStoreTests
             var coldEvents = coldSegments[index];
             var segmentData = JsonlSegmentWriter.Write(coldEvents);
             var segmentPath = $"segments/{TestServiceId}/cold_segment_{index}.jsonl";
-            await _coldStorage.PutAsync(segmentPath, segmentData, expectedETag: null, CancellationToken.None);
+            await _coldStorage.PutAsync(segmentPath, segmentData, expectedETag: null, CancellationToken.None).AsResultBoxAsync();
 
             segments.Add(
                 new ColdSegmentInfo(
@@ -106,7 +107,7 @@ public class HybridEventStoreTests
 
         var manifestData = JsonSerializer.SerializeToUtf8Bytes(manifest, JsonOptions);
         var manifestPath = $"control/{TestServiceId}/manifest.json";
-        await _coldStorage.PutAsync(manifestPath, manifestData, expectedETag: null, CancellationToken.None);
+        await _coldStorage.PutAsync(manifestPath, manifestData, expectedETag: null, CancellationToken.None).AsResultBoxAsync();
     }
 
     [Fact]
@@ -118,7 +119,7 @@ public class HybridEventStoreTests
         var hybrid = CreateHybrid(hotStore, DisabledOptions);
 
         // When
-        var result = await hybrid.ReadAllSerializableEventsAsync();
+        var result = await hybrid.ReadAllSerializableEventsAsync().AsResultBoxAsync();
 
         // Then
         Assert.True(result.IsSuccess);
@@ -134,7 +135,7 @@ public class HybridEventStoreTests
         var hybrid = CreateHybrid(hotStore, DisabledOptions);
 
         // When
-        var result = await hybrid.ReadAllSerializableEventsAsync();
+        var result = await hybrid.ReadAllSerializableEventsAsync().AsResultBoxAsync();
 
         // Then
         Assert.True(result.IsSuccess);
@@ -150,7 +151,7 @@ public class HybridEventStoreTests
         var hybrid = CreateHybrid(hotStore);
 
         // When
-        var result = await hybrid.ReadAllSerializableEventsAsync();
+        var result = await hybrid.ReadAllSerializableEventsAsync().AsResultBoxAsync();
 
         // Then
         Assert.True(result.IsSuccess);
@@ -174,7 +175,7 @@ public class HybridEventStoreTests
         var hybrid = CreateHybrid(hotStore);
 
         // When
-        var result = await hybrid.ReadAllSerializableEventsAsync();
+        var result = await hybrid.ReadAllSerializableEventsAsync().AsResultBoxAsync();
 
         // Then
         Assert.True(result.IsSuccess);
@@ -201,7 +202,7 @@ public class HybridEventStoreTests
         var hybrid = CreateHybrid(hotStore);
 
         // When
-        var result = await hybrid.ReadAllSerializableEventsAsync(since: null, maxCount: 2);
+        var result = await hybrid.ReadAllSerializableEventsAsync(since: null, maxCount: 2).AsResultBoxAsync();
 
         // Then
         Assert.True(result.IsSuccess);
@@ -228,7 +229,7 @@ public class HybridEventStoreTests
         var hybrid = CreateHybrid(hotStore);
 
         // When
-        var result = await hybrid.ReadAllSerializableEventsAsync(since: null, maxCount: 3);
+        var result = await hybrid.ReadAllSerializableEventsAsync(since: null, maxCount: 3).AsResultBoxAsync();
 
         // Then
         Assert.True(result.IsSuccess);
@@ -258,19 +259,65 @@ public class HybridEventStoreTests
             ],
             UpdatedAtUtc: DateTimeOffset.UtcNow);
         var manifestData = JsonSerializer.SerializeToUtf8Bytes(manifest, JsonOptions);
-        await _coldStorage.PutAsync($"control/{TestServiceId}/manifest.json", manifestData, null, CancellationToken.None);
+        await _coldStorage.PutAsync($"control/{TestServiceId}/manifest.json", manifestData, null, CancellationToken.None).AsResultBoxAsync();
 
         var hotEvent = CreateEvent(DateTime.UtcNow.AddMinutes(-5), "HotFallback");
         var hotStore = new StubSerializableEventStore([hotEvent]);
         var hybrid = CreateHybrid(hotStore);
 
         // When
-        var result = await hybrid.ReadAllSerializableEventsAsync();
+        var result = await hybrid.ReadAllSerializableEventsAsync().AsResultBoxAsync();
 
         // Then: should fall back to hot store
         Assert.True(result.IsSuccess);
         Assert.Single(result.GetValue());
         Assert.Equal("HotFallback", result.GetValue().First().EventPayloadName);
+    }
+
+    [Fact]
+    public async Task Should_fall_back_to_hot_when_cold_read_times_out_without_caller_cancellation()
+    {
+        // Given: a cold segment whose read surfaces a provider timeout as an OperationCanceledException
+        var coldEvent = CreateEvent(DateTime.UtcNow.AddDays(-2), "Cold");
+        await StoreColdManifestAndSegmentsAsync([coldEvent], coldEvent.SortableUniqueIdValue);
+        var hotEvent = CreateEvent(DateTime.UtcNow.AddMinutes(-5), "HotFallback");
+        var hybrid = new HybridEventStore(
+            new StubSerializableEventStore([hotEvent]),
+            new TimingOutSegmentStorage(_coldStorage),
+            _segmentFormatHandler,
+            new DefaultServiceIdProvider(),
+            Options.Create(EnabledOptions),
+            NullLogger<HybridEventStore>.Instance);
+
+        // Then: both reads fall back to the hot store, as 10.x did for any failed cold read
+        var listed = Assert.Single(await hybrid.ReadAllSerializableEventsAsync());
+        Assert.Equal("HotFallback", listed.EventPayloadName);
+        var streamed = new List<string>();
+        await hybrid.StreamAllSerializableEventsAsync(null, null, evt =>
+        {
+            streamed.Add(evt.EventPayloadName);
+            return ValueTask.CompletedTask;
+        });
+        Assert.Equal(["HotFallback"], streamed);
+
+        // But the caller's own cancellation stops the streaming read
+        using var cancelled = new CancellationTokenSource();
+        await cancelled.CancelAsync();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => hybrid.StreamAllSerializableEventsAsync(
+            null, null, _ => ValueTask.CompletedTask, cancelled.Token));
+    }
+
+    private sealed class TimingOutSegmentStorage(IColdObjectStorage inner) : IColdObjectStorage
+    {
+        public Task<ColdStorageObject?> GetAsync(string path, CancellationToken ct) => inner.GetAsync(path, ct);
+        public Task<Stream> OpenReadAsync(string path, CancellationToken ct) =>
+            Task.FromException<Stream>(new TaskCanceledException("cold segment read timed out"));
+        public Task<bool> PutAsync(string path, Stream data, string? expectedETag, CancellationToken ct) =>
+            inner.PutAsync(path, data, expectedETag, ct);
+        public Task<bool> PutAsync(string path, byte[] data, string? expectedETag, CancellationToken ct) =>
+            inner.PutAsync(path, data, expectedETag, ct);
+        public Task<IReadOnlyList<string>> ListAsync(string prefix, CancellationToken ct) => inner.ListAsync(prefix, ct);
+        public Task<bool> DeleteAsync(string path, CancellationToken ct) => inner.DeleteAsync(path, ct);
     }
 
     [Fact]
@@ -286,7 +333,7 @@ public class HybridEventStoreTests
         var hybrid = CreateHybrid(hotStore);
 
         // When
-        var result = await hybrid.ReadAllSerializableEventsAsync(since: null, maxCount: null);
+        var result = await hybrid.ReadAllSerializableEventsAsync(since: null, maxCount: null).AsResultBoxAsync();
 
         // Then
         Assert.True(result.IsSuccess);
@@ -310,7 +357,7 @@ public class HybridEventStoreTests
         var hybrid = CreateHybrid(hotStore, logger: logger);
 
         // When
-        var result = await hybrid.ReadAllSerializableEventsAsync(new SortableUniqueId(coldEvent.SortableUniqueIdValue));
+        var result = await hybrid.ReadAllSerializableEventsAsync(new SortableUniqueId(coldEvent.SortableUniqueIdValue)).AsResultBoxAsync();
 
         // Then
         Assert.True(result.IsSuccess);
@@ -331,7 +378,7 @@ public class HybridEventStoreTests
         // When
         using (HybridReadProjectionContext.Push("orders-summary"))
         {
-            var result = await hybrid.ReadAllSerializableEventsAsync(since: null, maxCount: 500);
+            var result = await hybrid.ReadAllSerializableEventsAsync(since: null, maxCount: 500).AsResultBoxAsync();
             Assert.True(result.IsSuccess);
         }
 
@@ -350,7 +397,7 @@ public class HybridEventStoreTests
         var hybrid = CreateHybrid(new StubSerializableEventStore([]));
 
         // When
-        var result = await hybrid.ReadAllSerializableEventsAsync(since: null, maxCount: 500);
+        var result = await hybrid.ReadAllSerializableEventsAsync(since: null, maxCount: 500).AsResultBoxAsync();
 
         // Then
         Assert.True(result.IsSuccess);
@@ -376,8 +423,8 @@ public class HybridEventStoreTests
 
         var segmentOneData = JsonlSegmentWriter.Write(segmentOneEvents);
         var segmentTwoData = JsonlSegmentWriter.Write(segmentTwoEvents);
-        await _coldStorage.PutAsync($"segments/{TestServiceId}/segment-1.jsonl", segmentOneData, expectedETag: null, CancellationToken.None);
-        await _coldStorage.PutAsync($"segments/{TestServiceId}/segment-2.jsonl", segmentTwoData, expectedETag: null, CancellationToken.None);
+        await _coldStorage.PutAsync($"segments/{TestServiceId}/segment-1.jsonl", segmentOneData, expectedETag: null, CancellationToken.None).AsResultBoxAsync();
+        await _coldStorage.PutAsync($"segments/{TestServiceId}/segment-2.jsonl", segmentTwoData, expectedETag: null, CancellationToken.None).AsResultBoxAsync();
 
         var manifest = new ColdManifest(
             ServiceId: TestServiceId,
@@ -405,7 +452,7 @@ public class HybridEventStoreTests
             UpdatedAtUtc: DateTimeOffset.UtcNow);
 
         var manifestData = JsonSerializer.SerializeToUtf8Bytes(manifest, JsonOptions);
-        await _coldStorage.PutAsync($"control/{TestServiceId}/manifest.json", manifestData, expectedETag: null, CancellationToken.None);
+        await _coldStorage.PutAsync($"control/{TestServiceId}/manifest.json", manifestData, expectedETag: null, CancellationToken.None).AsResultBoxAsync();
 
         var hybrid = CreateHybrid(new StubSerializableEventStore([]));
 
@@ -414,7 +461,7 @@ public class HybridEventStoreTests
         HybridReadBatchMetadata? metadata;
         using (HybridReadProjectionContext.Push("kanyusha-list"))
         {
-            var result = await hybrid.ReadAllSerializableEventsAsync(since: null, maxCount: 100_000);
+            var result = await hybrid.ReadAllSerializableEventsAsync(since: null, maxCount: 100_000).AsResultBoxAsync();
             Assert.True(result.IsSuccess);
             events = result.GetValue().ToList();
             metadata = HybridReadProjectionContext.BatchMetadata;
@@ -443,33 +490,33 @@ public class HybridEventStoreTests
             _ignoreSinceFilter = ignoreSinceFilter;
         }
 
-        public Task<ResultBox<IEnumerable<TagStream>>> ReadTagsAsync(ITag tag)
+        public Task<IEnumerable<TagStream>> ReadTagsAsync(ITag tag)
             => throw new NotSupportedException();
 
-        public Task<ResultBox<TagState>> GetLatestTagAsync(ITag tag)
+        public Task<TagState> GetLatestTagAsync(ITag tag)
             => throw new NotSupportedException();
 
-        public Task<ResultBox<bool>> TagExistsAsync(ITag tag)
+        public Task<bool> TagExistsAsync(ITag tag)
             => throw new NotSupportedException();
 
-        public Task<ResultBox<long>> GetEventCountAsync(SortableUniqueId? since = null)
+        public Task<long> GetEventCountAsync(SortableUniqueId? since = null)
             => throw new NotSupportedException();
 
-        public Task<ResultBox<IEnumerable<TagInfo>>> GetAllTagsAsync(string? tagGroup = null)
+        public Task<IEnumerable<TagInfo>> GetAllTagsAsync(string? tagGroup = null)
             => throw new NotSupportedException();
 
-        public Task<ResultBox<string>> GetLatestSortableUniqueIdAsync()
+        public Task<string> GetLatestSortableUniqueIdAsync()
             => throw new NotSupportedException();
 
-        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null)
+        public Task<IEnumerable<SerializableEvent>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null)
         {
             IEnumerable<SerializableEvent> filtered = _ignoreSinceFilter || since is null
                 ? _events
                 : _events.Where(e => string.Compare(e.SortableUniqueIdValue, since.Value, StringComparison.Ordinal) > 0);
-            return Task.FromResult(ResultBox.FromValue(filtered));
+            return Task.FromResult(filtered);
         }
 
-        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(SortableUniqueId? since, int? maxCount)
+        public Task<IEnumerable<SerializableEvent>> ReadAllSerializableEventsAsync(SortableUniqueId? since, int? maxCount)
         {
             IEnumerable<SerializableEvent> filtered = _ignoreSinceFilter || since is null
                 ? _events
@@ -478,23 +525,21 @@ public class HybridEventStoreTests
             {
                 filtered = filtered.Take(maxCount.Value);
             }
-            return Task.FromResult(ResultBox.FromValue(filtered));
+            return Task.FromResult(filtered);
         }
 
-        public Task<ResultBox<SerializableEvent>> ReadSerializableEventAsync(Guid eventId)
+        public Task<SerializableEvent?> ReadSerializableEventAsync(Guid eventId)
         {
             var result = _events.FirstOrDefault(e => e.Id == eventId);
-            return result == null
-                ? Task.FromResult(ResultBox.Error<SerializableEvent>(new KeyNotFoundException($"Event {eventId} not found")))
-                : Task.FromResult(ResultBox.FromValue(result));
+            return Task.FromResult<SerializableEvent?>(result);
         }
 
-        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadSerializableEventsByTagAsync(
+        public Task<IEnumerable<SerializableEvent>> ReadSerializableEventsByTagAsync(
             ITag tag,
             SortableUniqueId? since = null)
             => throw new NotSupportedException();
 
-        public Task<ResultBox<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>>
+        public Task<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>
             WriteSerializableEventsAsync(IEnumerable<SerializableEvent> events)
             => throw new NotSupportedException();
     }
@@ -508,28 +553,28 @@ public class HybridEventStoreTests
             _events = events;
         }
 
-        public Task<ResultBox<IEnumerable<TagStream>>> ReadTagsAsync(ITag tag)
+        public Task<IEnumerable<TagStream>> ReadTagsAsync(ITag tag)
             => throw new NotSupportedException();
 
-        public Task<ResultBox<TagState>> GetLatestTagAsync(ITag tag)
+        public Task<TagState> GetLatestTagAsync(ITag tag)
             => throw new NotSupportedException();
 
-        public Task<ResultBox<bool>> TagExistsAsync(ITag tag)
+        public Task<bool> TagExistsAsync(ITag tag)
             => throw new NotSupportedException();
 
-        public Task<ResultBox<long>> GetEventCountAsync(SortableUniqueId? since = null)
+        public Task<long> GetEventCountAsync(SortableUniqueId? since = null)
             => throw new NotSupportedException();
 
-        public Task<ResultBox<IEnumerable<TagInfo>>> GetAllTagsAsync(string? tagGroup = null)
+        public Task<IEnumerable<TagInfo>> GetAllTagsAsync(string? tagGroup = null)
             => throw new NotSupportedException();
 
-        public Task<ResultBox<string>> GetLatestSortableUniqueIdAsync()
+        public Task<string> GetLatestSortableUniqueIdAsync()
             => throw new NotSupportedException();
 
-        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null)
+        public Task<IEnumerable<SerializableEvent>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null)
             => ReadAllSerializableEventsAsync(since, maxCount: null);
 
-        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(SortableUniqueId? since, int? maxCount)
+        public Task<IEnumerable<SerializableEvent>> ReadAllSerializableEventsAsync(SortableUniqueId? since, int? maxCount)
         {
             IEnumerable<SerializableEvent> filtered = since is null
                 ? _events
@@ -539,18 +584,18 @@ public class HybridEventStoreTests
                 filtered = filtered.Take(maxCount.Value);
             }
 
-            return Task.FromResult(ResultBox.FromValue<IEnumerable<SerializableEvent>>(new SingleUseEnumerable(filtered)));
+            return Task.FromResult<IEnumerable<SerializableEvent>>(new SingleUseEnumerable(filtered));
         }
 
-        public Task<ResultBox<SerializableEvent>> ReadSerializableEventAsync(Guid eventId)
+        public Task<SerializableEvent?> ReadSerializableEventAsync(Guid eventId)
             => throw new NotSupportedException();
 
-        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadSerializableEventsByTagAsync(
+        public Task<IEnumerable<SerializableEvent>> ReadSerializableEventsByTagAsync(
             ITag tag,
             SortableUniqueId? since = null)
             => throw new NotSupportedException();
 
-        public Task<ResultBox<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>>
+        public Task<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>
             WriteSerializableEventsAsync(IEnumerable<SerializableEvent> events)
             => throw new NotSupportedException();
     }

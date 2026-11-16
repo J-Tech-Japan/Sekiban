@@ -18,6 +18,7 @@ using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Testing;
 using Sekiban.Dcb.Tags;
 using Xunit;
+using Sekiban.Dcb.TestSupport;
 
 namespace Sekiban.Dcb.Orleans.Tests;
 
@@ -196,7 +197,7 @@ public sealed class AzureQueueSizeGateTests
         Assert.Equal(long.MaxValue, exception.MeasuredBytes);
         Assert.Equal(long.MaxValue, exception.MeasuredRepresentationBytes);
         Assert.Null(exception.CertifiedUpperBoundBytes);
-        Assert.Empty((await store.ReadAllSerializableEventsAsync()).GetValue());
+        Assert.Empty((await store.ReadAllSerializableEventsAsync().AsResultBoxAsync()).GetValue());
         Assert.Equal(0, publisher.PlannedPublishCalls);
         Assert.Equal(0, publisher.LegacyPublishCalls);
     }
@@ -331,7 +332,7 @@ public sealed class AzureQueueSizeGateTests
             var exception = Assert.IsType<ExecutorSizeLimitExceededException>(result.GetException());
             Assert.Equal(65_536, exception.LimitBytes);
             Assert.Equal(certifiedBytes, exception.MeasuredBytes);
-            Assert.Empty((await store.ReadAllSerializableEventsAsync()).GetValue());
+            Assert.Empty((await store.ReadAllSerializableEventsAsync().AsResultBoxAsync()).GetValue());
             Assert.Equal(0, publisher.PlannedPublishCalls);
             Assert.Equal(0, publisher.LegacyPublishCalls);
         }
@@ -372,7 +373,7 @@ public sealed class AzureQueueSizeGateTests
         Assert.Equal(0, publisher.PlannedPublishCalls);
         Assert.Equal(1, publisher.LegacyPublishCalls);
         Assert.Equal(2, publisher.LastLegacyEventCount);
-        Assert.Equal(2, (await store.ReadAllSerializableEventsAsync()).GetValue().Count());
+        Assert.Equal(2, (await store.ReadAllSerializableEventsAsync().AsResultBoxAsync()).GetValue().Count());
     }
 
     [Theory]
@@ -432,7 +433,7 @@ public sealed class AzureQueueSizeGateTests
         });
 
         Assert.IsType<ExecutorSizeCapabilityException>(result.GetException());
-        Assert.Empty((await store.ReadAllSerializableEventsAsync()).GetValue());
+        Assert.Empty((await store.ReadAllSerializableEventsAsync().AsResultBoxAsync()).GetValue());
         Assert.Equal(0, publisher.PlannedPublishCalls);
         Assert.Equal(0, publisher.LegacyPublishCalls);
     }
@@ -452,7 +453,7 @@ public sealed class AzureQueueSizeGateTests
                 [new ConsistencyTagEntry($"WeatherForecast:{serializedId}", "")]));
 
         Assert.IsType<ExecutorSizeCapabilityException>(serialized.GetException());
-        Assert.Empty((await serializedStore.ReadAllSerializableEventsAsync()).GetValue());
+        Assert.Empty((await serializedStore.ReadAllSerializableEventsAsync().AsResultBoxAsync()).GetValue());
 
         var conditionalStore = new InMemoryConditionalEventStore(domain.EventTypes);
         var conditionalPublisher = new FailingDestinationPublisher(failOnCapture: 1);
@@ -466,7 +467,7 @@ public sealed class AzureQueueSizeGateTests
                     "g76-strict-capture-failure"));
 
         Assert.IsType<ExecutorSizeCapabilityException>(conditional.GetException());
-        Assert.Empty((await conditionalStore.ReadAllSerializableEventsAsync()).GetValue());
+        Assert.Empty((await conditionalStore.ReadAllSerializableEventsAsync().AsResultBoxAsync()).GetValue());
         Assert.Equal(0, conditionalPublisher.PlannedPublishCalls);
         Assert.Equal(0, conditionalPublisher.LegacyPublishCalls);
     }
@@ -500,7 +501,7 @@ public sealed class AzureQueueSizeGateTests
         var result = await ExecuteFailureRouteAsync(route, executor, domain);
 
         Assert.IsType<ExecutorSizeCapabilityException>(result.Exception);
-        Assert.Empty((await store.ReadAllSerializableEventsAsync()).GetValue());
+        Assert.Empty((await store.ReadAllSerializableEventsAsync().AsResultBoxAsync()).GetValue());
         Assert.Equal(0, publisher.PlannedPublishCalls);
         Assert.Equal(0, publisher.LegacyPublishCalls);
     }
@@ -535,7 +536,7 @@ public sealed class AzureQueueSizeGateTests
 
         Assert.True(result.IsSuccess, result.Exception?.ToString());
         Assert.Single(result.Diagnostics);
-        Assert.Single((await store.ReadAllSerializableEventsAsync()).GetValue());
+        Assert.Single((await store.ReadAllSerializableEventsAsync().AsResultBoxAsync()).GetValue());
         Assert.Equal(0, publisher.PlannedPublishCalls);
         Assert.Equal(1, publisher.LegacyPublishCalls);
     }
@@ -910,7 +911,7 @@ public sealed class AzureQueueSizeGateTests
 
         var exception = Assert.IsType<ExecutorSizeLimitExceededException>(result.GetException());
         Assert.Empty(remaining);
-        Assert.Empty((await store.ReadAllSerializableEventsAsync()).GetValue());
+        Assert.Empty((await store.ReadAllSerializableEventsAsync().AsResultBoxAsync()).GetValue());
         Assert.Equal(0, publisher.PlannedPublishCalls);
         Assert.Equal(0, publisher.LegacyPublishCalls);
         return exception;
@@ -966,7 +967,7 @@ public sealed class AzureQueueSizeGateTests
         Assert.Equal(measuredBytes, execution.Exception.MeasuredBytes);
         Assert.Equal(measuredRepresentationBytes, execution.Exception.MeasuredRepresentationBytes);
         Assert.Equal(certifiedUpperBoundBytes, execution.Exception.CertifiedUpperBoundBytes);
-        Assert.Empty((await execution.Store.ReadAllSerializableEventsAsync()).GetValue());
+        Assert.Empty((await execution.Store.ReadAllSerializableEventsAsync().AsResultBoxAsync()).GetValue());
         Assert.Equal(2, execution.Publisher.CaptureCalls);
         Assert.Equal(0, execution.Publisher.PlannedPublishCalls);
         Assert.Equal(0, execution.Publisher.LegacyPublishCalls);

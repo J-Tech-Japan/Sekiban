@@ -637,13 +637,8 @@ public sealed class UnsafeWindowMvMySqlCatchUpWorker<TRow> : IUnsafeWindowMvCatc
             cancellationToken: cancellationToken)).ConfigureAwait(false);
 
         var since = string.IsNullOrEmpty(lastSuid) ? null : new SortableUniqueId(lastSuid);
-        var result = await _eventStore.ReadAllSerializableEventsAsync(since).ConfigureAwait(false);
-        if (!result.IsSuccess)
-        {
-            throw result.GetException();
-        }
-
-        var events = result.GetValue().Take(_batchSize).ToList();
+        var serializedEvents = await _eventStore.ReadAllSerializableEventsAsync(since).ConfigureAwait(false);
+        var events = serializedEvents.Take(_batchSize).ToList();
         if (events.Count == 0)
         {
             return 0;
@@ -816,13 +811,8 @@ public sealed class UnsafeWindowMvMySqlPromoter<TRow> : IUnsafeWindowMvPromoter 
         foreach (var tag in tags)
         {
             ct.ThrowIfCancellationRequested();
-            var result = await _eventStore.ReadSerializableEventsByTagAsync(tag, since).ConfigureAwait(false);
-            if (!result.IsSuccess)
-            {
-                throw result.GetException();
-            }
-
-            foreach (var serialized in result.GetValue())
+            var serializedEvents = await _eventStore.ReadSerializableEventsByTagAsync(tag, since).ConfigureAwait(false);
+            foreach (var serialized in serializedEvents)
             {
                 var key = serialized.Id.ToString();
                 if (combined.ContainsKey(key))

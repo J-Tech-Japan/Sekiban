@@ -1,5 +1,4 @@
 using System.Collections.Concurrent;
-using ResultBoxes;
 using Sekiban.Dcb.MultiProjections;
 using Sekiban.Dcb.Capabilities;
 using Sekiban.Dcb.ServiceId;
@@ -72,7 +71,7 @@ public class InMemoryMultiProjectionStateStore :
         }
     }
 
-    public Task<ResultBox<ProjectionStatusWriteResult>> UpsertAsync(
+    public Task<ProjectionStatusWriteResult> UpsertAsync(
         ProjectionStatusHeartbeat heartbeat,
         long expectedSequence,
         CancellationToken cancellationToken = default)
@@ -83,9 +82,9 @@ public class InMemoryMultiProjectionStateStore :
         var serviceId = CurrentServiceId;
         if (!string.Equals(heartbeat.ServiceId, serviceId, StringComparison.Ordinal))
         {
-            return Task.FromResult(ResultBox.Error<ProjectionStatusWriteResult>(
+            return Task.FromException<ProjectionStatusWriteResult>(
                 new UnauthorizedAccessException(
-                    $"Projection status heartbeat belongs to service '{heartbeat.ServiceId}', not '{serviceId}'.")));
+                    $"Projection status heartbeat belongs to service '{heartbeat.ServiceId}', not '{serviceId}'."));
         }
 
         if (string.IsNullOrWhiteSpace(heartbeat.ProjectorName) ||
@@ -94,8 +93,8 @@ public class InMemoryMultiProjectionStateStore :
             string.IsNullOrWhiteSpace(heartbeat.ActivationId) ||
             heartbeat.Sequence <= 0)
         {
-            return Task.FromResult(ResultBox.Error<ProjectionStatusWriteResult>(
-                new ArgumentException("Projection status heartbeat identity and sequence are required.")));
+            return Task.FromException<ProjectionStatusWriteResult>(
+                new ArgumentException("Projection status heartbeat identity and sequence are required."));
         }
 
         var key = (
@@ -110,22 +109,22 @@ public class InMemoryMultiProjectionStateStore :
             var currentSequence = current?.Sequence ?? 0;
             if (currentSequence != expectedSequence || heartbeat.Sequence <= currentSequence)
             {
-                return Task.FromResult(ResultBox.FromValue(
+                return Task.FromResult(
                     ProjectionStatusWriteResult.Rejected(
                         heartbeat,
                         expectedSequence,
                         current,
                         current is null && expectedSequence > 0
                             ? ProjectionStatusConflictReason.RowAbsent
-                            : null)));
+                            : null));
             }
 
             _statusRows[key] = heartbeat;
-            return Task.FromResult(ResultBox.FromValue(ProjectionStatusWriteResult.Success(heartbeat)));
+            return Task.FromResult(ProjectionStatusWriteResult.Success(heartbeat));
         }
     }
 
-    public Task<ResultBox<IReadOnlyList<ProjectionStatusHeartbeat>>> ListAsync(
+    public Task<IReadOnlyList<ProjectionStatusHeartbeat>> ListAsync(
         string? projectorName = null,
         string? projectorVersion = null,
         CancellationToken cancellationToken = default)
@@ -144,22 +143,21 @@ public class InMemoryMultiProjectionStateStore :
                 .ThenBy(row => row.ClusterId, StringComparer.Ordinal)
                 .ThenBy(row => row.ActivationId, StringComparer.Ordinal)
                 .ToArray();
-            return Task.FromResult(ResultBox.FromValue<IReadOnlyList<ProjectionStatusHeartbeat>>(rows));
+            return Task.FromResult<IReadOnlyList<ProjectionStatusHeartbeat>>(rows);
         }
     }
 
-    public Task<ResultBox<OptionalValue<MultiProjectionStateRecord>>> GetLatestForVersionAsync(
+    public Task<MultiProjectionStateRecord?> GetLatestForVersionAsync(
         string projectorName,
         string projectorVersion,
         CancellationToken cancellationToken = default)
     {
         var serviceId = CurrentServiceId;
         _states.TryGetValue((serviceId, projectorName, projectorVersion), out var record);
-        return Task.FromResult(ResultBox.FromValue(
-            record != null ? OptionalValue.FromValue(record) : OptionalValue<MultiProjectionStateRecord>.Empty));
+        return Task.FromResult(record);
     }
 
-    public Task<ResultBox<OptionalValue<MultiProjectionStateRecord>>> GetLatestAnyVersionAsync(
+    public Task<MultiProjectionStateRecord?> GetLatestAnyVersionAsync(
         string projectorName,
         CancellationToken cancellationToken = default)
     {
@@ -171,21 +169,20 @@ public class InMemoryMultiProjectionStateStore :
             .ThenByDescending(s => s.LastSortableUniqueId)
             .FirstOrDefault();
 
-        return Task.FromResult(ResultBox.FromValue(
-            record != null ? OptionalValue.FromValue(record) : OptionalValue<MultiProjectionStateRecord>.Empty));
+        return Task.FromResult(record);
     }
 
-    public Task<ResultBox<bool>> UpsertAsync(
+    public Task<bool> UpsertAsync(
         MultiProjectionStateRecord record,
         int offloadThresholdBytes = 1_000_000,
         CancellationToken cancellationToken = default)
     {
-        return Task.FromResult(ResultBox.Error<bool>(
+        return Task.FromException<bool>(
             new NotSupportedException(
-                "InMemoryMultiProjectionStateStore requires payload stream upsert. Use UpsertFromStreamAsync.")));
+                "InMemoryMultiProjectionStateStore requires payload stream upsert. Use UpsertFromStreamAsync."));
     }
 
-    public async Task<ResultBox<bool>> UpsertFromStreamAsync(
+    public async Task<bool> UpsertFromStreamAsync(
         MultiProjectionStateWriteRequest request,
         Stream stream,
         int offloadThresholdBytes,
@@ -207,10 +204,10 @@ public class InMemoryMultiProjectionStateStore :
             var revision = existing is null ? 1 : existing.Revision + 1;
             _control[key] = new ControlEntry(generation, revision, CheckpointLifecycle.Active);
         }
-        return ResultBox.FromValue(true);
+        return true;
     }
 
-    public Task<ResultBox<Stream>> OpenStateDataReadStreamAsync(
+    public Task<Stream> OpenStateDataReadStreamAsync(
         MultiProjectionStateRecord record,
         CancellationToken cancellationToken = default)
     {
@@ -218,15 +215,15 @@ public class InMemoryMultiProjectionStateStore :
         var key = (serviceId, record.ProjectorName, record.ProjectorVersion);
         if (_stateData.TryGetValue(key, out var data))
         {
-            return Task.FromResult(ResultBox.FromValue<Stream>(new MemoryStream(data, writable: false)));
+            return Task.FromResult<Stream>(new MemoryStream(data, writable: false));
         }
 
-        return Task.FromResult(ResultBox.Error<Stream>(
+        return Task.FromException<Stream>(
             new InvalidOperationException(
-                $"InMemory snapshot payload not found for {record.ProjectorName}/{record.ProjectorVersion}")));
+                $"InMemory snapshot payload not found for {record.ProjectorName}/{record.ProjectorVersion}"));
     }
 
-    public Task<ResultBox<IReadOnlyList<ProjectorStateInfo>>> ListAllAsync(
+    public Task<IReadOnlyList<ProjectorStateInfo>> ListAllAsync(
         CancellationToken cancellationToken = default)
     {
         var serviceId = CurrentServiceId;
@@ -243,10 +240,10 @@ public class InMemoryMultiProjectionStateStore :
                 s.LastSortableUniqueId))
             .ToList();
 
-        return Task.FromResult(ResultBox.FromValue<IReadOnlyList<ProjectorStateInfo>>(list));
+        return Task.FromResult<IReadOnlyList<ProjectorStateInfo>>(list);
     }
 
-    public Task<ResultBox<bool>> DeleteAsync(
+    public Task<bool> DeleteAsync(
         string projectorName,
         string projectorVersion,
         CancellationToken cancellationToken = default)
@@ -259,10 +256,10 @@ public class InMemoryMultiProjectionStateStore :
         {
             _control.Remove(key);
         }
-        return Task.FromResult(ResultBox.FromValue(removed));
+        return Task.FromResult(removed);
     }
 
-    public Task<ResultBox<int>> DeleteAllAsync(
+    public Task<int> DeleteAllAsync(
         string? projectorName = null,
         CancellationToken cancellationToken = default)
     {
@@ -284,7 +281,7 @@ public class InMemoryMultiProjectionStateStore :
             }
         }
 
-        return Task.FromResult(ResultBox.FromValue(keysToRemove.Count));
+        return Task.FromResult(keysToRemove.Count);
     }
 
     // ---------------------------------------------------------------------------------------------------------------
@@ -304,7 +301,7 @@ public class InMemoryMultiProjectionStateStore :
         return new CheckpointSlot(true, entry.Generation, entry.Revision.ToString(), entry.Lifecycle, record);
     }
 
-    public Task<ResultBox<CheckpointSlot>> ReadCheckpointSlotAsync(
+    public Task<CheckpointSlot> ReadCheckpointSlotAsync(
         string projectorName,
         string projectorVersion,
         CancellationToken cancellationToken = default)
@@ -312,7 +309,7 @@ public class InMemoryMultiProjectionStateStore :
         var key = (CurrentServiceId, projectorName, projectorVersion);
         lock (_casGate)
         {
-            return Task.FromResult(ResultBox.FromValue(BuildSlotUnlocked(key)));
+            return Task.FromResult(BuildSlotUnlocked(key));
         }
     }
 
@@ -431,7 +428,7 @@ public class InMemoryMultiProjectionStateStore :
         if (fault is WriteFaultMode.PostCommitRereadUnavailable)
         {
             return await CheckpointInDoubtResolver.ResolveAsync(
-                _ => throw new IOException("injected re-read authority unreachable"),
+                _ => Task.FromException<CheckpointSlot>(new IOException("injected re-read authority unreachable")),
                 CheckpointInDoubtResolver.CommittedByExactResult(
                     generation, nextRevision, CheckpointLifecycle.Active, payload.LastSortableUniqueId, payload.EventsProcessed),
                 maxAttempts: 3,

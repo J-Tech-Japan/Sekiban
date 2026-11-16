@@ -46,7 +46,7 @@ public class TagListService
     /// <param name="tagGroup">Optional: Filter by tag group name</param>
     /// <returns>List of tag information</returns>
     public Task<ResultBox<IEnumerable<TagInfo>>> GetAllTagsAsync(string? tagGroup = null)
-        => _eventStore.GetAllTagsAsync(tagGroup);
+        => _eventStore.GetAllTagsAsync(tagGroup).ToResultBoxAsync();
 
     /// <summary>
     ///     Get all tags grouped by tag group
@@ -55,7 +55,7 @@ public class TagListService
     /// <returns>List of tag group summaries</returns>
     public async Task<ResultBox<IReadOnlyList<TagGroupSummary>>> GetTagsByGroupAsync(string? tagGroup = null)
     {
-        var tagsResult = await _eventStore.GetAllTagsAsync(tagGroup);
+        var tagsResult = await _eventStore.GetAllTagsAsync(tagGroup).ToResultBoxAsync();
         if (!tagsResult.IsSuccess)
         {
             return ResultBox.Error<IReadOnlyList<TagGroupSummary>>(tagsResult.GetException());

@@ -5,6 +5,7 @@ using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Testing;
 using Sekiban.Dcb.Storage;
 using CoreInMemoryEventStore = Sekiban.Dcb.Testing.InMemoryEventStore;
+using Sekiban.Dcb.TestSupport;
 namespace Sekiban.Dcb.Tests;
 
 /// <summary>
@@ -169,7 +170,7 @@ public class InMemoryObjectAccessorTests
 
         // Create some events
         var event1 = EventTestHelper.CreateEvent(new StudentCreated(studentId, "John Doe"), studentTag);
-        await _eventStore.WriteEventAsync(event1, _domainTypes.EventTypes);
+        await _eventStore.WriteEventAsync(event1, _domainTypes.EventTypes).AsResultBoxAsync();
 
         // Get TagConsistentActor and make a reservation with a sortable unique ID
         var tagConsistentActorResult = await _accessor.GetActorAsync<ITagConsistentActorCommon>(tagConsistentActorId);
@@ -182,7 +183,7 @@ public class InMemoryObjectAccessorTests
 
         // Add another event (this should not be included in the state)
         var event2 = EventTestHelper.CreateEvent(new StudentEnrolledInClassRoom(studentId, Guid.NewGuid()), studentTag);
-        await _eventStore.WriteEventAsync(event2, _domainTypes.EventTypes);
+        await _eventStore.WriteEventAsync(event2, _domainTypes.EventTypes).AsResultBoxAsync();
 
         // Get TagStateActor
         var tagStateActorResult = await _accessor.GetActorAsync<ITagStateActorCommon>(tagStateActorId);

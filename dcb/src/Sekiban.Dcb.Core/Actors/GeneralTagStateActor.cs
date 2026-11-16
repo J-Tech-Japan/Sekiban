@@ -528,7 +528,7 @@ public class GeneralTagStateActor : ITagStateActorCommon
             }
             else
             {
-                var eventsResult = await _eventStore.ReadEventsByTagAsync(tag, _eventTypes, since);
+                var eventsResult = await _eventStore.ReadEventsByTagAsync(tag, _eventTypes, since).ToResultBoxAsync();
                 cancellationToken.ThrowIfCancellationRequested();
                 if (!eventsResult.IsSuccess)
                 {
@@ -607,7 +607,7 @@ public class GeneralTagStateActor : ITagStateActorCommon
             }
             else
             {
-                var eventsResult = await _eventStore.ReadEventsByTagAsync(tag, _eventTypes);
+                var eventsResult = await _eventStore.ReadEventsByTagAsync(tag, _eventTypes).ToResultBoxAsync();
                 cancellationToken.ThrowIfCancellationRequested();
                 if (!eventsResult.IsSuccess)
                 {

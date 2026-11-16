@@ -1,5 +1,4 @@
 using Microsoft.Data.Sqlite;
-using ResultBoxes;
 
 namespace Sekiban.Dcb.Sqlite;
 
@@ -71,152 +70,136 @@ public partial class SqliteMultiProjectionStateStore
         }
     }
 
-    public async Task<ResultBox<ProjectionStatusWriteResult>> UpsertAsync(
+    public async Task<ProjectionStatusWriteResult> UpsertAsync(
         ProjectionStatusHeartbeat heartbeat,
         long expectedSequence,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(heartbeat);
-        try
+        var serviceId = CurrentServiceId;
+        if (!string.Equals(heartbeat.ServiceId, serviceId, StringComparison.Ordinal))
         {
-            var serviceId = CurrentServiceId;
-            if (!string.Equals(heartbeat.ServiceId, serviceId, StringComparison.Ordinal))
-            {
-                return ResultBox.Error<ProjectionStatusWriteResult>(
-                    new UnauthorizedAccessException("Projection status ServiceId is owned by the server."));
-            }
-
-            if (expectedSequence < 0 || heartbeat.Sequence <= 0)
-            {
-                return ResultBox.Error<ProjectionStatusWriteResult>(
-                    new ArgumentOutOfRangeException(nameof(expectedSequence), "Projection status sequences must be positive and expected sequence must not be negative."));
-            }
-
-            await using var connection = new SqliteConnection(_connectionString);
-            await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
-            EnsureProjectionStatusSchema(connection);
-
-            await using var command = connection.CreateCommand();
-            command.CommandText = """
-                INSERT INTO dcb_projection_statuses
-                    (ServiceId, ProjectorName, ProjectorVersion, ClusterId, ActivationId, Sequence,
-                     AppliedEventCount, LastAppliedSortableUniqueId, LastTraversedSortableUniqueId, RecordedAtUtc,
-                     Phase, LeaseExpiresAtUtc, IsFaulted, FaultMessage, SwitchKind, SwitchReason, SwitchedAtUtc)
-                SELECT @serviceId, @projectorName, @projectorVersion, @clusterId, @activationId, @sequence,
-                       @appliedEventCount, @lastAppliedSortableUniqueId, @lastTraversedSortableUniqueId, @recordedAtUtc,
-                       @phase, @leaseExpiresAtUtc, @isFaulted, @faultMessage, @switchKind, @switchReason, @switchedAtUtc
-                WHERE @expectedSequence = 0
-                   OR EXISTS (
-                       SELECT 1
-                       FROM dcb_projection_statuses
-                       WHERE ServiceId = @serviceId
-                         AND ProjectorName = @projectorName
-                         AND ProjectorVersion = @projectorVersion
-                         AND ClusterId = @clusterId)
-                ON CONFLICT(ServiceId, ProjectorName, ProjectorVersion, ClusterId)
-                DO UPDATE SET
-                    ActivationId = excluded.ActivationId,
-                    Sequence = excluded.Sequence,
-                    AppliedEventCount = excluded.AppliedEventCount,
-                    LastAppliedSortableUniqueId = excluded.LastAppliedSortableUniqueId,
-                    LastTraversedSortableUniqueId = excluded.LastTraversedSortableUniqueId,
-                    RecordedAtUtc = excluded.RecordedAtUtc,
-                    Phase = excluded.Phase,
-                    LeaseExpiresAtUtc = excluded.LeaseExpiresAtUtc,
-                    IsFaulted = excluded.IsFaulted,
-                    FaultMessage = excluded.FaultMessage,
-                    SwitchKind = excluded.SwitchKind,
-                    SwitchReason = excluded.SwitchReason,
-                    SwitchedAtUtc = excluded.SwitchedAtUtc
-                WHERE dcb_projection_statuses.Sequence = @expectedSequence
-                  AND excluded.Sequence > dcb_projection_statuses.Sequence
-                RETURNING ServiceId, ProjectorName, ProjectorVersion, ClusterId, ActivationId, Sequence,
-                          AppliedEventCount, LastAppliedSortableUniqueId, LastTraversedSortableUniqueId, RecordedAtUtc,
-                          Phase, LeaseExpiresAtUtc, IsFaulted, FaultMessage, SwitchKind, SwitchReason, SwitchedAtUtc;
-                """;
-            AddStatusParameter(command, "@serviceId", heartbeat.ServiceId);
-            AddStatusParameter(command, "@projectorName", heartbeat.ProjectorName);
-            AddStatusParameter(command, "@projectorVersion", heartbeat.ProjectorVersion);
-            AddStatusParameter(command, "@clusterId", heartbeat.ClusterId);
-            AddStatusParameter(command, "@activationId", heartbeat.ActivationId);
-            AddStatusParameter(command, "@sequence", heartbeat.Sequence);
-            AddStatusParameter(command, "@appliedEventCount", heartbeat.AppliedEventCount);
-            AddStatusParameter(command, "@lastAppliedSortableUniqueId", (object?)heartbeat.LastAppliedSortableUniqueId ?? DBNull.Value);
-            AddStatusParameter(command, "@lastTraversedSortableUniqueId", (object?)heartbeat.LastTraversedSortableUniqueId ?? DBNull.Value);
-            AddStatusParameter(command, "@recordedAtUtc", heartbeat.RecordedAtUtc.ToString("O"));
-            AddStatusParameter(command, "@phase", heartbeat.Phase);
-            AddStatusParameter(command, "@leaseExpiresAtUtc", (object?)heartbeat.LeaseExpiresAtUtc?.ToString("O") ?? DBNull.Value);
-            AddStatusParameter(command, "@isFaulted", heartbeat.IsFaulted ? 1 : 0);
-            AddStatusParameter(command, "@faultMessage", (object?)heartbeat.FaultMessage ?? DBNull.Value);
-            AddStatusParameter(command, "@switchKind", (object?)heartbeat.SwitchKind ?? DBNull.Value);
-            AddStatusParameter(command, "@switchReason", (object?)heartbeat.SwitchReason ?? DBNull.Value);
-            AddStatusParameter(command, "@switchedAtUtc", (object?)heartbeat.SwitchedAtUtc?.ToString("O") ?? DBNull.Value);
-            AddStatusParameter(command, "@expectedSequence", expectedSequence);
-
-            await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
-            if (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
-            {
-                return ResultBox.FromValue(ProjectionStatusWriteResult.Success(ReadHeartbeat(reader)));
-            }
-
-            await reader.DisposeAsync().ConfigureAwait(false);
-            var current = await ReadCurrentHeartbeatAsync(
-                connection,
-                heartbeat,
-                cancellationToken).ConfigureAwait(false);
-            return ResultBox.FromValue(ProjectionStatusWriteResult.Rejected(
-                heartbeat,
-                expectedSequence,
-                current,
-                current is null && expectedSequence > 0
-                    ? ProjectionStatusConflictReason.RowAbsent
-                    : null));
+            throw new UnauthorizedAccessException("Projection status ServiceId is owned by the server.");
         }
-        catch (Exception ex)
+
+        if (expectedSequence < 0 || heartbeat.Sequence <= 0)
         {
-            return ResultBox.Error<ProjectionStatusWriteResult>(ex);
+            throw new ArgumentOutOfRangeException(nameof(expectedSequence), "Projection status sequences must be positive and expected sequence must not be negative.");
         }
+
+        await using var connection = new SqliteConnection(_connectionString);
+        await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+        EnsureProjectionStatusSchema(connection);
+
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            INSERT INTO dcb_projection_statuses
+                (ServiceId, ProjectorName, ProjectorVersion, ClusterId, ActivationId, Sequence,
+                 AppliedEventCount, LastAppliedSortableUniqueId, LastTraversedSortableUniqueId, RecordedAtUtc,
+                 Phase, LeaseExpiresAtUtc, IsFaulted, FaultMessage, SwitchKind, SwitchReason, SwitchedAtUtc)
+            SELECT @serviceId, @projectorName, @projectorVersion, @clusterId, @activationId, @sequence,
+                   @appliedEventCount, @lastAppliedSortableUniqueId, @lastTraversedSortableUniqueId, @recordedAtUtc,
+                   @phase, @leaseExpiresAtUtc, @isFaulted, @faultMessage, @switchKind, @switchReason, @switchedAtUtc
+            WHERE @expectedSequence = 0
+               OR EXISTS (
+                   SELECT 1
+                   FROM dcb_projection_statuses
+                   WHERE ServiceId = @serviceId
+                     AND ProjectorName = @projectorName
+                     AND ProjectorVersion = @projectorVersion
+                     AND ClusterId = @clusterId)
+            ON CONFLICT(ServiceId, ProjectorName, ProjectorVersion, ClusterId)
+            DO UPDATE SET
+                ActivationId = excluded.ActivationId,
+                Sequence = excluded.Sequence,
+                AppliedEventCount = excluded.AppliedEventCount,
+                LastAppliedSortableUniqueId = excluded.LastAppliedSortableUniqueId,
+                LastTraversedSortableUniqueId = excluded.LastTraversedSortableUniqueId,
+                RecordedAtUtc = excluded.RecordedAtUtc,
+                Phase = excluded.Phase,
+                LeaseExpiresAtUtc = excluded.LeaseExpiresAtUtc,
+                IsFaulted = excluded.IsFaulted,
+                FaultMessage = excluded.FaultMessage,
+                SwitchKind = excluded.SwitchKind,
+                SwitchReason = excluded.SwitchReason,
+                SwitchedAtUtc = excluded.SwitchedAtUtc
+            WHERE dcb_projection_statuses.Sequence = @expectedSequence
+              AND excluded.Sequence > dcb_projection_statuses.Sequence
+            RETURNING ServiceId, ProjectorName, ProjectorVersion, ClusterId, ActivationId, Sequence,
+                      AppliedEventCount, LastAppliedSortableUniqueId, LastTraversedSortableUniqueId, RecordedAtUtc,
+                      Phase, LeaseExpiresAtUtc, IsFaulted, FaultMessage, SwitchKind, SwitchReason, SwitchedAtUtc;
+            """;
+        AddStatusParameter(command, "@serviceId", heartbeat.ServiceId);
+        AddStatusParameter(command, "@projectorName", heartbeat.ProjectorName);
+        AddStatusParameter(command, "@projectorVersion", heartbeat.ProjectorVersion);
+        AddStatusParameter(command, "@clusterId", heartbeat.ClusterId);
+        AddStatusParameter(command, "@activationId", heartbeat.ActivationId);
+        AddStatusParameter(command, "@sequence", heartbeat.Sequence);
+        AddStatusParameter(command, "@appliedEventCount", heartbeat.AppliedEventCount);
+        AddStatusParameter(command, "@lastAppliedSortableUniqueId", (object?)heartbeat.LastAppliedSortableUniqueId ?? DBNull.Value);
+        AddStatusParameter(command, "@lastTraversedSortableUniqueId", (object?)heartbeat.LastTraversedSortableUniqueId ?? DBNull.Value);
+        AddStatusParameter(command, "@recordedAtUtc", heartbeat.RecordedAtUtc.ToString("O"));
+        AddStatusParameter(command, "@phase", heartbeat.Phase);
+        AddStatusParameter(command, "@leaseExpiresAtUtc", (object?)heartbeat.LeaseExpiresAtUtc?.ToString("O") ?? DBNull.Value);
+        AddStatusParameter(command, "@isFaulted", heartbeat.IsFaulted ? 1 : 0);
+        AddStatusParameter(command, "@faultMessage", (object?)heartbeat.FaultMessage ?? DBNull.Value);
+        AddStatusParameter(command, "@switchKind", (object?)heartbeat.SwitchKind ?? DBNull.Value);
+        AddStatusParameter(command, "@switchReason", (object?)heartbeat.SwitchReason ?? DBNull.Value);
+        AddStatusParameter(command, "@switchedAtUtc", (object?)heartbeat.SwitchedAtUtc?.ToString("O") ?? DBNull.Value);
+        AddStatusParameter(command, "@expectedSequence", expectedSequence);
+
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        if (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            return ProjectionStatusWriteResult.Success(ReadHeartbeat(reader));
+        }
+
+        await reader.DisposeAsync().ConfigureAwait(false);
+        var current = await ReadCurrentHeartbeatAsync(
+            connection,
+            heartbeat,
+            cancellationToken).ConfigureAwait(false);
+        return ProjectionStatusWriteResult.Rejected(
+            heartbeat,
+            expectedSequence,
+            current,
+            current is null && expectedSequence > 0
+                ? ProjectionStatusConflictReason.RowAbsent
+                : null);
     }
 
-    public async Task<ResultBox<IReadOnlyList<ProjectionStatusHeartbeat>>> ListAsync(
+    public async Task<IReadOnlyList<ProjectionStatusHeartbeat>> ListAsync(
         string? projectorName = null,
         string? projectorVersion = null,
         CancellationToken cancellationToken = default)
     {
-        try
+        await using var connection = new SqliteConnection(_connectionString);
+        await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+        EnsureProjectionStatusSchema(connection);
+
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT ServiceId, ProjectorName, ProjectorVersion, ClusterId, ActivationId, Sequence,
+                   AppliedEventCount, LastAppliedSortableUniqueId, LastTraversedSortableUniqueId, RecordedAtUtc,
+                   Phase, LeaseExpiresAtUtc, IsFaulted, FaultMessage, SwitchKind, SwitchReason, SwitchedAtUtc
+            FROM dcb_projection_statuses
+            WHERE ServiceId = @serviceId
+              AND (@projectorName IS NULL OR ProjectorName = @projectorName)
+              AND (@projectorVersion IS NULL OR ProjectorVersion = @projectorVersion)
+            ORDER BY ProjectorName, ProjectorVersion, ClusterId, ActivationId;
+            """;
+        AddStatusParameter(command, "@serviceId", CurrentServiceId);
+        AddStatusParameter(command, "@projectorName", (object?)projectorName ?? DBNull.Value);
+        AddStatusParameter(command, "@projectorVersion", (object?)projectorVersion ?? DBNull.Value);
+
+        var rows = new List<ProjectionStatusHeartbeat>();
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
         {
-            await using var connection = new SqliteConnection(_connectionString);
-            await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
-            EnsureProjectionStatusSchema(connection);
-
-            await using var command = connection.CreateCommand();
-            command.CommandText = """
-                SELECT ServiceId, ProjectorName, ProjectorVersion, ClusterId, ActivationId, Sequence,
-                       AppliedEventCount, LastAppliedSortableUniqueId, LastTraversedSortableUniqueId, RecordedAtUtc,
-                       Phase, LeaseExpiresAtUtc, IsFaulted, FaultMessage, SwitchKind, SwitchReason, SwitchedAtUtc
-                FROM dcb_projection_statuses
-                WHERE ServiceId = @serviceId
-                  AND (@projectorName IS NULL OR ProjectorName = @projectorName)
-                  AND (@projectorVersion IS NULL OR ProjectorVersion = @projectorVersion)
-                ORDER BY ProjectorName, ProjectorVersion, ClusterId, ActivationId;
-                """;
-            AddStatusParameter(command, "@serviceId", CurrentServiceId);
-            AddStatusParameter(command, "@projectorName", (object?)projectorName ?? DBNull.Value);
-            AddStatusParameter(command, "@projectorVersion", (object?)projectorVersion ?? DBNull.Value);
-
-            var rows = new List<ProjectionStatusHeartbeat>();
-            await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
-            while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
-            {
-                rows.Add(ReadHeartbeat(reader));
-            }
-
-            return ResultBox.FromValue<IReadOnlyList<ProjectionStatusHeartbeat>>(rows);
+            rows.Add(ReadHeartbeat(reader));
         }
-        catch (Exception ex)
-        {
-            return ResultBox.Error<IReadOnlyList<ProjectionStatusHeartbeat>>(ex);
-        }
+
+        return rows;
     }
 
     private static void AddStatusParameter(SqliteCommand command, string name, object value)

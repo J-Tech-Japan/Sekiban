@@ -1,34 +1,39 @@
-using ResultBoxes;
 namespace Sekiban.Dcb.ColdEvents;
 
+/// <summary>
+///     Object storage used by the cold event store. Failures are reported as exceptions; cancellation is reported as
+///     <see cref="OperationCanceledException" />.
+/// </summary>
 public interface IColdObjectStorage
 {
-    Task<ResultBox<ColdStorageObject>> GetAsync(string path, CancellationToken ct);
+    /// <summary>Returns the object at <paramref name="path" />, or <c>null</c> when no object exists there.</summary>
+    Task<ColdStorageObject?> GetAsync(string path, CancellationToken ct);
 
-    async Task<ResultBox<Stream>> OpenReadAsync(string path, CancellationToken ct)
+    /// <summary>
+    ///     Opens the object at <paramref name="path" /> for reading. A missing object is a failure: the default
+    ///     implementation throws <see cref="KeyNotFoundException" />.
+    /// </summary>
+    async Task<Stream> OpenReadAsync(string path, CancellationToken ct)
     {
-        var getResult = await GetAsync(path, ct).ConfigureAwait(false);
-        if (!getResult.IsSuccess)
-        {
-            return ResultBox.Error<Stream>(getResult.GetException());
-        }
-
-        return ResultBox.FromValue<Stream>(new MemoryStream(getResult.GetValue().Data, writable: false));
+        var storageObject = await GetAsync(path, ct).ConfigureAwait(false)
+            ?? throw new KeyNotFoundException($"Cold object not found: {path}");
+        return new MemoryStream(storageObject.Data, writable: false);
     }
 
-    Task<ResultBox<bool>> PutAsync(
+    Task<bool> PutAsync(
         string path,
         Stream data,
         string? expectedETag,
         CancellationToken ct);
 
-    Task<ResultBox<bool>> PutAsync(
+    Task<bool> PutAsync(
         string path,
         byte[] data,
         string? expectedETag,
         CancellationToken ct);
 
-    Task<ResultBox<IReadOnlyList<string>>> ListAsync(string prefix, CancellationToken ct);
+    Task<IReadOnlyList<string>> ListAsync(string prefix, CancellationToken ct);
 
-    Task<ResultBox<bool>> DeleteAsync(string path, CancellationToken ct);
+    /// <summary>Deletes the object; returns <c>false</c> when no object existed.</summary>
+    Task<bool> DeleteAsync(string path, CancellationToken ct);
 }

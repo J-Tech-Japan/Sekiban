@@ -68,7 +68,7 @@ public sealed class ProjectionStatusReader : IProjectionStatusReader
             var rowsResult = await _statusStore.ListAsync(
                 request?.ProjectorName,
                 expectedProjectorVersion is null ? request?.ProjectorVersion : null,
-                cancellationToken).ConfigureAwait(false);
+                cancellationToken).ToResultBoxAsync().ConfigureAwait(false);
             if (!rowsResult.IsSuccess)
             {
                 return ResultBox.Error<IReadOnlyList<ProjectionStatusSnapshot>>(rowsResult.GetException());
@@ -80,7 +80,7 @@ public sealed class ProjectionStatusReader : IProjectionStatusReader
             var sample = await _readWindowCache.GetOrSampleAsync(
                 serviceId,
                 _options.SamplingWindow,
-                () => _eventStore.GetEventCountAsync(),
+                () => _eventStore.GetEventCountAsync().ToResultBoxAsync(),
                 cancellationToken).ConfigureAwait(false);
             var total = sample.TotalEventCount;
             var sampledAt = sample.SampledAtUtc;
@@ -97,14 +97,9 @@ public sealed class ProjectionStatusReader : IProjectionStatusReader
                 await limiter.WaitAsync(cancellationToken).ConfigureAwait(false);
                 try
                 {
-                    var countResult = await _eventStore.GetEventCountAsync(
+                    var count = await _eventStore.GetEventCountAsync(
                         new SortableUniqueId(cursor!)).ConfigureAwait(false);
-                    if (!countResult.IsSuccess)
-                    {
-                        throw countResult.GetException();
-                    }
-
-                    remainingByCursor[cursor!] = Math.Max(0, countResult.GetValue());
+                    remainingByCursor[cursor!] = Math.Max(0, count);
                 }
                 finally
                 {

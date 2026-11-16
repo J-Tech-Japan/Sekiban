@@ -30,7 +30,7 @@ public class PostgresConditionalAppendTests : PostgresTestBase
     private IConditionalEventStore Conditional => (IConditionalEventStore)Fixture.EventStore;
 
     private async Task<int> DurableCount() =>
-        (await Fixture.EventStore.ReadAllSerializableEventsAsync()).GetValue().Count();
+        (await Fixture.EventStore.ReadAllSerializableEventsAsync().AsResultBoxAsync()).GetValue().Count();
 
     private SerializableEvent MarkerFixed(string value, string sortableId) =>
         new Event(new ConditionalMarkerEvent(value), sortableId, nameof(ConditionalMarkerEvent),
@@ -60,8 +60,8 @@ public class PostgresConditionalAppendTests : PostgresTestBase
     public async Task ConcurrentDifferentOperations_SameKey_OneWins_OtherIsKeyReuseConflict()
     {
         var results = await Task.WhenAll(
-            Conditional.AppendIfUniqueAsync(new ConditionalAppendRequest("pg-diff", ConditionalAppendScenarios.Marker(Fixture.DomainTypes, "A"))),
-            Conditional.AppendIfUniqueAsync(new ConditionalAppendRequest("pg-diff", ConditionalAppendScenarios.Marker(Fixture.DomainTypes, "B"))));
+            Conditional.AppendIfUniqueAsync(new ConditionalAppendRequest("pg-diff", ConditionalAppendScenarios.Marker(Fixture.DomainTypes, "A"))).AsResultBoxAsync(),
+            Conditional.AppendIfUniqueAsync(new ConditionalAppendRequest("pg-diff", ConditionalAppendScenarios.Marker(Fixture.DomainTypes, "B"))).AsResultBoxAsync());
 
         Assert.Equal(1, results.Count(r => r.IsSuccess && r.GetValue().Status == ConditionalAppendStatus.Appended));
         Assert.Equal(1, results.Count(r => !r.IsSuccess && r.GetException() is KeyReuseConflictException));
@@ -77,7 +77,7 @@ public class PostgresConditionalAppendTests : PostgresTestBase
         // Phase-aware: SaveChanges is cancelled before commit — a KNOWN pre-commit rollback. It surfaces as the original
         // OperationCanceledException, NEVER a typed AmbiguousAfterWrite. Nothing is durable.
         var cancelled = await Conditional.AppendIfUniqueAsync(
-            new ConditionalAppendRequest("pg-cancel", ConditionalAppendScenarios.Marker(Fixture.DomainTypes, "v")), cts.Token);
+            new ConditionalAppendRequest("pg-cancel", ConditionalAppendScenarios.Marker(Fixture.DomainTypes, "v")), cts.Token).AsResultBoxAsync();
 
         Assert.False(cancelled.IsSuccess);
         Assert.IsNotType<ConditionalAppendInDoubtException>(cancelled.GetException());
@@ -86,7 +86,7 @@ public class PostgresConditionalAppendTests : PostgresTestBase
 
         // Recovery: a normal retry converges to a durable Appended.
         var retry = (await Conditional.AppendIfUniqueAsync(
-            new ConditionalAppendRequest("pg-cancel", ConditionalAppendScenarios.Marker(Fixture.DomainTypes, "v")))).GetValue();
+            new ConditionalAppendRequest("pg-cancel", ConditionalAppendScenarios.Marker(Fixture.DomainTypes, "v"))).AsResultBoxAsync()).GetValue();
         Assert.Equal(ConditionalAppendStatus.Appended, retry.Status);
         Assert.Equal(1, await DurableCount());
     }
@@ -104,7 +104,7 @@ public class PostgresConditionalAppendTests : PostgresTestBase
             // The claim commits durably, then the response is lost. The store signals the post-commit ambiguity marker and
             // the shared orchestrator resolves it authoritatively ON THE SAME CALL to AlreadyCommitted — never raw transport.
             var first = await Conditional.AppendIfUniqueAsync(
-                new ConditionalAppendRequest("pg-postcommit", ConditionalAppendScenarios.Marker(Fixture.DomainTypes, "v")));
+                new ConditionalAppendRequest("pg-postcommit", ConditionalAppendScenarios.Marker(Fixture.DomainTypes, "v"))).AsResultBoxAsync();
             Assert.True(first.IsSuccess, first.IsSuccess ? "" : first.GetException().ToString());
             Assert.Equal(ConditionalAppendStatus.AlreadyCommittedSameOperation, first.GetValue().Status);
             Assert.Equal(1, await DurableCount());
@@ -119,9 +119,9 @@ public class PostgresConditionalAppendTests : PostgresTestBase
         var freshStore = new PostgresEventStore(
             Fixture.DbContextFactory, Fixture.DomainTypes.EventTypes, new DefaultServiceIdProvider());
         var deterministicId = ConditionalAppendIdentity.DeriveEventId("default", OperationFingerprint.NormalizeKey("pg-postcommit"));
-        var winner = (await freshStore.ReadSerializableEventAsync(deterministicId)).GetValue();
+        var winner = Assert.IsType<SerializableEvent>(await freshStore.ReadSerializableEventAsync(deterministicId));
         var retry = (await ((IConditionalEventStore)freshStore).AppendIfUniqueAsync(
-            new ConditionalAppendRequest("pg-postcommit", ConditionalAppendScenarios.Marker(Fixture.DomainTypes, "v")))).GetValue();
+            new ConditionalAppendRequest("pg-postcommit", ConditionalAppendScenarios.Marker(Fixture.DomainTypes, "v"))).AsResultBoxAsync()).GetValue();
 
         Assert.Equal(ConditionalAppendStatus.AlreadyCommittedSameOperation, retry.Status);
         ConditionalAppendScenarios.AssertReceiptMatchesStoredWinner(retry, "default", "pg-postcommit", Fixture.DomainTypes, winner);
@@ -179,11 +179,11 @@ public class PostgresConditionalAppendTests : PostgresTestBase
         try
         {
             var sortable = SortableUniqueId.GenerateNew();
-            var first = await Conditional.AppendIfUniqueAsync(new ConditionalAppendRequest("pg-unrelated-A", MarkerFixed("A", sortable)));
+            var first = await Conditional.AppendIfUniqueAsync(new ConditionalAppendRequest("pg-unrelated-A", MarkerFixed("A", sortable))).AsResultBoxAsync();
             Assert.True(first.IsSuccess);
             Assert.Equal(ConditionalAppendStatus.Appended, first.GetValue().Status);
 
-            var clash = await Conditional.AppendIfUniqueAsync(new ConditionalAppendRequest("pg-unrelated-B", MarkerFixed("B", sortable)));
+            var clash = await Conditional.AppendIfUniqueAsync(new ConditionalAppendRequest("pg-unrelated-B", MarkerFixed("B", sortable))).AsResultBoxAsync();
 
             Assert.False(clash.IsSuccess);
             Assert.IsNotType<KeyReuseConflictException>(clash.GetException());

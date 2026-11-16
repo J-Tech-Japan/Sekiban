@@ -17,6 +17,7 @@ using Sekiban.Dcb.ServiceId;
 using Sekiban.Dcb.SizeGates;
 using Sekiban.Dcb.Testing;
 using Xunit;
+using Sekiban.Dcb.TestSupport;
 
 namespace Sekiban.Dcb.Tests;
 
@@ -55,7 +56,7 @@ public sealed class DynamoDbLocalWriteOperationTests
                 DynamoDbMaxWrittenItemSizeMeasurement.MaximumItemBytes +
                 Encoding.UTF8.GetByteCount("attribute_not_exists(pk)")));
 
-            var result = await store.WriteSerializableEventsAsync(events);
+            var result = await store.WriteSerializableEventsAsync(events).AsResultBoxAsync();
 
             Assert.Equal(expectedSuccess, result.IsSuccess);
             Assert.Equal(expectedSuccess ? events.Count : 0, await CountItemsAsync(client, options.EventsTableName));
@@ -96,7 +97,7 @@ public sealed class DynamoDbLocalWriteOperationTests
 
         try
         {
-            Assert.True((await store.WriteSerializableEventsAsync([serialized])).IsSuccess);
+            Assert.True((await store.WriteSerializableEventsAsync([serialized]).AsResultBoxAsync()).IsSuccess);
             var eventItem = (await client.GetItemAsync(new GetItemRequest
             {
                 TableName = options.EventsTableName,

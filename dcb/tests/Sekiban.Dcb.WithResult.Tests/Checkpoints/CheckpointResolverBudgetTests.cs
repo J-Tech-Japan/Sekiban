@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using ResultBoxes;
 using Sekiban.Dcb.Storage.Checkpoints;
 using Xunit;
 namespace Sekiban.Dcb.Tests.Checkpoints;
@@ -22,7 +21,7 @@ public class CheckpointResolverBudgetTests
         public readonly TaskCompletionSource FirstStarted = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
         // A read that OBSERVES the token and blocks until it is cancelled, then exits cooperatively (throws OCE).
-        public async Task<ResultBox<CheckpointSlot>> ReadAsync(CancellationToken ct)
+        public async Task<CheckpointSlot> ReadAsync(CancellationToken ct)
         {
             Interlocked.Increment(ref Started);
             FirstStarted.TrySetResult();
@@ -35,7 +34,7 @@ public class CheckpointResolverBudgetTests
                 Interlocked.Increment(ref CooperativeExits);
                 throw;
             }
-            return ResultBox.FromValue(CheckpointSlot.Absent);
+            return CheckpointSlot.Absent;
         }
     }
 
@@ -95,15 +94,15 @@ public class CheckpointResolverBudgetTests
         using var alreadyCancelled = new CancellationTokenSource();
         alreadyCancelled.Cancel();
         var reads = 0;
-        Task<ResultBox<CheckpointSlot>> Reread(CancellationToken ct)
+        Task<CheckpointSlot> Reread(CancellationToken ct)
         {
             Interlocked.Increment(ref reads);
             Assert.False(ct.IsCancellationRequested, "the resolver passed a cancelled token — it must use its own budget");
             // Confirms our own committed write on the first read.
-            return Task.FromResult(ResultBox.FromValue(new CheckpointSlot(true, 1, "2", CheckpointLifecycle.Active,
+            return Task.FromResult(new CheckpointSlot(true, 1, "2", CheckpointLifecycle.Active,
                 new Sekiban.Dcb.MultiProjections.MultiProjectionStateRecord(
                     "p", "1.0.0", "T", "pos", 1, false, null, null, 1, 1, "w",
-                    new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc), new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc), "s", "h"))));
+                    new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc), new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc), "s", "h")));
         }
         var outcome = await CheckpointInDoubtResolver.ResolveActiveWriteAsync(
             Reread, resultingGeneration: 1, lastSortableUniqueId: "pos", eventsProcessed: 1,

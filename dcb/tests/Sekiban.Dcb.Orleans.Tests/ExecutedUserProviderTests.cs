@@ -22,6 +22,7 @@ using Sekiban.Dcb.Testing;
 using Sekiban.Dcb.TestSupport.ExecutedUser;
 using System.Text.Json;
 using Xunit;
+using Sekiban.Dcb.TestSupport;
 
 namespace Sekiban.Dcb.Orleans.Tests;
 
@@ -69,7 +70,7 @@ public class ExecutedUserProviderTests : IAsyncLifetime
         var result = await executor.ExecuteAsync(new CreateStudent(studentId, "Orleans Student", 5));
         Assert.True(result.IsSuccess);
 
-        var events = (await _eventStore.ReadAllSerializableEventsAsync()).GetValue().ToList();
+        var events = (await _eventStore.ReadAllSerializableEventsAsync().AsResultBoxAsync()).GetValue().ToList();
         Assert.Single(events);
         Assert.Equal("orleans-admin@contoso.com", events[0].EventMetadata.ExecutedUser);
     }
@@ -93,7 +94,7 @@ public class ExecutedUserProviderTests : IAsyncLifetime
         var result = await executor.ExecuteAsync(new CreateStudent(studentId, "Orleans Student", 5));
         Assert.True(result.IsSuccess);
 
-        var events = (await _eventStore.ReadAllSerializableEventsAsync()).GetValue().ToList();
+        var events = (await _eventStore.ReadAllSerializableEventsAsync().AsResultBoxAsync()).GetValue().ToList();
         Assert.Single(events);
         Assert.Equal("GeneralSekibanExecutor", events[0].EventMetadata.ExecutedUser);
     }
@@ -110,7 +111,7 @@ public class ExecutedUserProviderTests : IAsyncLifetime
         var result = await executor.ExecuteAsync(new CreateStudent(studentId, "Orleans Student", 5));
         Assert.True(result.IsSuccess);
 
-        var events = (await _eventStore.ReadAllSerializableEventsAsync()).GetValue().ToList();
+        var events = (await _eventStore.ReadAllSerializableEventsAsync().AsResultBoxAsync()).GetValue().ToList();
         Assert.Single(events);
         Assert.Equal("GeneralSekibanExecutor", events[0].EventMetadata.ExecutedUser);
     }

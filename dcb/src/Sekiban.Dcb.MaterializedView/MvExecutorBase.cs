@@ -680,9 +680,9 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvOrleansCatch
             var currentPosition = currentStatus.CurrentCheckpointTruth.IsKnown
                 ? currentStatus.CurrentCheckpointTruth.PositionValue
                 : null;
-            var readResult = await selectedEventStore.ReadAllSerializableEventsAsync(
+            var readResult = await ResultBox.WrapTry(() => selectedEventStore.ReadAllSerializableEventsAsync(
                     SortableUniqueId.NullableValue(currentPosition),
-                    _options.BatchSize)
+                    _options.BatchSize))
                 .ConfigureAwait(false);
             var result = await CompleteCatchUpInternalAsync(
                     host,
@@ -1638,17 +1638,22 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvOrleansCatch
     private static SortableUniqueId CreateSafeThreshold(int safeWindowMs) =>
         new(SortableUniqueId.Generate(DateTime.UtcNow.AddMilliseconds(-safeWindowMs), Guid.Empty));
 
-    private static async Task<MvCheckpointTruth> CaptureTargetCheckpointFromStoreAsync(IEventStore eventStore)
+    internal static async Task<MvCheckpointTruth> CaptureTargetCheckpointFromStoreAsync(IEventStore eventStore)
     {
+        string latestSortableUniqueId;
         try
         {
-            var result = await eventStore.GetLatestSortableUniqueIdAsync().ConfigureAwait(false);
-            if (!result.IsSuccess)
-            {
-                return MvCheckpointTruth.Unknown(MvCheckpointUnknownReason.ReadUnavailable);
-            }
+            latestSortableUniqueId = await eventStore.GetLatestSortableUniqueIdAsync().ConfigureAwait(false);
+        }
+        catch (Exception)
+        {
+            // Any failed read is ReadUnavailable, as every failed read was in 10.x. No caller token reaches this read,
+            // so an OperationCanceledException here is a provider timeout, not caller cancellation.
+            return MvCheckpointTruth.Unknown(MvCheckpointUnknownReason.ReadUnavailable);
+        }
 
-            var latestSortableUniqueId = result.GetValue();
+        try
+        {
             if (string.IsNullOrWhiteSpace(latestSortableUniqueId))
             {
                 return MvCheckpointTruth.KnownZero(MvCheckpointProvenance.AuthoritativeTargetCapture());

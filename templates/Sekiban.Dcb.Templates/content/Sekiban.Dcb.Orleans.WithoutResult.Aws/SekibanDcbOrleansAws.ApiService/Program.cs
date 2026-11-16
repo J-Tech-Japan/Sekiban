@@ -530,8 +530,7 @@ if (TemplateEnvironment.IsDevelopment(app.Environment.EnvironmentName))
             "/debug/events",
             async ([FromServices] IEventStore eventStore) =>
             {
-                var result = await eventStore.ReadAllEventsAsync();
-                var events = result.GetValue().ToList();
+                var events = (await eventStore.ReadAllEventsAsync()).ToList();
                 Console.WriteLine($"[Debug] ReadAllEventsAsync returned {events.Count} events");
                 return Results.Ok(
                     new

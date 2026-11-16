@@ -1,5 +1,3 @@
-using ResultBoxes;
-
 namespace Sekiban.Dcb.ColdEvents;
 
 public sealed class JsonlColdObjectStorage : IColdObjectStorage
@@ -12,32 +10,35 @@ public sealed class JsonlColdObjectStorage : IColdObjectStorage
         Directory.CreateDirectory(_basePath);
     }
 
-    public async Task<ResultBox<ColdStorageObject>> GetAsync(string path, CancellationToken ct)
+    public async Task<ColdStorageObject?> GetAsync(string path, CancellationToken ct)
     {
         var fullPath = ColdStoragePath.ToAbsolute(_basePath, path);
         if (!File.Exists(fullPath))
         {
-            return ResultBox.Error<ColdStorageObject>(new FileNotFoundException($"Cold object not found: {path}"));
+            return null;
         }
 
+        byte[] data;
         try
         {
-            var data = await File.ReadAllBytesAsync(fullPath, ct);
-            return ResultBox.FromValue(new ColdStorageObject(data, ColdStoragePath.ComputeEtag(data)));
+            data = await File.ReadAllBytesAsync(fullPath, ct);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException)
         {
-            return ResultBox.Error<ColdStorageObject>(ex);
+            // Removed between the existence check and the read: still "not found".
+            return null;
         }
+
+        return new ColdStorageObject(data, ColdStoragePath.ComputeEtag(data));
     }
 
-    public Task<ResultBox<Stream>> OpenReadAsync(string path, CancellationToken ct)
+    public Task<Stream> OpenReadAsync(string path, CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
         var fullPath = ColdStoragePath.ToAbsolute(_basePath, path);
         if (!File.Exists(fullPath))
         {
-            return Task.FromResult(ResultBox.Error<Stream>(new FileNotFoundException($"Cold object not found: {path}")));
+            return Task.FromException<Stream>(new FileNotFoundException($"Cold object not found: {path}"));
         }
 
         try
@@ -49,21 +50,21 @@ public sealed class JsonlColdObjectStorage : IColdObjectStorage
                 FileShare.Read,
                 bufferSize: 81920,
                 FileOptions.Asynchronous | FileOptions.SequentialScan);
-            return Task.FromResult(ResultBox.FromValue(stream));
+            return Task.FromResult(stream);
         }
         catch (Exception ex)
         {
-            return Task.FromResult(ResultBox.Error<Stream>(ex));
+            return Task.FromException<Stream>(ex);
         }
     }
 
-    public async Task<ResultBox<bool>> PutAsync(string path, byte[] data, string? expectedETag, CancellationToken ct)
+    public async Task<bool> PutAsync(string path, byte[] data, string? expectedETag, CancellationToken ct)
     {
         await using var stream = new MemoryStream(data, writable: false);
         return await PutAsync(path, stream, expectedETag, ct);
     }
 
-    public async Task<ResultBox<bool>> PutAsync(string path, Stream data, string? expectedETag, CancellationToken ct)
+    public async Task<bool> PutAsync(string path, Stream data, string? expectedETag, CancellationToken ct)
     {
         var fullPath = ColdStoragePath.ToAbsolute(_basePath, path);
         var directory = Path.GetDirectoryName(fullPath);
@@ -72,90 +73,83 @@ public sealed class JsonlColdObjectStorage : IColdObjectStorage
             Directory.CreateDirectory(directory);
         }
 
-        try
+        if (expectedETag is not null)
         {
-            if (expectedETag is not null)
-            {
-                try
-                {
-                    await using var stream = new FileStream(
-                        fullPath,
-                        FileMode.Open,
-                        FileAccess.ReadWrite,
-                        FileShare.None,
-                        bufferSize: 4096,
-                        FileOptions.Asynchronous);
-
-                    var existing = await ReadAllAsync(stream, ct);
-                    var etag = ColdStoragePath.ComputeEtag(existing);
-                    if (!string.Equals(etag, expectedETag, StringComparison.Ordinal))
-                    {
-                        return ResultBox.Error<bool>(new InvalidOperationException(
-                            $"ETag mismatch at {path}: expected={expectedETag}, actual={etag}"));
-                    }
-
-                    stream.SetLength(0);
-                    if (data.CanSeek)
-                    {
-                        data.Position = 0;
-                    }
-
-                    await data.CopyToAsync(stream, ct);
-                    await stream.FlushAsync(ct);
-                    return ResultBox.FromValue(true);
-                }
-                catch (FileNotFoundException)
-                {
-                    return ResultBox.Error<bool>(new InvalidOperationException(
-                        $"Conditional write failed: {path} does not exist"));
-                }
-            }
-
             try
             {
-                await using var create = new FileStream(
+                await using var stream = new FileStream(
                     fullPath,
-                    FileMode.CreateNew,
-                    FileAccess.Write,
+                    FileMode.Open,
+                    FileAccess.ReadWrite,
                     FileShare.None,
                     bufferSize: 4096,
                     FileOptions.Asynchronous);
+
+                var existing = await ReadAllAsync(stream, ct);
+                var etag = ColdStoragePath.ComputeEtag(existing);
+                if (!string.Equals(etag, expectedETag, StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException(
+                        $"ETag mismatch at {path}: expected={expectedETag}, actual={etag}");
+                }
+
+                stream.SetLength(0);
                 if (data.CanSeek)
                 {
                     data.Position = 0;
                 }
 
-                await data.CopyToAsync(create, ct);
-                await create.FlushAsync(ct);
-                return ResultBox.FromValue(true);
+                await data.CopyToAsync(stream, ct);
+                await stream.FlushAsync(ct);
+                return true;
             }
-            catch (IOException) when (File.Exists(fullPath))
+            catch (FileNotFoundException)
             {
-                await using var overwrite = new FileStream(
-                    fullPath,
-                    FileMode.Create,
-                    FileAccess.Write,
-                    FileShare.None,
-                    bufferSize: 4096,
-                    FileOptions.Asynchronous);
-                if (data.CanSeek)
-                {
-                    data.Position = 0;
-                }
+                throw new InvalidOperationException(
+                    $"Conditional write failed: {path} does not exist");
+            }
+        }
 
-                await data.CopyToAsync(overwrite, ct);
-                await overwrite.FlushAsync(ct);
+        try
+        {
+            await using var create = new FileStream(
+                fullPath,
+                FileMode.CreateNew,
+                FileAccess.Write,
+                FileShare.None,
+                bufferSize: 4096,
+                FileOptions.Asynchronous);
+            if (data.CanSeek)
+            {
+                data.Position = 0;
             }
 
-            return ResultBox.FromValue(true);
+            await data.CopyToAsync(create, ct);
+            await create.FlushAsync(ct);
+            return true;
         }
-        catch (Exception ex)
+        catch (IOException) when (File.Exists(fullPath))
         {
-            return ResultBox.Error<bool>(ex);
+            await using var overwrite = new FileStream(
+                fullPath,
+                FileMode.Create,
+                FileAccess.Write,
+                FileShare.None,
+                bufferSize: 4096,
+                FileOptions.Asynchronous);
+            if (data.CanSeek)
+            {
+                data.Position = 0;
+            }
+
+            await data.CopyToAsync(overwrite, ct);
+            await overwrite.FlushAsync(ct);
         }
+
+        return true;
     }
 
-    public Task<ResultBox<IReadOnlyList<string>>> ListAsync(string prefix, CancellationToken ct)
+    public Task<IReadOnlyList<string>> ListAsync(string prefix, CancellationToken ct)
     {
         try
         {
@@ -173,7 +167,7 @@ public sealed class JsonlColdObjectStorage : IColdObjectStorage
                     var candidate = Path.Combine(_basePath, firstSegment);
                     if (!Directory.Exists(candidate))
                     {
-                        return Task.FromResult(ResultBox.FromValue<IReadOnlyList<string>>([]));
+                        return Task.FromResult<IReadOnlyList<string>>([]);
                     }
 
                     searchRoot = candidate;
@@ -187,15 +181,15 @@ public sealed class JsonlColdObjectStorage : IColdObjectStorage
                 .OrderBy(x => x, StringComparer.Ordinal)
                 .ToList();
 
-            return Task.FromResult(ResultBox.FromValue<IReadOnlyList<string>>(result));
+            return Task.FromResult<IReadOnlyList<string>>(result);
         }
         catch (Exception ex)
         {
-            return Task.FromResult(ResultBox.Error<IReadOnlyList<string>>(ex));
+            return Task.FromException<IReadOnlyList<string>>(ex);
         }
     }
 
-    public Task<ResultBox<bool>> DeleteAsync(string path, CancellationToken ct)
+    public Task<bool> DeleteAsync(string path, CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
         var fullPath = ColdStoragePath.ToAbsolute(_basePath, path);
@@ -203,15 +197,15 @@ public sealed class JsonlColdObjectStorage : IColdObjectStorage
         {
             if (!File.Exists(fullPath))
             {
-                return Task.FromResult(ResultBox.FromValue(false));
+                return Task.FromResult(false);
             }
 
             File.Delete(fullPath);
-            return Task.FromResult(ResultBox.FromValue(true));
+            return Task.FromResult(true);
         }
         catch (Exception ex)
         {
-            return Task.FromResult(ResultBox.Error<bool>(ex));
+            return Task.FromException<bool>(ex);
         }
     }
 
