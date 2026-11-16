@@ -44,7 +44,7 @@ jobs:
       - name: Restore and build DCB
         run: |
           dotnet restore dcb/Sekiban.Dcb.slnx -p:NuGetAudit=false
-          dotnet build dcb/Sekiban.Dcb.slnx -c Release --no-restore --nologo
+          dotnet build dcb/Sekiban.Dcb.slnx -c Release --no-restore --nologo -p:GeneratePackageOnBuild=false
 
       - name: Restore and build TemplateValidation
         run: |
