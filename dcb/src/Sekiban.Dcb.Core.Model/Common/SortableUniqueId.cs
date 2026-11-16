@@ -1,4 +1,3 @@
-using ResultBoxes;
 namespace Sekiban.Dcb.Common;
 
 /// <summary>
@@ -127,29 +126,13 @@ public record SortableUniqueId(string Value)
         value != null ? new SortableUniqueId(value) : null;
 
     /// <summary>
-    ///     Create OptionalValue from nullable string
-    /// </summary>
-    public static OptionalValue<SortableUniqueId> OptionalValue(string? value) =>
-        !string.IsNullOrWhiteSpace(value) ? new SortableUniqueId(value) : OptionalValue<SortableUniqueId>.Empty;
-
-    /// <summary>
     ///     Parse string to SortableUniqueId with validation
     /// </summary>
-    public static ResultBox<SortableUniqueId> Parse(string value)
+    /// <exception cref="ArgumentException">Thrown when <paramref name="value" /> is not a valid sortable unique id.</exception>
+    public static SortableUniqueId Parse(string value)
     {
-        if (string.IsNullOrWhiteSpace(value))
-            return ResultBox.Error<SortableUniqueId>(new ArgumentException("Value cannot be null or empty"));
-
-        if (value.Length != TickNumberOfLength + IdNumberOfLength)
-            return ResultBox.Error<SortableUniqueId>(
-                new ArgumentException(
-                    $"Value must be exactly {TickNumberOfLength + IdNumberOfLength} characters long"));
-
-        // Validate that all characters are digits
-        if (!value.All(char.IsDigit))
-            return ResultBox.Error<SortableUniqueId>(new ArgumentException("Value must contain only digits"));
-
-        return ResultBox.FromValue(new SortableUniqueId(value));
+        var error = Validate(value);
+        return error is null ? new SortableUniqueId(value) : throw new ArgumentException(error);
     }
 
     /// <summary>
@@ -157,14 +140,28 @@ public record SortableUniqueId(string Value)
     /// </summary>
     public static bool TryParse(string value, out SortableUniqueId? result)
     {
-        var parseResult = Parse(value);
-        if (parseResult.IsSuccess)
+        if (Validate(value) is null)
         {
-            result = parseResult.GetValue();
+            result = new SortableUniqueId(value);
             return true;
         }
 
         result = null;
         return false;
+    }
+
+    private static string? Validate(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return "Value cannot be null or empty";
+
+        if (value.Length != TickNumberOfLength + IdNumberOfLength)
+            return $"Value must be exactly {TickNumberOfLength + IdNumberOfLength} characters long";
+
+        // Validate that all characters are digits
+        if (!value.All(char.IsDigit))
+            return "Value must contain only digits";
+
+        return null;
     }
 }

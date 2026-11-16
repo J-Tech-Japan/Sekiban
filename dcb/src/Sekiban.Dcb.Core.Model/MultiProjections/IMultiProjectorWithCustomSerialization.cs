@@ -3,7 +3,7 @@ using Sekiban.Dcb.Domains;
 namespace Sekiban.Dcb.MultiProjections;
 
 /// <summary>
-///     Core interface for multi-projectors that require custom serialization logic (ResultBox-based).
+///     Core interface for multi-projectors that require custom serialization logic.
 ///     Implementing classes must provide static methods for serialization and deserialization.
 ///     This interface extends ICoreMultiProjector<TSelf> to include all projection capabilities.
 /// </summary>

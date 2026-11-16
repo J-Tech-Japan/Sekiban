@@ -164,6 +164,76 @@ internal static class GuardedUnwrap
     }
 
     /// <summary>
+    ///     Runs an exception-based core call at a boundary. A failure is rethrown as itself after the boundary is
+    ///     recorded on it; a null result becomes a <see cref="SekibanBoundaryException" /> naming the boundary.
+    /// </summary>
+    internal static T Run<T>(Func<T> call, BoundaryContext context) where T : notnull
+    {
+        T value;
+        try
+        {
+            value = call();
+        }
+        catch (Exception failure)
+        {
+            Annotate(failure, context);
+            ExceptionDispatchInfo.Capture(failure).Throw();
+            throw; // unreachable: Throw() above does not return. Here to satisfy definite assignment.
+        }
+
+        if (value is null)
+        {
+            throw new SekibanBoundaryException(
+                $"{context.Describe()} succeeded but produced no value. Please report it with this message.",
+                context.Operation,
+                context.Target,
+                null);
+        }
+
+        return value;
+    }
+
+    /// <summary>
+    ///     Awaits an exception-based core call at a boundary. A failure is rethrown as itself after the boundary is
+    ///     recorded on it (as for a failed box); a null Task or a null result becomes a
+    ///     <see cref="SekibanBoundaryException" /> naming the boundary.
+    /// </summary>
+    internal static async Task<T> AwaitAsync<T>(Task<T> task, BoundaryContext context) where T : notnull
+    {
+        if (task is null)
+        {
+            throw new SekibanBoundaryException(
+                $"{context.Describe()} returned a null Task. Please report it with this message.",
+                context.Operation,
+                context.Target,
+                null);
+        }
+
+        T value;
+        try
+        {
+            value = await task.ConfigureAwait(false);
+        }
+        catch (Exception failure)
+        {
+            Annotate(failure, context);
+            ExceptionDispatchInfo.Capture(failure).Throw();
+            throw; // unreachable: Throw() above does not return. Here to satisfy definite assignment.
+        }
+
+        if (value is null)
+        {
+            throw new SekibanBoundaryException(
+                $"{context.Describe()} succeeded but produced no value. Please report it with this message.",
+                context.Operation,
+                context.Target,
+                null);
+        }
+
+        return value;
+    }
+
+    /// <summary>
     ///     Records the boundary on the exception without changing what it is.
     ///     Two properties matter, and neither is free:
     ///     <list type="bullet">

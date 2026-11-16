@@ -279,7 +279,7 @@ public class GeneralTagStateActorPersistenceTests
         var recovered = await actor.GetStateAsync();
         Assert.Equal(2, recovered.Version);
         Assert.Equal(12, Assert.IsType<TestIncrementalState>(
-            domainTypes.TagStatePayloadTypes.DeserializePayload(recovered.ResolvedPayloadName, recovered.Payload).GetValue()).Total);
+            domainTypes.TagStatePayloadTypes.DeserializePayload(recovered.ResolvedPayloadName, recovered.Payload)).Total);
         Assert.Equal(1, persistent.SaveSerializableStateCalls);
     }
 
@@ -400,7 +400,7 @@ public class GeneralTagStateActorPersistenceTests
         var recovered = await actor.GetStateAsync();
         Assert.Equal(1, recovered.Version);
         Assert.Equal(7, Assert.IsType<TestIncrementalState>(
-            domainTypes.TagStatePayloadTypes.DeserializePayload(recovered.ResolvedPayloadName, recovered.Payload).GetValue()).Total);
+            domainTypes.TagStatePayloadTypes.DeserializePayload(recovered.ResolvedPayloadName, recovered.Payload)).Total);
         Assert.Equal(1, persistent.SaveSerializableStateCalls);
     }
 
@@ -774,15 +774,15 @@ public class GeneralTagStateActorPersistenceTests
 
         public Type? GetPayloadType(string payloadName) => _inner.GetPayloadType(payloadName);
 
-        public ResultBox<string> GetPayloadName(ITagStatePayload payload) => _inner.GetPayloadName(payload);
+        public string GetPayloadName(ITagStatePayload payload) => _inner.GetPayloadName(payload);
 
-        public ResultBox<ITagStatePayload> DeserializePayload(string payloadName, byte[] jsonBytes)
+        public ITagStatePayload DeserializePayload(string payloadName, byte[] jsonBytes)
         {
             DeserializePayloadCount++;
             return _inner.DeserializePayload(payloadName, jsonBytes);
         }
 
-        public ResultBox<byte[]> SerializePayload(ITagStatePayload payload)
+        public byte[] SerializePayload(ITagStatePayload payload)
         {
             SerializePayloadCount++;
             var serialized = _inner.SerializePayload(payload);

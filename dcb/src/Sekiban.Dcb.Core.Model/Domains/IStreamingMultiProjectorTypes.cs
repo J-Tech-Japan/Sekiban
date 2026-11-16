@@ -1,4 +1,3 @@
-using ResultBoxes;
 using Sekiban.Dcb.MultiProjections;
 
 namespace Sekiban.Dcb.Domains;
@@ -22,7 +21,7 @@ public interface IStreamingMultiProjectorTypes
     ///     Deserializes the projector payload from <paramref name="source" />. The caller retains ownership of the
     ///     stream; implementations must neither dispose it nor seek it, and must honor <paramref name="cancellationToken" />.
     /// </summary>
-    Task<ResultBox<IMultiProjectionPayload>> DeserializeFromStreamAsync(
+    Task<IMultiProjectionPayload> DeserializeFromStreamAsync(
         string projectorName,
         DcbDomainTypes domainTypes,
         string safeWindowThreshold,

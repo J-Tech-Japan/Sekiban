@@ -50,13 +50,12 @@ public class GeneralMultiProjectionActorTests
         Assert.Equal("1.0.0", state.ProjectorVersion);
         Assert.Equal(6, state.Version);
 
-        var projectorRb = domain.MultiProjectorTypes.Deserialize(
+        var deserialized = domain.MultiProjectorTypes.Deserialize(
             state.ProjectorName,
             domain,
             state.LastSortableUniqueId ?? string.Empty,
             state.GetPayloadBytes());
-        Assert.True(projectorRb.IsSuccess);
-        var projector = Assert.IsType<StudentSummaries>(projectorRb.GetValue());
+        var projector = Assert.IsType<StudentSummaries>(deserialized);
         Assert.True(projector.Students.TryGetValue(s1, out var s1Item));
         Assert.Equal("Taro", s1Item.Name);
         Assert.Equal(1, s1Item.EnrolledCount);
@@ -92,13 +91,12 @@ public class GeneralMultiProjectionActorTests
         Assert.Equal("1.0.0", state2.ProjectorVersion);
         Assert.Equal(3, state2.Version);
 
-        var projectorRb2 = domain.MultiProjectorTypes.Deserialize(
+        var deserialized2 = domain.MultiProjectorTypes.Deserialize(
             state2.ProjectorName,
             domain,
             state2.LastSortableUniqueId ?? string.Empty,
             state2.GetPayloadBytes());
-        Assert.True(projectorRb2.IsSuccess);
-        var projector2 = Assert.IsType<StudentSummaries>(projectorRb2.GetValue());
+        var projector2 = Assert.IsType<StudentSummaries>(deserialized2);
         Assert.True(projector2.Students.TryGetValue(s1, out var s1Item2));
         Assert.Equal("Hanako", s1Item2.Name);
         Assert.Equal(0, s1Item2.EnrolledCount);

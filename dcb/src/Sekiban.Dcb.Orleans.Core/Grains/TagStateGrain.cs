@@ -81,7 +81,7 @@ public class TagStateGrain : Grain, ITagStateGrain
         cancellationToken.ThrowIfCancellationRequested();
         var cachedState = _cache.State?.CachedState;
 
-        var projectorVersionResult = _tagProjectorTypes.GetProjectorVersion(_tagStateId.TagProjectorName);
+        var projectorVersionResult = ResultBox.WrapTry(() => _tagProjectorTypes.GetProjectorVersion(_tagStateId.TagProjectorName));
         var projectorVersion = projectorVersionResult.IsSuccess ? projectorVersionResult.GetValue() : string.Empty;
 
         if (cachedState != null &&
@@ -239,9 +239,9 @@ public class TagStateGrain : Grain, ITagStateGrain
                 serialized.ProjectorVersion);
         }
 
-        var deserializeResult = _tagStatePayloadTypes.DeserializePayload(
+        var deserializeResult = ResultBox.WrapTry(() => _tagStatePayloadTypes.DeserializePayload(
             serialized.ResolvedPayloadName,
-            serialized.Payload);
+            serialized.Payload));
         cancellationToken.ThrowIfCancellationRequested();
         if (!deserializeResult.IsSuccess)
         {
@@ -292,7 +292,7 @@ public class TagStateGrain : Grain, ITagStateGrain
         }
         else
         {
-            var serializeResult = _tagStatePayloadTypes.SerializePayload(newState.Payload);
+            var serializeResult = ResultBox.WrapTry(() => _tagStatePayloadTypes.SerializePayload(newState.Payload));
             if (!serializeResult.IsSuccess)
             {
                 throw new InvalidOperationException(

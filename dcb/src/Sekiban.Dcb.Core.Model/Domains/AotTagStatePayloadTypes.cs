@@ -1,6 +1,5 @@
 using System.Text.Json;
 using System.Text.Json.Serialization.Metadata;
-using ResultBoxes;
 using Sekiban.Dcb.Tags;
 
 namespace Sekiban.Dcb.Domains;
@@ -33,37 +32,26 @@ public sealed class AotTagStatePayloadTypes : ITagStatePayloadTypes
     }
 
     /// <inheritdoc />
-    public ResultBox<string> GetPayloadName(ITagStatePayload payload)
-    {
-        if (_payloadNames.TryGetValue(payload.GetType(), out var payloadName))
-        {
-            return ResultBox.FromValue(payloadName);
-        }
-
-        return ResultBox.Error<string>(
-            new Exception($"Unknown payload type: {payload.GetType().Name}"));
-    }
+    public string GetPayloadName(ITagStatePayload payload) =>
+        _payloadNames.TryGetValue(payload.GetType(), out var payloadName)
+            ? payloadName
+            : throw new Exception($"Unknown payload type: {payload.GetType().Name}");
 
     /// <inheritdoc />
-    public ResultBox<ITagStatePayload> DeserializePayload(string payloadName, byte[] jsonBytes)
+    public ITagStatePayload DeserializePayload(string payloadName, byte[] jsonBytes)
     {
         if (_deserializers.TryGetValue(payloadName, out var deserializer))
         {
-            var result = deserializer(jsonBytes);
-            return result != null
-                ? ResultBox.FromValue(result)
-                : ResultBox.Error<ITagStatePayload>(new Exception($"Failed to deserialize: {payloadName}"));
+            return deserializer(jsonBytes) ?? throw new Exception($"Failed to deserialize: {payloadName}");
         }
-        return ResultBox.Error<ITagStatePayload>(new Exception($"Unknown payload type: {payloadName}"));
+        throw new Exception($"Unknown payload type: {payloadName}");
     }
 
     /// <inheritdoc />
-    public ResultBox<byte[]> SerializePayload(ITagStatePayload payload)
-    {
-        if (_serializers.TryGetValue(payload.GetType(), out var serializer))
-            return ResultBox.FromValue(serializer(payload));
-        return ResultBox.Error<byte[]>(new Exception($"Unknown payload type: {payload.GetType().Name}"));
-    }
+    public byte[] SerializePayload(ITagStatePayload payload) =>
+        _serializers.TryGetValue(payload.GetType(), out var serializer)
+            ? serializer(payload)
+            : throw new Exception($"Unknown payload type: {payload.GetType().Name}");
 
     /// <summary>
     ///     Not supported in AOT mode. Returns null.

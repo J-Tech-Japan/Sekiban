@@ -1220,15 +1220,9 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         if (_host != null)
         {
             hostStatus = await _host.GetProjectionHeadStatusAsync();
-            var projectorNameResult = ProjectionHeadStatusUtilities.EnsureProjectorNameConsistency(
+            projectorName = ProjectionHeadStatusUtilities.EnsureProjectorNameConsistency(
                 projectorName,
                 hostStatus.ProjectorName);
-            if (!projectorNameResult.IsSuccess)
-            {
-                throw projectorNameResult.GetException();
-            }
-
-            projectorName = projectorNameResult.GetValue();
             if (!string.IsNullOrWhiteSpace(hostStatus.ProjectorVersion))
             {
                 projectorVersion = hostStatus.ProjectorVersion;

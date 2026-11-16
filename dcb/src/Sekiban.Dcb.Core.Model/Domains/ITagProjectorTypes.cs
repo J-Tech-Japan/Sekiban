@@ -1,4 +1,3 @@
-using ResultBoxes;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.Tags;
 namespace Sekiban.Dcb.Domains;
@@ -11,12 +10,14 @@ public interface ITagProjectorTypes
     /// <summary>
     ///     Gets a tag projector function by its name
     /// </summary>
-    ResultBox<Func<ITagStatePayload, Event, ITagStatePayload>> GetProjectorFunction(string tagProjectorName);
+    /// <exception cref="Exception">Thrown when no projector is registered under <paramref name="tagProjectorName" />.</exception>
+    Func<ITagStatePayload, Event, ITagStatePayload> GetProjectorFunction(string tagProjectorName);
 
     /// <summary>
     ///     Gets the version of a projector by its name
     /// </summary>
-    ResultBox<string> GetProjectorVersion(string tagProjectorName);
+    /// <exception cref="Exception">Thrown when no projector is registered under <paramref name="tagProjectorName" />.</exception>
+    string GetProjectorVersion(string tagProjectorName);
 
     /// <summary>
     ///     Gets all registered tag projector names

@@ -1,114 +1,107 @@
 using System.Diagnostics.CodeAnalysis;
-using ResultBoxes;
 
 namespace Sekiban.Dcb.Common;
 
 /// <summary>
-///     Shared helpers for projection head status APIs.
+///     Shared helpers for projection head status APIs. Each helper returns the validated value or throws.
 /// </summary>
 public static class ProjectionHeadStatusUtilities
 {
-    public static ResultBox<string> ValidateProjectorVersion(
+    /// <summary>
+    ///     Returns the registered projector version.
+    /// </summary>
+    /// <exception cref="ArgumentException">The projector name is empty.</exception>
+    /// <exception cref="InvalidOperationException">The registered version differs from <paramref name="expectedProjectorVersion" />.</exception>
+    public static string ValidateProjectorVersion(
         DcbDomainTypes domainTypes,
         string projectorName,
         string? expectedProjectorVersion)
     {
         if (string.IsNullOrWhiteSpace(projectorName))
         {
-            return ResultBox.Error<string>(new ArgumentException("Projector name cannot be empty.", nameof(projectorName)));
+            throw new ArgumentException("Projector name cannot be empty.", nameof(projectorName));
         }
 
-        var projectorVersionResult = domainTypes.MultiProjectorTypes.GetProjectorVersion(projectorName);
-        if (!projectorVersionResult.IsSuccess)
-        {
-            return ResultBox.Error<string>(projectorVersionResult.GetException());
-        }
-
-        var currentProjectorVersion = projectorVersionResult.GetValue();
+        var currentProjectorVersion = domainTypes.MultiProjectorTypes.GetProjectorVersion(projectorName);
         if (!string.IsNullOrWhiteSpace(expectedProjectorVersion)
             && !string.Equals(currentProjectorVersion, expectedProjectorVersion, StringComparison.Ordinal))
         {
-            return ResultBox.Error<string>(
-                new InvalidOperationException(
-                    $"Projector version mismatch for '{projectorName}'. Expected '{expectedProjectorVersion}', but registered version is '{currentProjectorVersion}'."));
+            throw new InvalidOperationException(
+                $"Projector version mismatch for '{projectorName}'. Expected '{expectedProjectorVersion}', but registered version is '{currentProjectorVersion}'.");
         }
 
-        return ResultBox.FromValue(currentProjectorVersion);
+        return currentProjectorVersion;
     }
 
+    /// <summary>
+    ///     Returns the value of the public static <c>MultiProjectorName</c> property of <paramref name="projectorType" />.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">The type has no valid <c>MultiProjectorName</c>.</exception>
     [UnconditionalSuppressMessage(
         "AOT",
-        "IL2075",
+        "IL2070",
         Justification = "Projector types are registered runtime types that expose the public static MultiProjectorName property.")]
-    public static ResultBox<string> ResolveProjectorName(ResultBox<Type> projectorTypeResult)
+    public static string ResolveProjectorName(Type projectorType)
     {
-        if (!projectorTypeResult.IsSuccess)
-        {
-            return ResultBox.Error<string>(projectorTypeResult.GetException());
-        }
+        ArgumentNullException.ThrowIfNull(projectorType);
 
-        var projectorType = projectorTypeResult.GetValue();
         var projectorNameProperty = projectorType.GetProperty("MultiProjectorName");
         if (projectorNameProperty == null)
         {
-            return ResultBox.Error<string>(
-                new InvalidOperationException(
-                    $"Projector type {projectorType.Name} does not have MultiProjectorName property"));
+            throw new InvalidOperationException(
+                $"Projector type {projectorType.Name} does not have MultiProjectorName property");
         }
 
         var projectorName = projectorNameProperty.GetValue(null) as string;
         if (string.IsNullOrWhiteSpace(projectorName))
         {
-            return ResultBox.Error<string>(
-                new InvalidOperationException(
-                    $"Projector type {projectorType.Name} has invalid MultiProjectorName"));
+            throw new InvalidOperationException(
+                $"Projector type {projectorType.Name} has invalid MultiProjectorName");
         }
 
-        return ResultBox.FromValue(projectorName);
+        return projectorName;
     }
 
-    public static ResultBox<string> EnsureProjectorNameConsistency(
+    /// <summary>
+    ///     Returns <paramref name="requestedProjectorName" /> when the projection reported no name or the same name.
+    /// </summary>
+    /// <exception cref="ArgumentException">The requested name is empty.</exception>
+    /// <exception cref="InvalidOperationException">The projection reported a different name.</exception>
+    public static string EnsureProjectorNameConsistency(
         string requestedProjectorName,
         string? actualProjectorName)
     {
         if (string.IsNullOrWhiteSpace(requestedProjectorName))
         {
-            return ResultBox.Error<string>(
-                new ArgumentException("Projector name cannot be empty.", nameof(requestedProjectorName)));
+            throw new ArgumentException("Projector name cannot be empty.", nameof(requestedProjectorName));
         }
 
-        if (string.IsNullOrWhiteSpace(actualProjectorName))
+        if (!string.IsNullOrWhiteSpace(actualProjectorName)
+            && !string.Equals(requestedProjectorName, actualProjectorName, StringComparison.Ordinal))
         {
-            return ResultBox.FromValue(requestedProjectorName);
+            throw new InvalidOperationException(
+                $"Projector name mismatch. Requested '{requestedProjectorName}', but projection returned '{actualProjectorName}'.");
         }
 
-        if (!string.Equals(requestedProjectorName, actualProjectorName, StringComparison.Ordinal))
-        {
-            return ResultBox.Error<string>(
-                new InvalidOperationException(
-                    $"Projector name mismatch. Requested '{requestedProjectorName}', but projection returned '{actualProjectorName}'."));
-        }
-
-        return ResultBox.FromValue(requestedProjectorName);
+        return requestedProjectorName;
     }
 
-    public static ResultBox<string> EnsureProjectorVersionConsistency(
+    /// <summary>
+    ///     Returns <paramref name="registeredProjectorVersion" /> when the projection reported no version or the same one.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">The projection reported a different version.</exception>
+    public static string EnsureProjectorVersionConsistency(
         string registeredProjectorVersion,
         string? actualProjectorVersion)
     {
-        if (string.IsNullOrWhiteSpace(actualProjectorVersion))
+        if (!string.IsNullOrWhiteSpace(actualProjectorVersion)
+            && !string.Equals(registeredProjectorVersion, actualProjectorVersion, StringComparison.Ordinal))
         {
-            return ResultBox.FromValue(registeredProjectorVersion);
+            throw new InvalidOperationException(
+                $"Projector version mismatch. Registered '{registeredProjectorVersion}', but projection returned '{actualProjectorVersion}'.");
         }
 
-        if (!string.Equals(registeredProjectorVersion, actualProjectorVersion, StringComparison.Ordinal))
-        {
-            return ResultBox.Error<string>(
-                new InvalidOperationException(
-                    $"Projector version mismatch. Registered '{registeredProjectorVersion}', but projection returned '{actualProjectorVersion}'."));
-        }
-
-        return ResultBox.FromValue(registeredProjectorVersion);
+        return registeredProjectorVersion;
     }
 
     public static string? NormalizeSortableUniqueId(string? sortableUniqueId) =>

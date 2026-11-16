@@ -226,8 +226,8 @@ public class CoreGeneralSekibanExecutor
 
     private static string? ResolveReservationPosition(ITag tag, IReadOnlyDictionary<ITag, TagState> accessedStates)
     {
-        if (tag is ConsistencyTag explicitTag && explicitTag.SortableUniqueId.HasValue)
-            return explicitTag.SortableUniqueId.GetValue().Value;
+        if (tag is ConsistencyTag { SortableUniqueId: { } explicitSortableUniqueId })
+            return explicitSortableUniqueId.Value;
         var lookupTag = tag is ConsistencyTag wrapper ? wrapper.InnerTag : tag;
         return accessedStates.TryGetValue(lookupTag, out var state) ? state.LastSortedUniqueId : null;
     }
@@ -686,9 +686,9 @@ public class CoreGeneralSekibanExecutor
                     new InvalidOperationException($"Unknown payload type: {state.ResolvedPayloadName}"));
             }
 
-            var deserializeResult = _domainTypes.TagStatePayloadTypes.DeserializePayload(
+            var deserializeResult = ResultBox.WrapTry(() => _domainTypes.TagStatePayloadTypes.DeserializePayload(
                 state.ResolvedPayloadName,
-                state.Payload);
+                state.Payload));
             cancellationToken.ThrowIfCancellationRequested();
 
             if (!deserializeResult.IsSuccess)
@@ -1047,7 +1047,7 @@ public class CoreGeneralSekibanExecutor
             }
 
             // Get the multi-projector type for this query
-            var projectorTypeResult = _domainTypes.QueryTypes.GetMultiProjectorType(queryCommon);
+            var projectorTypeResult = ResultBox.WrapTry(() => _domainTypes.QueryTypes.GetMultiProjectorType(queryCommon));
             if (!projectorTypeResult.IsSuccess)
             {
                 return ResultBox.Error<TResult>(projectorTypeResult.GetException());
@@ -1096,7 +1096,7 @@ public class CoreGeneralSekibanExecutor
             var state = stateResult.GetValue();
 
             // Create a provider function that returns the payload
-            var projectorProvider = () => Task.FromResult(ResultBox.FromValue(state.Payload));
+            var projectorProvider = () => Task.FromResult(state.Payload);
 
             // Execute the query using QueryTypes
             var serviceProvider = _actorAccessor as IServiceProvider ??
@@ -1124,14 +1124,14 @@ public class CoreGeneralSekibanExecutor
                 try { safeThresholdTime = actorSafeThreshold.GetDateTime(); } catch { }
             }
             catch { }
-            var result = await _domainTypes.QueryTypes.ExecuteQueryAsync(
+            var result = await ResultBox.WrapTry(() => _domainTypes.QueryTypes.ExecuteQueryAsync(
                 queryCommon,
                 projectorProvider,
                 serviceProvider,
                 safeVersion,
                 safeThreshold,
                 safeThresholdTime,
-                unsafeVersion);
+                unsafeVersion));
 
             if (!result.IsSuccess)
             {
@@ -1167,7 +1167,7 @@ public class CoreGeneralSekibanExecutor
             }
 
             // Get the multi-projector type for this query
-            var projectorTypeResult = _domainTypes.QueryTypes.GetMultiProjectorType(queryCommon);
+            var projectorTypeResult = ResultBox.WrapTry(() => _domainTypes.QueryTypes.GetMultiProjectorType(queryCommon));
             if (!projectorTypeResult.IsSuccess)
             {
                 return ResultBox.Error<ListQueryResult<TResult>>(projectorTypeResult.GetException());
@@ -1216,7 +1216,7 @@ public class CoreGeneralSekibanExecutor
             var state = stateResult.GetValue();
 
             // Create a provider function that returns the payload
-            var projectorProvider = () => Task.FromResult(ResultBox.FromValue(state.Payload));
+            var projectorProvider = () => Task.FromResult(state.Payload);
 
             // Execute the list query using QueryTypes
             var serviceProvider = _actorAccessor as IServiceProvider ??
@@ -1240,14 +1240,14 @@ public class CoreGeneralSekibanExecutor
                 try { safeThresholdTime = actorSafeThreshold.GetDateTime(); } catch { }
             }
             catch { }
-            var result = await _domainTypes.QueryTypes.ExecuteListQueryAsync(
+            var result = await ResultBox.WrapTry(() => _domainTypes.QueryTypes.ExecuteListQueryAsync(
                 queryCommon,
                 projectorProvider,
                 serviceProvider,
                 safeVersion,
                 safeThreshold,
                 safeThresholdTime,
-                unsafeVersion);
+                unsafeVersion));
 
             if (!result.IsSuccess)
             {
@@ -1279,10 +1279,10 @@ public class CoreGeneralSekibanExecutor
     {
         try
         {
-            var projectorVersionResult = ProjectionHeadStatusUtilities.ValidateProjectorVersion(
+            var projectorVersionResult = ResultBox.WrapTry(() => ProjectionHeadStatusUtilities.ValidateProjectorVersion(
                 _domainTypes,
                 projectorName,
-                expectedProjectorVersion);
+                expectedProjectorVersion));
             if (!projectorVersionResult.IsSuccess)
             {
                 return ResultBox.Error<ProjectionHeadStatus>(projectorVersionResult.GetException());
@@ -1297,17 +1297,17 @@ public class CoreGeneralSekibanExecutor
             var actor = actorResult.GetValue();
             var status = await actor.GetProjectionHeadStatusAsync();
 
-            var projectorNameResult = ProjectionHeadStatusUtilities.EnsureProjectorNameConsistency(
+            var projectorNameResult = ResultBox.WrapTry(() => ProjectionHeadStatusUtilities.EnsureProjectorNameConsistency(
                 projectorName,
-                status.ProjectorName);
+                status.ProjectorName));
             if (!projectorNameResult.IsSuccess)
             {
                 return ResultBox.Error<ProjectionHeadStatus>(projectorNameResult.GetException());
             }
 
-            var projectorVersionConsistencyResult = ProjectionHeadStatusUtilities.EnsureProjectorVersionConsistency(
+            var projectorVersionConsistencyResult = ResultBox.WrapTry(() => ProjectionHeadStatusUtilities.EnsureProjectorVersionConsistency(
                 projectorVersionResult.GetValue(),
-                status.ProjectorVersion);
+                status.ProjectorVersion));
             if (!projectorVersionConsistencyResult.IsSuccess)
             {
                 return ResultBox.Error<ProjectionHeadStatus>(projectorVersionConsistencyResult.GetException());

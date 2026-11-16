@@ -1,4 +1,3 @@
-using ResultBoxes;
 using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Events;
@@ -643,12 +642,8 @@ public class DualStateProjectionWrapper<T>
             ResolveTags(evt, domainTypes),
             domainTypes,
             ZeroThreshold);
-        if (!safeProjected.IsSuccess)
-        {
-            throw safeProjected.GetException();
-        }
 
-        _safeProjector = (T)safeProjected.GetValue();
+        _safeProjector = (T)safeProjected;
         _safeLastEventId = evt.Id;
         _safeLastSortableUniqueId = evt.SortableUniqueIdValue;
         CaptureSafeStateFingerprint(domainTypes);
@@ -664,14 +659,10 @@ public class DualStateProjectionWrapper<T>
             ResolveTags(evt, domainTypes),
             domainTypes,
             safeWindowThreshold);
-        if (!served.IsSuccess)
-        {
-            throw served.GetException();
-        }
 
         VerifySafeStateUnchanged(domainTypes, "after unsafe fold");
 
-        _unsafeProjector = (T)served.GetValue();
+        _unsafeProjector = (T)served;
         _unsafeLastEventId = evt.Id;
         _unsafeLastSortableUniqueId = evt.SortableUniqueIdValue;
         _unsafeVersion = _safeVersion + _bufferedEvents.Count;
@@ -729,12 +720,8 @@ public class DualStateProjectionWrapper<T>
             domainTypes,
             ZeroThreshold.Value,
             _safeProjector);
-        if (!serialized.IsSuccess)
-        {
-            throw serialized.GetException();
-        }
 
-        return serialized.GetValue().Data;
+        return serialized.Data;
     }
 
     /// <summary>
@@ -780,21 +767,25 @@ public class DualStateProjectionWrapper<T>
                 .ToList();
             foreach (var ev in ordered)
             {
-                var projected = _types.Project(
-                    _projectorName,
-                    served,
-                    ev,
-                    ResolveTags(ev, domainTypes),
-                    domainTypes,
-                    safeWindowThreshold);
-                if (!projected.IsSuccess)
+                var tags = ResolveTags(ev, domainTypes);
+                IMultiProjectionPayload projected;
+                try
                 {
-                    var exception = projected.GetException();
+                    projected = _types.Project(
+                        _projectorName,
+                        served,
+                        ev,
+                        tags,
+                        domainTypes,
+                        safeWindowThreshold);
+                }
+                catch (Exception exception)
+                {
                     DeferredSafeRepairFaultAttribution.AnnotateReplayEvent(exception, ev);
-                    throw exception;
+                    throw;
                 }
                 VerifySafeStateUnchanged(domainTypes, "after served fold");
-                served = (T)projected.GetValue();
+                served = (T)projected;
                 lastEventId = ev.Id;
                 lastSortableId = ev.SortableUniqueIdValue;
             }
@@ -875,33 +866,32 @@ public class DualStateProjectionWrapper<T>
         }
 
         var rebuiltProjector = _types.GenerateInitialPayload(_projectorName);
-        if (!rebuiltProjector.IsSuccess)
-        {
-            throw rebuiltProjector.GetException();
-        }
 
-        var newSafeProjector = (T)rebuiltProjector.GetValue();
+        var newSafeProjector = (T)rebuiltProjector;
         var newSafeLastEventId = Guid.Empty;
         var newSafeLastSortableId = string.Empty;
 
         foreach (var ev in _allSafeEvents.Values)
         {
-            var projected = _types.Project(
-                _projectorName,
-                newSafeProjector,
-                ev,
-                ResolveTags(ev, domainTypes),
-                domainTypes,
-                ZeroThreshold);
-
-            if (!projected.IsSuccess)
+            var tags = ResolveTags(ev, domainTypes);
+            IMultiProjectionPayload projected;
+            try
             {
-                var exception = projected.GetException();
+                projected = _types.Project(
+                    _projectorName,
+                    newSafeProjector,
+                    ev,
+                    tags,
+                    domainTypes,
+                    ZeroThreshold);
+            }
+            catch (Exception exception)
+            {
                 DeferredSafeRepairFaultAttribution.AnnotateReplayEvent(exception, ev);
-                throw exception;
+                throw;
             }
 
-            newSafeProjector = (T)projected.GetValue();
+            newSafeProjector = (T)projected;
             newSafeLastEventId = ev.Id;
             newSafeLastSortableId = ev.SortableUniqueIdValue;
         }

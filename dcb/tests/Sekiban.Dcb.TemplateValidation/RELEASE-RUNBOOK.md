@@ -245,7 +245,13 @@ checks run only on main; tag workflows run on their respective tag series.
 Offline verification never proves environment configuration, private-host
 credential validity, or actual public publication.
 
-Raise the stale currency-fixture version when templates begin using a newer library API so that the stale consumer still restores and builds before currency validation rejects it.
+`derive-stale-currency-version.sh` picks the stale version that the packaged-consumer currency
+fixture writes; the stale consumer must still restore and build before currency validation rejects
+it. For a stable template version it is the published `10.23.0`: raise it when templates begin
+using a newer 10.x library API. For a preview `x.y.z-previewNN` it is `x.y.z-preview(NN-1).stale`,
+which is never published and sorts just below the template version, so restore falls forward to
+the template version itself from the local candidate feed and, once that version is public, from
+nuget.org.
 
 For library release records through 10.24.x, the required test checks remain
 `dcbTestsNet9` and `dcbTestsNet10`. Records for 10.25.0 and later require

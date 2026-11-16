@@ -46,11 +46,9 @@ public class OrleansQuerySerializationTests
             query);
 
         // Act - Convert to typed result
-        var typedResult = result.ToTypedResult<TestQueryResult>();
+        var listResult = result.ToTypedResult<TestQueryResult>();
 
         // Assert
-        Assert.True(typedResult.IsSuccess);
-        var listResult = typedResult.GetValue();
         Assert.Equal(3, listResult.TotalCount);
         Assert.Equal(1, listResult.TotalPages);
         Assert.Equal(1, listResult.CurrentPage);

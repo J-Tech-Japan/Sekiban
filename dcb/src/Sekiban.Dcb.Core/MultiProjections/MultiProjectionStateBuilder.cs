@@ -79,7 +79,7 @@ public class MultiProjectionStateBuilder
         options ??= new MultiProjectionBuildOptions();
 
         // Get projector version
-        var versionResult = _domainTypes.MultiProjectorTypes.GetProjectorVersion(projectorName);
+        var versionResult = ResultBox.WrapTry(() => _domainTypes.MultiProjectorTypes.GetProjectorVersion(projectorName));
         if (!versionResult.IsSuccess)
         {
             return new ProjectorBuildResult(

@@ -1,5 +1,5 @@
-using ResultBoxes;
 using Sekiban.Dcb.Actors;
+using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.Tags;
 namespace Sekiban.Dcb.Commands;
@@ -7,7 +7,7 @@ namespace Sekiban.Dcb.Commands;
 /// <summary>
 ///     Core implementation of ICoreCommandContext and ICommandContextResultAccessor
 ///     Provides access to tag states during command processing and tracks accessed states
-///     Uses ResultBox for error handling (shared by WithResult and WithoutResult packages)
+///     Throws on failure (shared by WithResult and WithoutResult packages)
 ///     Can be used with different actor frameworks (InMemory, Orleans, Dapr)
 /// </summary>
 public class CoreGeneralCommandContext : ICoreCommandContext, ICommandContextResultAccessor
@@ -23,286 +23,223 @@ public class CoreGeneralCommandContext : ICoreCommandContext, ICommandContextRes
         _domainTypes = domainTypes ?? throw new ArgumentNullException(nameof(domainTypes));
     }
 
-    public async Task<ResultBox<TagStateTyped<TState>>> GetStateAsync<TState, TProjector>(ITag tag)
+    public async Task<TagStateTyped<TState>> GetStateAsync<TState, TProjector>(ITag tag)
         where TState : ITagStatePayload where TProjector : ITagProjector<TProjector>
     {
-        try
+        // Validate tag before calling actor
+        var validationErrors = TagValidator.ValidateTag(tag);
+        if (validationErrors.Count > 0)
         {
-            // Validate tag before calling actor
-            var validationErrors = TagValidator.ValidateTag(tag);
-            if (validationErrors.Count > 0)
+            throw new TagValidationErrorsException(validationErrors);
+        }
+        // Get the TagStateActor
+        var tagStateId = new TagStateId(tag, TProjector.ProjectorName);
+        var tagStateActorId = tagStateId.GetTagStateId();
+
+        var actorResult = await _actorAccessor.GetActorAsync<ITagStateActorCommon>(tagStateActorId);
+        if (!actorResult.IsSuccess)
+        {
+            // If actor doesn't exist, return empty state with EmptyTagStatePayload
+            // We can't cast EmptyTagStatePayload to TState, so we need to handle this differently
+            var emptyPayload = new EmptyTagStatePayload();
+            if (emptyPayload is TState)
             {
-                return ResultBox.Error<TagStateTyped<TState>>(new TagValidationErrorsException(validationErrors));
+                return new TagStateTyped<TState>(
+                    tag,
+                    (TState)(ITagStatePayload)emptyPayload,
+                    0,
+                    DateTimeOffset.UtcNow);
             }
-            // Get the TagStateActor
-            var tagStateId = new TagStateId(tag, TProjector.ProjectorName);
-            var tagStateActorId = tagStateId.GetTagStateId();
+            // Return error indicating that the state is empty and cannot be cast to the requested type
+            throw new InvalidCastException(
+                $"Expected state payload of type {typeof(TState).Name} but got {nameof(EmptyTagStatePayload)}");
+        }
 
-            var actorResult = await _actorAccessor.GetActorAsync<ITagStateActorCommon>(tagStateActorId);
-            if (!actorResult.IsSuccess)
-            {
-                // If actor doesn't exist, return empty state with EmptyTagStatePayload
-                // We can't cast EmptyTagStatePayload to TState, so we need to handle this differently
-                var emptyPayload = new EmptyTagStatePayload();
-                if (emptyPayload is TState)
-                {
-                    return ResultBox.FromValue(
-                        new TagStateTyped<TState>(
-                            tag,
-                            (TState)(ITagStatePayload)emptyPayload,
-                            0,
-                            DateTimeOffset.UtcNow));
-                }
-                // Return error indicating that the state is empty and cannot be cast to the requested type
-                return ResultBox.Error<TagStateTyped<TState>>(
-                    new InvalidCastException(
-                        $"Expected state payload of type {typeof(TState).Name} but got {nameof(EmptyTagStatePayload)}"));
-            }
+        var actor = actorResult.GetValue();
+        var serializableState = await actor.GetStateAsync();
 
-            var actor = actorResult.GetValue();
-            var serializableState = await actor.GetStateAsync();
+        // Deserialize the payload
+        var payload = _domainTypes.TagStatePayloadTypes.DeserializePayload(
+            serializableState.ResolvedPayloadName,
+            serializableState.Payload);
 
-            // Deserialize the payload
-            var payloadResult = _domainTypes.TagStatePayloadTypes.DeserializePayload(
-                serializableState.ResolvedPayloadName,
-                serializableState.Payload);
+        // Track the accessed state as TagState
+        var tagState = new TagState(
+            payload,
+            serializableState.Version,
+            serializableState.LastSortedUniqueId,
+            serializableState.TagGroup,
+            serializableState.TagContent,
+            serializableState.TagProjector,
+            serializableState.ProjectorVersion);
+        _accessedTagStates[tag] = tagState;
 
-            if (!payloadResult.IsSuccess)
-            {
-                return ResultBox.Error<TagStateTyped<TState>>(payloadResult.GetException());
-            }
-
-            var payload = payloadResult.GetValue();
-
-            // Track the accessed state as TagState
-            var tagState = new TagState(
-                payload,
+        // Check if the payload is of the expected type
+        if (payload is TState typedPayload)
+        {
+            return new TagStateTyped<TState>(
+                tag,
+                typedPayload,
                 serializableState.Version,
-                serializableState.LastSortedUniqueId,
-                serializableState.TagGroup,
-                serializableState.TagContent,
-                serializableState.TagProjector,
-                serializableState.ProjectorVersion);
-            _accessedTagStates[tag] = tagState;
-
-            // Check if the payload is of the expected type
-            if (payload is TState typedPayload)
-            {
-                return ResultBox.FromValue(
-                    new TagStateTyped<TState>(
-                        tag,
-                        typedPayload,
-                        serializableState.Version,
-                        DateTimeOffset.UtcNow // TODO: We might need to track actual last modified time
-                    ));
-            }
-
-            // If payload type doesn't match, return error
-            return ResultBox.Error<TagStateTyped<TState>>(
-                new InvalidCastException(
-                    $"Expected state payload of type {typeof(TState).Name} but got {payload.GetType().Name}"));
+                DateTimeOffset.UtcNow // TODO: We might need to track actual last modified time
+                );
         }
-        catch (Exception ex)
-        {
-            return ResultBox.Error<TagStateTyped<TState>>(ex);
-        }
+
+        // If payload type doesn't match, return error
+        throw new InvalidCastException(
+            $"Expected state payload of type {typeof(TState).Name} but got {payload.GetType().Name}");
     }
 
-    public async Task<ResultBox<TagState>> GetStateAsync<TProjector>(ITag tag)
+    public async Task<TagState> GetStateAsync<TProjector>(ITag tag)
         where TProjector : ITagProjector<TProjector>
     {
-        try
+        // Validate tag before calling actor
+        var validationErrors = TagValidator.ValidateTag(tag);
+        if (validationErrors.Count > 0)
         {
-            // Validate tag before calling actor
-            var validationErrors = TagValidator.ValidateTag(tag);
-            if (validationErrors.Count > 0)
-            {
-                return ResultBox.Error<TagState>(new TagValidationErrorsException(validationErrors));
-            }
-            // Get the TagStateActor
-            var tagStateId = new TagStateId(tag, TProjector.ProjectorName);
-            var tagStateActorId = tagStateId.GetTagStateId();
-
-            var actorResult = await _actorAccessor.GetActorAsync<ITagStateActorCommon>(tagStateActorId);
-            if (!actorResult.IsSuccess)
-            {
-                // If actor doesn't exist, return empty state
-                return ResultBox.FromValue(
-                    new TagState(
-                        new EmptyTagStatePayload(),
-                        0,
-                        "",
-                        tag.GetTagGroup(),
-                        tag.GetTag().Substring(tag.GetTagGroup().Length + 1),
-                        TProjector.ProjectorName,
-                        TProjector.ProjectorVersion));
-            }
-
-            var actor = actorResult.GetValue();
-            var serializableState = await actor.GetStateAsync();
-
-            // Deserialize the payload
-            var payloadResult = _domainTypes.TagStatePayloadTypes.DeserializePayload(
-                serializableState.ResolvedPayloadName,
-                serializableState.Payload);
-
-            if (!payloadResult.IsSuccess)
-            {
-                return ResultBox.Error<TagState>(payloadResult.GetException());
-            }
-
-            var payload = payloadResult.GetValue();
-
-            // Create TagState from SerializableTagState
-            var tagState = new TagState(
-                payload,
-                serializableState.Version,
-                serializableState.LastSortedUniqueId,
-                serializableState.TagGroup,
-                serializableState.TagContent,
-                serializableState.TagProjector,
-                serializableState.ProjectorVersion);
-
-            // Track the accessed state
-            _accessedTagStates[tag] = tagState;
-
-            return ResultBox.FromValue(tagState);
+            throw new TagValidationErrorsException(validationErrors);
         }
-        catch (Exception ex)
+        // Get the TagStateActor
+        var tagStateId = new TagStateId(tag, TProjector.ProjectorName);
+        var tagStateActorId = tagStateId.GetTagStateId();
+
+        var actorResult = await _actorAccessor.GetActorAsync<ITagStateActorCommon>(tagStateActorId);
+        if (!actorResult.IsSuccess)
         {
-            return ResultBox.Error<TagState>(ex);
+            // If actor doesn't exist, return empty state
+            return new TagState(
+                new EmptyTagStatePayload(),
+                0,
+                "",
+                tag.GetTagGroup(),
+                tag.GetTag().Substring(tag.GetTagGroup().Length + 1),
+                TProjector.ProjectorName,
+                TProjector.ProjectorVersion);
         }
+
+        var actor = actorResult.GetValue();
+        var serializableState = await actor.GetStateAsync();
+
+        // Deserialize the payload
+        var payload = _domainTypes.TagStatePayloadTypes.DeserializePayload(
+            serializableState.ResolvedPayloadName,
+            serializableState.Payload);
+
+        // Create TagState from SerializableTagState
+        var tagState = new TagState(
+            payload,
+            serializableState.Version,
+            serializableState.LastSortedUniqueId,
+            serializableState.TagGroup,
+            serializableState.TagContent,
+            serializableState.TagProjector,
+            serializableState.ProjectorVersion);
+
+        // Track the accessed state
+        _accessedTagStates[tag] = tagState;
+
+        return tagState;
     }
 
-    public async Task<ResultBox<bool>> TagExistsAsync(ITag tag)
+    public async Task<bool> TagExistsAsync(ITag tag)
     {
-        try
+        // Validate tag before calling actor
+        var validationErrors = TagValidator.ValidateTag(tag);
+        if (validationErrors.Count > 0)
         {
-            // Validate tag before calling actor
-            var validationErrors = TagValidator.ValidateTag(tag);
-            if (validationErrors.Count > 0)
-            {
-                return ResultBox.Error<bool>(new TagValidationErrorsException(validationErrors));
-            }
-            // Get the TagConsistentActor for this tag
-            var tagConsistentActorId = tag.GetTag();
-
-            var actorResult = await _actorAccessor.GetActorAsync<ITagConsistentActorCommon>(tagConsistentActorId);
-            if (!actorResult.IsSuccess)
-            {
-                // Actor doesn't exist means tag doesn't exist (not an error, just no data)
-                return ResultBox.FromValue(false);
-            }
-
-            var actor = actorResult.GetValue();
-            var latestSortableUniqueIdResult = await actor.GetLatestSortableUniqueIdAsync();
-
-            if (!latestSortableUniqueIdResult.IsSuccess)
-            {
-                return ResultBox.Error<bool>(latestSortableUniqueIdResult.GetException());
-            }
-
-            var latestSortableUniqueId = latestSortableUniqueIdResult.GetValue();
-
-            // If there's a latest sortable unique ID, the tag EXISTS.
-            if (!string.IsNullOrEmpty(latestSortableUniqueId))
-            {
-                // SEK-G19: track the existing tag's version as accessed state (if not already tracked by a GetStateAsync),
-                // so a later write that REFERENCES this existing tag reserves on its CURRENT version (an exact-token match,
-                // an update) rather than defaulting to expect-empty. Without this, a tag that a command only checks for
-                // EXISTENCE would reserve with an empty expected version and — now that empty means "expect the tag to be
-                // empty" — be wrongly rejected against its own committed state. A tag that does NOT exist stays untracked, so
-                // a first write still reserves expect-empty and a second first-write conflicts (the #1085 fix is preserved).
-                if (!_accessedTagStates.ContainsKey(tag))
-                {
-                    TrackObservedVersion(tag, latestSortableUniqueId);
-                }
-                return ResultBox.FromValue(true);
-            }
-
-            TrackObservedVersion(tag, string.Empty);
-            return ResultBox.FromValue(false);
+            throw new TagValidationErrorsException(validationErrors);
         }
-        catch (Exception ex)
+        // Get the TagConsistentActor for this tag
+        var tagConsistentActorId = tag.GetTag();
+
+        var actorResult = await _actorAccessor.GetActorAsync<ITagConsistentActorCommon>(tagConsistentActorId);
+        if (!actorResult.IsSuccess)
         {
-            // Return error for actual exceptions
-            return ResultBox.Error<bool>(ex);
+            // Actor doesn't exist means tag doesn't exist (not an error, just no data)
+            return false;
         }
+
+        var actor = actorResult.GetValue();
+        var latestSortableUniqueId = (await actor.GetLatestSortableUniqueIdAsync()).GetValueOrRethrow();
+
+        // If there's a latest sortable unique ID, the tag EXISTS.
+        if (!string.IsNullOrEmpty(latestSortableUniqueId))
+        {
+            // SEK-G19: track the existing tag's version as accessed state (if not already tracked by a GetStateAsync),
+            // so a later write that REFERENCES this existing tag reserves on its CURRENT version (an exact-token match,
+            // an update) rather than defaulting to expect-empty. Without this, a tag that a command only checks for
+            // EXISTENCE would reserve with an empty expected version and — now that empty means "expect the tag to be
+            // empty" — be wrongly rejected against its own committed state. A tag that does NOT exist stays untracked, so
+            // a first write still reserves expect-empty and a second first-write conflicts (the #1085 fix is preserved).
+            if (!_accessedTagStates.ContainsKey(tag))
+            {
+                TrackObservedVersion(tag, latestSortableUniqueId);
+            }
+            return true;
+        }
+
+        TrackObservedVersion(tag, string.Empty);
+        return false;
     }
 
-    public async Task<ResultBox<string>> GetTagLatestSortableUniqueIdAsync(ITag tag)
+    public async Task<string> GetTagLatestSortableUniqueIdAsync(ITag tag)
     {
-        try
+        // Validate tag before calling actor
+        var validationErrors = TagValidator.ValidateTag(tag);
+        if (validationErrors.Count > 0)
         {
-            // Validate tag before calling actor
-            var validationErrors = TagValidator.ValidateTag(tag);
-            if (validationErrors.Count > 0)
-            {
-                return ResultBox.Error<string>(new TagValidationErrorsException(validationErrors));
-            }
-            // Get the TagConsistentActor for this tag
-            var tagConsistentActorId = tag.GetTag();
-
-            var actorResult = await _actorAccessor.GetActorAsync<ITagConsistentActorCommon>(tagConsistentActorId);
-            if (!actorResult.IsSuccess)
-            {
-                // If actor doesn't exist, return empty string (not an error, just no data)
-                return ResultBox.FromValue("");
-            }
-
-            var actor = actorResult.GetValue();
-            var latestSortableUniqueIdResult = await actor.GetLatestSortableUniqueIdAsync();
-
-            if (!latestSortableUniqueIdResult.IsSuccess)
-            {
-                return ResultBox.Error<string>(latestSortableUniqueIdResult.GetException());
-            }
-
-            // For now, we'll skip tracking in GetTagLatestSortableUniqueIdAsync to avoid double-fetching
-            // The state will be tracked when GetStateAsync is called
-
-            return ResultBox.FromValue(latestSortableUniqueIdResult.GetValue());
+            throw new TagValidationErrorsException(validationErrors);
         }
-        catch (Exception ex)
+        // Get the TagConsistentActor for this tag
+        var tagConsistentActorId = tag.GetTag();
+
+        var actorResult = await _actorAccessor.GetActorAsync<ITagConsistentActorCommon>(tagConsistentActorId);
+        if (!actorResult.IsSuccess)
         {
-            // Return error for actual exceptions
-            return ResultBox.Error<string>(ex);
+            // If actor doesn't exist, return empty string (not an error, just no data)
+            return "";
         }
+
+        var actor = actorResult.GetValue();
+        // For now, we'll skip tracking in GetTagLatestSortableUniqueIdAsync to avoid double-fetching
+        // The state will be tracked when GetStateAsync is called
+        return (await actor.GetLatestSortableUniqueIdAsync()).GetValueOrRethrow();
     }
-    public Task<ResultBox<EventOrNone>> AppendEvent(IEventPayload ev, params ITag[] tags)
+
+    public Task<EventOrNone> AppendEvent(IEventPayload ev, params ITag[] tags)
     {
         if (ev is null)
         {
-            return ResultBox.Error<EventOrNone>(new ArgumentNullException(nameof(ev))).ToTask();
+            return Task.FromException<EventOrNone>(new ArgumentNullException(nameof(ev)));
         }
 
         return AppendEvent(new EventPayloadWithTags(ev, tags?.ToList() ?? new List<ITag>()));
     }
 
-    public Task<ResultBox<EventOrNone>> AppendEvent(EventPayloadWithTags ev)
+    public Task<EventOrNone> AppendEvent(EventPayloadWithTags ev)
     {
         try
         {
             if (ev == null)
             {
-                return ResultBox.Error<EventOrNone>(new ArgumentNullException(nameof(ev))).ToTask();
+                return Task.FromException<EventOrNone>(new ArgumentNullException(nameof(ev)));
             }
 
             // Validate all tags in the event before appending
             var validationErrors = TagValidator.ValidateTags(ev.Tags);
             if (validationErrors.Count > 0)
             {
-                return ResultBox.Error<EventOrNone>(new TagValidationErrorsException(validationErrors)).ToTask();
+                return Task.FromException<EventOrNone>(new TagValidationErrorsException(validationErrors));
             }
 
             // Store the event for later processing by CommandExecutor
             _appendedEvents.Add(ev);
 
-            return ResultBox.FromValue(EventOrNone.FromValue(ev)).ToTask();
+            return Task.FromResult(EventOrNone.FromValue(ev));
         }
         catch (Exception ex)
         {
-            return ResultBox.Error<EventOrNone>(ex).ToTask();
+            return Task.FromException<EventOrNone>(ex);
         }
     }
 

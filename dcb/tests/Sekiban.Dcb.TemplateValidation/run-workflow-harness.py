@@ -44,7 +44,7 @@ class Failure(RuntimeError):
 
 def resultboxes_allowed(source):
     # The ResultBoxes ratchet list as compiled into the validator; fixture packages that are in it
-    # declare ResultBoxes directly, as the real packs reach it (directly or through Core/Core.Model).
+    # declare ResultBoxes directly, as the real packs reach it (directly or through Core).
     text=(source/REL/'PackageArtifactValidator.cs').read_text()
     block=re.search(r'ResultBoxesAllowedPackageIds =\s*\[(.*?)\];', text, re.S)
     assert block, 'ResultBoxesAllowedPackageIds not found'
@@ -542,6 +542,16 @@ def preview_cases(source, root, self_test):
     for version in ['0.0.0','11.0.1-preview01','11.0.1-preview99']:
         run(['bash','-euo','pipefail','-c',repro_guard],f.repo,{**f.env,'VERSION':version})
     print('PASS reproducibility dispatch stable/preview boundaries; PR selection remains stable-only',flush=True)
+
+    # The packaged-consumer currency fixture: stable keeps the published 10.23.0; a preview falls forward to itself.
+    derive=str(source/REL/'derive-stale-currency-version.sh')
+    for version,stale in [('10.25.0','10.23.0'),('10.22.0','10.23.0'),('11.0.1-preview01','11.0.1-preview00.stale'),
+                          ('11.0.1-preview10','11.0.1-preview09.stale'),('11.0.1-preview99','11.0.1-preview98.stale')]:
+        actual=run(['bash',derive,version],source).strip()
+        assert actual==stale, f'stale currency version for {version}: {actual}'
+    for version in ['11.0.1-preview00','11.0.1-rc01','11.0.1-preview1','11.0.1-preview01.stale']:
+        rejected('stale currency '+version,'Invalid template version:',lambda:run(['bash',derive,version],source))
+    print('PASS stale currency version derivation: stable 10.23.0, preview x.y.z-preview(NN-1).stale',flush=True)
 
 def mutate(f,case):
     route=f'repos/{REPO}/actions/runs/100'; run_api=f.api[route]

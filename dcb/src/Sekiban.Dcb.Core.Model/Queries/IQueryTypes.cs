@@ -1,9 +1,8 @@
-using ResultBoxes;
 using Sekiban.Dcb.MultiProjections;
 namespace Sekiban.Dcb.Queries;
 
 /// <summary>
-///     Core interface for managing query types and execution (ResultBox-based)
+///     Core interface for managing query types and execution. Failures are thrown as exceptions.
 /// </summary>
 public interface ICoreQueryTypes
 {
@@ -20,9 +19,9 @@ public interface ICoreQueryTypes
     /// <summary>
     ///     Execute a single-result query
     /// </summary>
-    Task<ResultBox<object>> ExecuteQueryAsync(
+    Task<object> ExecuteQueryAsync(
         IQueryCommon query,
-        Func<Task<ResultBox<IMultiProjectionPayload>>> projectorProvider,
+        Func<Task<IMultiProjectionPayload>> projectorProvider,
     IServiceProvider serviceProvider,
     int? safeVersion = null,
     string? safeWindowThreshold = null,
@@ -32,9 +31,9 @@ public interface ICoreQueryTypes
     /// <summary>
     ///     Execute a list query
     /// </summary>
-    Task<ResultBox<object>> ExecuteListQueryAsync(
+    Task<object> ExecuteListQueryAsync(
         IListQueryCommon query,
-        Func<Task<ResultBox<IMultiProjectionPayload>>> projectorProvider,
+        Func<Task<IMultiProjectionPayload>> projectorProvider,
     IServiceProvider serviceProvider,
     int? safeVersion = null,
     string? safeWindowThreshold = null,
@@ -44,9 +43,9 @@ public interface ICoreQueryTypes
     /// <summary>
     ///     Execute a list query and return a general result for serialization
     /// </summary>
-    Task<ResultBox<ListQueryResultGeneral>> ExecuteListQueryAsGeneralAsync(
+    Task<ListQueryResultGeneral> ExecuteListQueryAsGeneralAsync(
         IListQueryCommon query,
-        Func<Task<ResultBox<IMultiProjectionPayload>>> projectorProvider,
+        Func<Task<IMultiProjectionPayload>> projectorProvider,
     IServiceProvider serviceProvider,
     int? safeVersion = null,
     string? safeWindowThreshold = null,
@@ -56,12 +55,12 @@ public interface ICoreQueryTypes
     /// <summary>
     ///     Get the multi-projector type for a query
     /// </summary>
-    ResultBox<Type> GetMultiProjectorType(IQueryCommon query);
+    Type GetMultiProjectorType(IQueryCommon query);
 
     /// <summary>
     ///     Get the multi-projector type for a list query
     /// </summary>
-    ResultBox<Type> GetMultiProjectorType(IListQueryCommon query);
+    Type GetMultiProjectorType(IListQueryCommon query);
 
     /// <summary>
     ///     Get a type by its name

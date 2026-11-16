@@ -386,7 +386,7 @@ public class GeneralTagStateActor : ITagStateActorCommon
         }
 
         // Use ITagStatePayloadTypes for serialization
-        var serializeResult = _tagStatePayloadTypes.SerializePayload(tagState.Payload);
+        var serializeResult = ResultBox.WrapTry(() => _tagStatePayloadTypes.SerializePayload(tagState.Payload));
         if (!serializeResult.IsSuccess)
         {
             throw new InvalidOperationException(
@@ -419,7 +419,7 @@ public class GeneralTagStateActor : ITagStateActorCommon
                 state.ProjectorVersion);
         }
 
-        var deserializeResult = _tagStatePayloadTypes.DeserializePayload(state.ResolvedPayloadName, state.Payload);
+        var deserializeResult = ResultBox.WrapTry(() => _tagStatePayloadTypes.DeserializePayload(state.ResolvedPayloadName, state.Payload));
         if (!deserializeResult.IsSuccess)
         {
             throw new InvalidOperationException(
@@ -438,7 +438,7 @@ public class GeneralTagStateActor : ITagStateActorCommon
 
     private string GetCurrentProjectorVersion()
     {
-        var projectorVersionResult = _tagProjectorTypes.GetProjectorVersion(_tagStateId.TagProjectorName);
+        var projectorVersionResult = ResultBox.WrapTry(() => _tagProjectorTypes.GetProjectorVersion(_tagStateId.TagProjectorName));
         return projectorVersionResult.IsSuccess ? projectorVersionResult.GetValue() : string.Empty;
     }
 
@@ -449,7 +449,7 @@ public class GeneralTagStateActor : ITagStateActorCommon
     {
         cancellationToken.ThrowIfCancellationRequested();
         // Get the projector function
-        var projectorFuncResult = _tagProjectorTypes.GetProjectorFunction(_tagStateId.TagProjectorName);
+        var projectorFuncResult = ResultBox.WrapTry(() => _tagProjectorTypes.GetProjectorFunction(_tagStateId.TagProjectorName));
         if (!projectorFuncResult.IsSuccess)
         {
             // Return empty state if projector not found
@@ -459,7 +459,7 @@ public class GeneralTagStateActor : ITagStateActorCommon
         var projectFunc = projectorFuncResult.GetValue();
 
         // Get the projector version
-        var versionResult = _tagProjectorTypes.GetProjectorVersion(_tagStateId.TagProjectorName);
+        var versionResult = ResultBox.WrapTry(() => _tagProjectorTypes.GetProjectorVersion(_tagStateId.TagProjectorName));
         var projectorVersion = versionResult.IsSuccess ? versionResult.GetValue() : string.Empty;
 
         // Create the tag to query events

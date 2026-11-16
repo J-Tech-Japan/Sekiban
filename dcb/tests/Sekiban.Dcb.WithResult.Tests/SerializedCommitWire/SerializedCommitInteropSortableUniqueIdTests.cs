@@ -20,8 +20,7 @@ public sealed class SerializedCommitInteropSortableUniqueIdTests
         Assert.All(value, character => Assert.InRange(character, '0', '9'));
 
         var parsed = SortableUniqueId.Parse(value);
-        Assert.True(parsed.IsSuccess, parsed.IsSuccess ? string.Empty : parsed.GetException().ToString());
-        Assert.Equal(value, parsed.GetValue().Value);
+        Assert.Equal(value, parsed.Value);
     }
 
     [Fact]

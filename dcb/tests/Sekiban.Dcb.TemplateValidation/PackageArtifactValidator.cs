@@ -24,7 +24,6 @@ internal static class PackageArtifactValidator
         "Sekiban.Dcb.BlobStorage.S3",
         "Sekiban.Dcb.ColdStorage",
         "Sekiban.Dcb.Core",
-        "Sekiban.Dcb.Core.Model",
         "Sekiban.Dcb.Core.Testing",
         "Sekiban.Dcb.CosmosDb",
         "Sekiban.Dcb.DynamoDB",
@@ -44,7 +43,6 @@ internal static class PackageArtifactValidator
         "Sekiban.Dcb.WithResult.Model",
         "Sekiban.Dcb.WithResult.Testing",
         "Sekiban.Dcb.WithoutResult",
-        "Sekiban.Dcb.WithoutResult.Model",
         "Sekiban.Dcb.WithoutResult.Testing"
     ];
 

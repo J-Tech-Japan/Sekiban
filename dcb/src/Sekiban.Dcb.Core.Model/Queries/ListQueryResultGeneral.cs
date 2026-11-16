@@ -1,4 +1,3 @@
-using ResultBoxes;
 namespace Sekiban.Dcb.Queries;
 
 /// <summary>
@@ -38,17 +37,13 @@ public record ListQueryResultGeneral(
         }
     }
 
-    public ResultBox<ListQueryResult<T>> ToTypedResult<T>() where T : notnull
+    /// <summary>
+    ///     Converts the items to <typeparamref name="T" />.
+    /// </summary>
+    /// <exception cref="InvalidCastException">Thrown when an item is not a <typeparamref name="T" />.</exception>
+    public ListQueryResult<T> ToTypedResult<T>() where T : notnull
     {
-        try
-        {
-            var typedItems = Items.Cast<T>().ToList();
-            var result = new ListQueryResult<T>(TotalCount, TotalPages, CurrentPage, PageSize, typedItems, IsCatchUpInProgress);
-            return ResultBox.FromValue(result);
-        }
-        catch (InvalidCastException ex)
-        {
-            return ResultBox.Error<ListQueryResult<T>>(ex);
-        }
+        var typedItems = Items.Cast<T>().ToList();
+        return new ListQueryResult<T>(TotalCount, TotalPages, CurrentPage, PageSize, typedItems, IsCatchUpInProgress);
     }
 }

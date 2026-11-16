@@ -31,7 +31,6 @@
     </ItemGroup>
 
     <ItemGroup>
-        <PackageReference Include="ResultBoxes" Version="0.4.0"/>
         <PackageReference Include="Microsoft.Sbom.Targets" Version="4.1.5">
             <PrivateAssets>all</PrivateAssets>
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>

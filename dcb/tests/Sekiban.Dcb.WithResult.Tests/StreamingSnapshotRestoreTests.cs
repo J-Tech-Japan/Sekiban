@@ -358,97 +358,59 @@ public sealed partial class StreamingSnapshotRestoreTests
     }
 
     [Fact]
-    public async Task Frozen_10_18_external_registry_binary_loads_and_is_invoked_through_the_buffered_compatibility_path()
+    public void Frozen_10_18_external_registry_binary_is_rejected_by_the_11_exception_based_contract()
     {
-        // The fixture project references only the published 10.18 packages. At test run its old ICore interface token is
-        // bound to this build, proving the optional capability did not add an abstract member or prevent loading.
+        // The fixture project references only the published 10.18 packages, so its registry implements the
+        // ResultBox-returning ICoreMultiProjectorTypes. 11.0 changes that contract to plain return values on purpose
+        // (custom registries must be recompiled), so the old binary no longer loads against this build. This test
+        // pins that intended break; it replaces the 10.x test that the old binary still loaded and was invoked.
         var fixturePath = Path.Combine(AppContext.BaseDirectory, "Sekiban.Dcb.StreamingRestore.Legacy1018Fixture.dll");
         var loaded = System.Reflection.Assembly.LoadFrom(fixturePath);
-        var registryType = loaded.GetType(
+
+        var failure = Assert.Throws<TypeLoadException>(() => loaded.GetType(
             "Sekiban.Dcb.StreamingRestore.Legacy1018Fixture.Legacy1018ExternalRegistry",
-            throwOnError: true)!;
-        var registry = Assert.IsAssignableFrom<ICoreMultiProjectorTypes>(Activator.CreateInstance(registryType));
-        Assert.False(registry is IStreamingMultiProjectorTypes);
-
-        var bytes = Encoding.UTF8.GetBytes("v10.18 external registry payload");
-        var blob = new CappedBlobAccessor();
-        const string projectorName = "legacy-1018-external-registry";
-        const string projectorVersion = "10.18";
-        var key = await blob.WriteAsync(new MemoryStream(bytes), projectorName);
-        var envelope = new SerializableMultiProjectionStateEnvelope(
-            IsOffloaded: true,
-            InlineState: null,
-            OffloadedState: new SerializableMultiProjectionStateOffloaded(
-                key,
-                blob.ProviderName,
-                "Sekiban.Dcb.StreamingRestore.Legacy1018Fixture.Legacy1018Payload",
-                projectorName,
-                projectorVersion,
-                SortableUniqueId.MinValue.Value,
-                Guid.Empty,
-                Version: 3,
-                IsCatchedUp: true,
-                IsSafeState: true,
-                PayloadLength: bytes.Length,
-                OriginalSizeBytes: bytes.Length,
-                CompressedSizeBytes: bytes.Length));
-        var actor = new GeneralMultiProjectionActor(
-            CreateDomain(registry),
-            projectorName);
-
-        await using var resolved = await SnapshotEnvelopeResolver.ResolveForRestoreAsync(envelope, blob);
-        await actor.SetResolvedSnapshotAsync(resolved);
-
-        var state = await actor.GetStateAsync();
-        Assert.True(state.IsSuccess);
-        Assert.Equal(
-            "v10.18 external registry payload",
-            registryType.Assembly
-                .GetType(state.GetValue().Payload.GetType().FullName!, throwOnError: true)!
-                .GetProperty("Value")!
-                .GetValue(state.GetValue().Payload));
-        // Once for the explicitly observable fallback and once for the legacy dual-state clone. Both calls are to the
-        // separately compiled 10.18 implementation, not a test double built against the new capability.
-        Assert.Equal(2, registryType.GetProperty("DeserializeCalls")!.GetValue(registry));
+            throwOnError: true));
+        Assert.Contains("'Project'", failure.Message);
     }
 
     [Fact]
     public void Streaming_restore_public_surface_is_additive_and_the_legacy_registry_contract_is_frozen()
     {
-        // This list is the published v10.18 ICoreMultiProjectorTypes surface. The stream capability must remain a
-        // separate opt-in interface: adding a member here would break the separately compiled external fixture above.
+        // This list is the ICoreMultiProjectorTypes surface: the v10.18 member set, exception based since 11.0. The
+        // stream capability must remain a separate opt-in interface so a registry that does not implement it keeps
+        // the buffered path.
         var legacy = typeof(ICoreMultiProjectorTypes).GetMethods();
         Assert.Equal(12, legacy.Length);
-        AssertMethod(legacy, "Project", typeof(ResultBox<IMultiProjectionPayload>),
+        AssertMethod(legacy, "Project", typeof(IMultiProjectionPayload),
             typeof(string), typeof(IMultiProjectionPayload), typeof(Event), typeof(List<ITag>),
             typeof(DcbDomainTypes), typeof(SortableUniqueId));
-        AssertMethod(legacy, "GetProjectorVersion", typeof(ResultBox<string>), typeof(string));
+        AssertMethod(legacy, "GetProjectorVersion", typeof(string), typeof(string));
         AssertMethod(legacy, "GetAllProjectorNames", typeof(IReadOnlyList<string>));
-        AssertMethod(legacy, "GetInitialPayloadGenerator", typeof(ResultBox<Func<IMultiProjectionPayload>>), typeof(string));
-        AssertMethod(legacy, "GetProjectorType", typeof(ResultBox<Type>), typeof(string));
-        AssertMethod(legacy, "GenerateInitialPayload", typeof(ResultBox<IMultiProjectionPayload>), typeof(string));
-        AssertMethod(legacy, "Deserialize", typeof(ResultBox<IMultiProjectionPayload>),
+        AssertMethod(legacy, "GetInitialPayloadGenerator", typeof(Func<IMultiProjectionPayload>), typeof(string));
+        AssertMethod(legacy, "GetProjectorType", typeof(Type), typeof(string));
+        AssertMethod(legacy, "GenerateInitialPayload", typeof(IMultiProjectionPayload), typeof(string));
+        AssertMethod(legacy, "Deserialize", typeof(IMultiProjectionPayload),
             typeof(byte[]), typeof(string), typeof(JsonSerializerOptions));
-        AssertMethod(legacy, "Deserialize", typeof(ResultBox<IMultiProjectionPayload>),
+        AssertMethod(legacy, "Deserialize", typeof(IMultiProjectionPayload),
             typeof(string), typeof(DcbDomainTypes), typeof(string), typeof(byte[]));
-        AssertMethod(legacy, "Serialize", typeof(ResultBox<SerializationResult>),
+        AssertMethod(legacy, "Serialize", typeof(SerializationResult),
             typeof(string), typeof(DcbDomainTypes), typeof(string), typeof(IMultiProjectionPayload));
-        AssertMethod(legacy, "SerializeToStream", typeof(ResultBox<SerializationSizeInfo>),
+        AssertMethod(legacy, "SerializeToStream", typeof(SerializationSizeInfo),
             typeof(string), typeof(DcbDomainTypes), typeof(string), typeof(IMultiProjectionPayload), typeof(Stream));
-        AssertMethod(legacy, "DeserializeJson", typeof(ResultBox<IMultiProjectionPayload>),
+        AssertMethod(legacy, "DeserializeJson", typeof(IMultiProjectionPayload),
             typeof(string), typeof(string), typeof(DcbDomainTypes));
         var customRegistration = Assert.Single(
             legacy,
             method => method.Name == "RegisterProjectorWithCustomSerialization");
         Assert.True(customRegistration.IsGenericMethodDefinition);
-        Assert.Equal(typeof(ResultBox<bool>), customRegistration.ReturnType);
+        Assert.Equal(typeof(bool), customRegistration.ReturnType);
         Assert.Empty(customRegistration.GetParameters());
         Assert.DoesNotContain(legacy, method => method.Name is "DeserializeFromStreamAsync" or "SupportsStreamDeserialization");
 
         var streaming = typeof(IStreamingMultiProjectorTypes).GetMethods();
         Assert.Equal(2, streaming.Length);
         AssertMethod(streaming, "SupportsStreamDeserialization", typeof(bool), typeof(string));
-        AssertMethod(streaming, "DeserializeFromStreamAsync", typeof(Task<ResultBox<IMultiProjectionPayload>>),
+        AssertMethod(streaming, "DeserializeFromStreamAsync", typeof(Task<IMultiProjectionPayload>),
             typeof(string), typeof(DcbDomainTypes), typeof(string), typeof(Stream), typeof(CancellationToken));
 
         var custom = typeof(ICoreMultiProjectorWithStreamDeserialization).GetMethods();
@@ -724,15 +686,15 @@ public sealed partial class StreamingSnapshotRestoreTests
         public static string MultiProjectorVersion => "1";
         public static CustomStreamPayloadProjector GenerateInitialPayload() => new([]);
 
-        public static ResultBox<CustomStreamPayloadProjector> Project(
+        public static CustomStreamPayloadProjector Project(
             CustomStreamPayloadProjector payload,
             Event ev,
             List<ITag> tags,
             DcbDomainTypes domainTypes,
             SortableUniqueId safeWindowThreshold) =>
             ev.Payload is PayloadAdded added
-                ? ResultBox.FromValue(payload with { Values = [.. payload.Values, added.Value] })
-                : ResultBox.FromValue(payload);
+                ? (payload with { Values = [.. payload.Values, added.Value] })
+                : payload;
 
         public static SerializationResult Serialize(
             DcbDomainTypes domainTypes,
@@ -771,15 +733,15 @@ public sealed partial class StreamingSnapshotRestoreTests
         public static string MultiProjectorVersion => "1";
         public static CustomBufferedPayloadProjector GenerateInitialPayload() => new([]);
 
-        public static ResultBox<CustomBufferedPayloadProjector> Project(
+        public static CustomBufferedPayloadProjector Project(
             CustomBufferedPayloadProjector payload,
             Event ev,
             List<ITag> tags,
             DcbDomainTypes domainTypes,
             SortableUniqueId safeWindowThreshold) =>
             ev.Payload is PayloadAdded added
-                ? ResultBox.FromValue(payload with { Values = [.. payload.Values, added.Value] })
-                : ResultBox.FromValue(payload);
+                ? (payload with { Values = [.. payload.Values, added.Value] })
+                : payload;
 
         public static SerializationResult Serialize(
             DcbDomainTypes domainTypes,
@@ -807,26 +769,26 @@ public sealed partial class StreamingSnapshotRestoreTests
         protected ICoreMultiProjectorTypes Inner { get; }
         public int BufferedDeserializeCalls { get; protected set; }
 
-        public ResultBox<IMultiProjectionPayload> Project(string name, IMultiProjectionPayload payload, Event ev,
+        public IMultiProjectionPayload Project(string name, IMultiProjectionPayload payload, Event ev,
             List<ITag> tags, DcbDomainTypes domain, SortableUniqueId threshold) =>
             Inner.Project(name, payload, ev, tags, domain, threshold);
-        public ResultBox<string> GetProjectorVersion(string name) => Inner.GetProjectorVersion(name);
+        public string GetProjectorVersion(string name) => Inner.GetProjectorVersion(name);
         public IReadOnlyList<string> GetAllProjectorNames() => Inner.GetAllProjectorNames();
-        public ResultBox<Func<IMultiProjectionPayload>> GetInitialPayloadGenerator(string name) =>
+        public Func<IMultiProjectionPayload> GetInitialPayloadGenerator(string name) =>
             Inner.GetInitialPayloadGenerator(name);
-        public ResultBox<Type> GetProjectorType(string name) => Inner.GetProjectorType(name);
-        public ResultBox<IMultiProjectionPayload> GenerateInitialPayload(string name) => Inner.GenerateInitialPayload(name);
-        public ResultBox<IMultiProjectionPayload> Deserialize(byte[] data, string name, JsonSerializerOptions options) =>
+        public Type GetProjectorType(string name) => Inner.GetProjectorType(name);
+        public IMultiProjectionPayload GenerateInitialPayload(string name) => Inner.GenerateInitialPayload(name);
+        public IMultiProjectionPayload Deserialize(byte[] data, string name, JsonSerializerOptions options) =>
             Inner.Deserialize(data, name, options);
-        public ResultBox<SerializationResult> Serialize(string name, DcbDomainTypes domain, string threshold,
+        public SerializationResult Serialize(string name, DcbDomainTypes domain, string threshold,
             IMultiProjectionPayload payload) => Inner.Serialize(name, domain, threshold, payload);
-        public virtual ResultBox<IMultiProjectionPayload> Deserialize(string name, DcbDomainTypes domain, string threshold,
+        public virtual IMultiProjectionPayload Deserialize(string name, DcbDomainTypes domain, string threshold,
             byte[] data)
         {
             BufferedDeserializeCalls++;
             return Inner.Deserialize(name, domain, threshold, data);
         }
-        public ResultBox<bool> RegisterProjectorWithCustomSerialization<T>()
+        public bool RegisterProjectorWithCustomSerialization<T>()
             where T : ICoreMultiProjectorWithCustomSerialization<T>, new() =>
             Inner.RegisterProjectorWithCustomSerialization<T>();
     }
@@ -839,7 +801,7 @@ public sealed partial class StreamingSnapshotRestoreTests
         public int StreamDeserializeCalls { get; protected set; }
         public bool SupportsStreamDeserialization(string projectorName) => _streaming.SupportsStreamDeserialization(projectorName);
 
-        public virtual async Task<ResultBox<IMultiProjectionPayload>> DeserializeFromStreamAsync(
+        public virtual async Task<IMultiProjectionPayload> DeserializeFromStreamAsync(
             string projectorName,
             DcbDomainTypes domainTypes,
             string safeWindowThreshold,
@@ -858,7 +820,7 @@ public sealed partial class StreamingSnapshotRestoreTests
 
     private sealed class FailingStreamingRegistry(ICoreMultiProjectorTypes inner) : CountingStreamingRegistry(inner)
     {
-        public override async Task<ResultBox<IMultiProjectionPayload>> DeserializeFromStreamAsync(
+        public override async Task<IMultiProjectionPayload> DeserializeFromStreamAsync(
             string projectorName,
             DcbDomainTypes domainTypes,
             string safeWindowThreshold,
@@ -867,7 +829,7 @@ public sealed partial class StreamingSnapshotRestoreTests
         {
             StreamDeserializeCalls++;
             await Task.CompletedTask;
-            return ResultBox.Error<IMultiProjectionPayload>(new InvalidDataException("stream-capability-failure"));
+            throw new InvalidDataException("stream-capability-failure");
         }
     }
 
@@ -879,7 +841,7 @@ public sealed partial class StreamingSnapshotRestoreTests
 
         public bool SupportsStreamDeserialization(string projectorName) => _streaming.SupportsStreamDeserialization(projectorName);
 
-        public async Task<ResultBox<IMultiProjectionPayload>> DeserializeFromStreamAsync(
+        public async Task<IMultiProjectionPayload> DeserializeFromStreamAsync(
             string projectorName,
             DcbDomainTypes domainTypes,
             string safeWindowThreshold,

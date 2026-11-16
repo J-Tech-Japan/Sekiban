@@ -62,9 +62,9 @@ public class GeneralCommandContext : ICommandContext, ICommandContextResultAcces
             var serializableState = await actor.GetStateAsync();
 
             // Deserialize the payload
-            var payloadResult = _domainTypes.TagStatePayloadTypes.DeserializePayload(
+            var payloadResult = ResultBox.WrapTry(() => _domainTypes.TagStatePayloadTypes.DeserializePayload(
                 serializableState.ResolvedPayloadName,
-                serializableState.Payload);
+                serializableState.Payload));
 
             if (!payloadResult.IsSuccess)
             {
@@ -141,9 +141,9 @@ public class GeneralCommandContext : ICommandContext, ICommandContextResultAcces
             var serializableState = await actor.GetStateAsync();
 
             // Deserialize the payload
-            var payloadResult = _domainTypes.TagStatePayloadTypes.DeserializePayload(
+            var payloadResult = ResultBox.WrapTry(() => _domainTypes.TagStatePayloadTypes.DeserializePayload(
                 serializableState.ResolvedPayloadName,
-                serializableState.Payload);
+                serializableState.Payload));
 
             if (!payloadResult.IsSuccess)
             {

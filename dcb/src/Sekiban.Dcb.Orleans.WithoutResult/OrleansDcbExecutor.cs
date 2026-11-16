@@ -280,7 +280,7 @@ public class OrleansDcbExecutor : ISekibanExecutor, IConditionalCommandExecutor,
     {
         var context = new BoundaryContext("ISekibanExecutor.QueryAsync (list)", typeof(TResult).Name);
         var listGeneral = await GuardedUnwrap.UnwrapAsync(result.ToListQueryResultAsync(_construction.DomainTypes), context);
-        return GuardedUnwrap.Unwrap(listGeneral.ToTypedResult<TResult>(), context);
+        return GuardedUnwrap.Run(() => listGeneral.ToTypedResult<TResult>(), context);
     }
 
     public Task<string> GetLatestSortableUniqueIdAsync() =>
@@ -290,38 +290,25 @@ public class OrleansDcbExecutor : ISekibanExecutor, IConditionalCommandExecutor,
         string projectorName,
         string? expectedProjectorVersion = null)
     {
-        var projectorVersionResult = ProjectionHeadStatusUtilities.ValidateProjectorVersion(
+        var registeredProjectorVersion = ProjectionHeadStatusUtilities.ValidateProjectorVersion(
             _construction.DomainTypes,
             projectorName,
             expectedProjectorVersion);
-        if (!projectorVersionResult.IsSuccess)
-        {
-            throw projectorVersionResult.GetException();
-        }
 
         var grainId = ServiceIdGrainKey.Build(_construction.ServiceIdProvider.GetCurrentServiceId(), projectorName);
         var grain = _construction.ClusterClient.GetGrain<IMultiProjectionGrain>(grainId);
         var grainStatus = await grain.GetProjectionHeadStatusAsync();
 
-        var projectorNameResult = ProjectionHeadStatusUtilities.EnsureProjectorNameConsistency(
+        var confirmedProjectorName = ProjectionHeadStatusUtilities.EnsureProjectorNameConsistency(
             projectorName,
             grainStatus.ProjectorName);
-        if (!projectorNameResult.IsSuccess)
-        {
-            throw projectorNameResult.GetException();
-        }
-
-        var projectorVersionConsistencyResult = ProjectionHeadStatusUtilities.EnsureProjectorVersionConsistency(
-            projectorVersionResult.GetValue(),
+        var confirmedProjectorVersion = ProjectionHeadStatusUtilities.EnsureProjectorVersionConsistency(
+            registeredProjectorVersion,
             grainStatus.ProjectorVersion);
-        if (!projectorVersionConsistencyResult.IsSuccess)
-        {
-            throw projectorVersionConsistencyResult.GetException();
-        }
 
         return new ProjectionHeadStatus(
-            projectorNameResult.GetValue(),
-            projectorVersionConsistencyResult.GetValue(),
+            confirmedProjectorName,
+            confirmedProjectorVersion,
             new ProjectionPosition(
                 grainStatus.CurrentEventVersion,
                 ProjectionHeadStatusUtilities.NormalizeSortableUniqueId(grainStatus.CurrentLastSortableUniqueId)),
@@ -352,27 +339,11 @@ public class OrleansDcbExecutor : ISekibanExecutor, IConditionalCommandExecutor,
         CancellationToken cancellationToken = default) =>
         _construction.GeneralExecutor.CommitSerializableEventsWithExpectedTagPositionsAsync(request, cancellationToken);
 
-    private string ResolveProjectorName(IQueryCommon queryCommon)
-    {
-        var projectorTypeResult = _construction.DomainTypes.QueryTypes.GetMultiProjectorType(queryCommon);
-        var projectorNameResult = ProjectionHeadStatusUtilities.ResolveProjectorName(projectorTypeResult);
-        if (!projectorNameResult.IsSuccess)
-        {
-            throw projectorNameResult.GetException();
-        }
+    private string ResolveProjectorName(IQueryCommon queryCommon) =>
+        ProjectionHeadStatusUtilities.ResolveProjectorName(
+            _construction.DomainTypes.QueryTypes.GetMultiProjectorType(queryCommon));
 
-        return projectorNameResult.GetValue();
-    }
-
-    private string ResolveProjectorName(IListQueryCommon queryCommon)
-    {
-        var projectorTypeResult = _construction.DomainTypes.QueryTypes.GetMultiProjectorType(queryCommon);
-        var projectorNameResult = ProjectionHeadStatusUtilities.ResolveProjectorName(projectorTypeResult);
-        if (!projectorNameResult.IsSuccess)
-        {
-            throw projectorNameResult.GetException();
-        }
-
-        return projectorNameResult.GetValue();
-    }
+    private string ResolveProjectorName(IListQueryCommon queryCommon) =>
+        ProjectionHeadStatusUtilities.ResolveProjectorName(
+            _construction.DomainTypes.QueryTypes.GetMultiProjectorType(queryCommon));
 }

@@ -257,11 +257,7 @@ public class GeneralMultiProjectionActor
         ThrowIfSnapshotRestoreUnavailable();
         InitializeProjectorsIfNeeded();
 
-        var versionResult = _types.GetProjectorVersion(_projectorName);
-        if (!versionResult.IsSuccess)
-        {
-            throw versionResult.GetException();
-        }
+        var projectorVersion = _types.GetProjectorVersion(_projectorName);
 
         var safeWindowThreshold = GetSafeWindowThreshold();
 
@@ -286,7 +282,7 @@ public class GeneralMultiProjectionActor
                 dualAccessor.SafeVersion,
                 ProjectionHeadStatusUtilities.NormalizeSortableUniqueId(dualAccessor.SafeLastSortableUniqueId));
 
-            return CreateProjectionHeadStatus(versionResult.GetValue(), current, consistent);
+            return CreateProjectionHeadStatus(projectorVersion, current, consistent);
         }
 
         var currentStateResult = await GetStateAsync(canGetUnsafeState: true);
@@ -302,7 +298,7 @@ public class GeneralMultiProjectionActor
         }
 
         return CreateProjectionHeadStatus(
-            versionResult.GetValue(),
+            projectorVersion,
             ToProjectionPosition(currentStateResult.GetValue()),
             ToProjectionPosition(consistentStateResult.GetValue()));
     }
@@ -347,13 +343,7 @@ public class GeneralMultiProjectionActor
         {
             if (validateProjectorVersion)
             {
-                var versionResult = _types.GetProjectorVersion(_projectorName);
-                if (!versionResult.IsSuccess)
-                {
-                    throw versionResult.GetException();
-                }
-
-                var currentVersion = versionResult.GetValue();
+                var currentVersion = _types.GetProjectorVersion(_projectorName);
                 if (!string.Equals(currentVersion, state.ProjectorVersion, StringComparison.Ordinal))
                 {
                     throw new InvalidOperationException(
@@ -427,7 +417,7 @@ public class GeneralMultiProjectionActor
                     "capability-absent");
                 var payloadBytes = await StreamReadHelper.ReadAllBytesAsync(payloadStream, cancellationToken)
                     .ConfigureAwait(false);
-                deserializeResult = _types.Deserialize(state.ProjectorName, _domain, safeThreshold, payloadBytes);
+                deserializeResult = ResultBox.WrapTry(() => _types.Deserialize(state.ProjectorName, _domain, safeThreshold, payloadBytes));
                 if (!deserializeResult.IsSuccess)
                 {
                     throw deserializeResult.GetException();
@@ -439,7 +429,7 @@ public class GeneralMultiProjectionActor
         else
         {
             var payloadBytes = state.GetPayloadBytes();
-            deserializeResult = _types.Deserialize(state.ProjectorName, _domain, safeThreshold, payloadBytes);
+            deserializeResult = ResultBox.WrapTry(() => _types.Deserialize(state.ProjectorName, _domain, safeThreshold, payloadBytes));
             if (!deserializeResult.IsSuccess)
             {
                 throw deserializeResult.GetException();
@@ -523,12 +513,12 @@ public class GeneralMultiProjectionActor
                              options: FileOptions.Asynchronous | FileOptions.SequentialScan))
             {
                 await using var tee = new SnapshotRestoreTeeReadStream(source, copy);
-                primary = await streamingTypes.DeserializeFromStreamAsync(
+                primary = await ResultBox.WrapTry(() => streamingTypes.DeserializeFromStreamAsync(
                         projectorName,
                         _domain,
                         safeWindowThreshold,
                         tee,
-                        cancellationToken)
+                        cancellationToken))
                     .ConfigureAwait(false);
                 if (!primary.IsSuccess)
                 {
@@ -556,12 +546,12 @@ public class GeneralMultiProjectionActor
                 FileShare.Read,
                 bufferSize: 81920,
                 options: FileOptions.Asynchronous | FileOptions.SequentialScan);
-            var clone = await streamingTypes.DeserializeFromStreamAsync(
+            var clone = await ResultBox.WrapTry(() => streamingTypes.DeserializeFromStreamAsync(
                     projectorName,
                     _domain,
                     safeWindowThreshold,
                     cloneSource,
-                    cancellationToken)
+                    cancellationToken))
                 .ConfigureAwait(false);
             if (!clone.IsSuccess)
             {
@@ -598,14 +588,14 @@ public class GeneralMultiProjectionActor
 
         var multiProjectionState = stateResult.GetValue();
         var payload = multiProjectionState.Payload;
-        var versionResult = _types.GetProjectorVersion(_projectorName);
+        var versionResult = ResultBox.WrapTry(() => _types.GetProjectorVersion(_projectorName));
         if (!versionResult.IsSuccess) return ResultBox.Error<SerializedMultiProjectionStatePayload>(versionResult.GetException());
         var projectorVersion = versionResult.GetValue();
 
         try
         {
             var safeThreshold = GetSafeWindowThreshold();
-            var serializeResult = _types.Serialize(_projectorName, _domain, safeThreshold.Value, payload);
+            var serializeResult = ResultBox.WrapTry(() => _types.Serialize(_projectorName, _domain, safeThreshold.Value, payload));
             if (!serializeResult.IsSuccess)
             {
                 return ResultBox.Error<SerializedMultiProjectionStatePayload>(serializeResult.GetException());
@@ -722,7 +712,7 @@ public class GeneralMultiProjectionActor
         var payloadType = payload.GetType();
         var payloadTypeName = payloadType.FullName ?? payloadType.Name;
 
-        var versionResult = _types.GetProjectorVersion(_projectorName);
+        var versionResult = ResultBox.WrapTry(() => _types.GetProjectorVersion(_projectorName));
         if (!versionResult.IsSuccess)
         {
             return ResultBox.Error<SerializableMultiProjectionStateEnvelope>(versionResult.GetException());
@@ -753,12 +743,12 @@ public class GeneralMultiProjectionActor
         SerializationSizeInfo sizeInfo;
         try
         {
-            var serializeResult = _types.SerializeToStream(
+            var serializeResult = ResultBox.WrapTry(() => _types.SerializeToStream(
                 _projectorName,
                 _domain,
                 safeThreshold.Value,
                 payload,
-                bufferStream);
+                bufferStream));
             if (!serializeResult.IsSuccess)
             {
                 return ResultBox.Error<SerializableMultiProjectionStateEnvelope>(serializeResult.GetException());
@@ -1055,7 +1045,12 @@ public class GeneralMultiProjectionActor
 
             try
             {
-                var result = method.Invoke(_singleStateAccessor, new object[] { ev, safeWindowThreshold, _domain });
+                var result = method.Invoke(
+                    _singleStateAccessor,
+                    System.Reflection.BindingFlags.DoNotWrapExceptions,
+                    null,
+                    new object[] { ev, safeWindowThreshold, _domain },
+                    null);
 
                 if (result is IMultiProjectionPayload payload)
                 {
@@ -1318,7 +1313,7 @@ public class GeneralMultiProjectionActor
     private Task<ResultBox<MultiProjectionState>> GetStateFromSingleAccessorAsync(bool canGetUnsafeState)
     {
         // Get version from the type
-        var versionResult = _types.GetProjectorVersion(_projectorName);
+        var versionResult = ResultBox.WrapTry(() => _types.GetProjectorVersion(_projectorName));
         if (!versionResult.IsSuccess)
         {
             return Task.FromResult(ResultBox.Error<MultiProjectionState>(versionResult.GetException()));
@@ -1410,7 +1405,7 @@ public class GeneralMultiProjectionActor
                 }
                 catch { }
                 var getUnsafeMethod = accessorType.GetMethod("GetUnsafeProjection");
-                var projection = getUnsafeMethod?.Invoke(_singleStateAccessor, new object[] { _domain });
+                var projection = getUnsafeMethod?.Invoke(_singleStateAccessor, System.Reflection.BindingFlags.DoNotWrapExceptions, null, new object[] { _domain }, null);
                 statePayload = (IMultiProjectionPayload)(projection?.GetType().GetProperty("State")?.GetValue(projection) ?? _singleStateAccessor);
                 lastSortableId = (string)(projection?.GetType().GetProperty("LastSortableUniqueId")?.GetValue(projection) ?? _unsafeLastSortableUniqueId);
                 lastEventId = (Guid)(projection?.GetType().GetProperty("LastEventId")?.GetValue(projection) ?? _unsafeLastEventId);
@@ -1477,13 +1472,7 @@ public class GeneralMultiProjectionActor
         ThrowIfSnapshotRestoreUnavailable();
         if (_singleStateAccessor == null)
         {
-            var init = _types.GenerateInitialPayload(_projectorName);
-            if (!init.IsSuccess)
-            {
-                throw init.GetException();
-            }
-
-            var initialPayload = init.GetValue();
+            var initialPayload = _types.GenerateInitialPayload(_projectorName);
 
             if (initialPayload is IDualStateAccessor)
             {

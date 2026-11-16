@@ -1,4 +1,3 @@
-using ResultBoxes;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.Tags;
 using System.Collections.Concurrent;
@@ -15,27 +14,16 @@ public class AotTagProjectorTypes : ITagProjectorTypes
     private readonly ConcurrentDictionary<string, string> _projectorVersions = new();
 
     /// <inheritdoc />
-    public ResultBox<Func<ITagStatePayload, Event, ITagStatePayload>> GetProjectorFunction(string tagProjectorName)
-    {
-        if (_projectorFunctions.TryGetValue(tagProjectorName, out var projectorFunc))
-        {
-            return ResultBox.FromValue(projectorFunc);
-        }
-
-        return ResultBox.Error<Func<ITagStatePayload, Event, ITagStatePayload>>(
-            new Exception($"Tag projector '{tagProjectorName}' not found"));
-    }
+    public Func<ITagStatePayload, Event, ITagStatePayload> GetProjectorFunction(string tagProjectorName) =>
+        _projectorFunctions.TryGetValue(tagProjectorName, out var projectorFunc)
+            ? projectorFunc
+            : throw new Exception($"Tag projector '{tagProjectorName}' not found");
 
     /// <inheritdoc />
-    public ResultBox<string> GetProjectorVersion(string tagProjectorName)
-    {
-        if (_projectorVersions.TryGetValue(tagProjectorName, out var version))
-        {
-            return ResultBox.FromValue(version);
-        }
-
-        return ResultBox.Error<string>(new Exception($"Tag projector '{tagProjectorName}' not found"));
-    }
+    public string GetProjectorVersion(string tagProjectorName) =>
+        _projectorVersions.TryGetValue(tagProjectorName, out var version)
+            ? version
+            : throw new Exception($"Tag projector '{tagProjectorName}' not found");
 
     /// <inheritdoc />
     public IReadOnlyList<string> GetAllProjectorNames() => _projectorFunctions.Keys.ToList();

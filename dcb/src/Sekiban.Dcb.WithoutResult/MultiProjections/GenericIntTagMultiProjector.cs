@@ -109,7 +109,7 @@ public record
                     var itemVersion = item["version"]?.GetValue<int>() ?? 0;
                     var itemLast = item["last"]?.GetValue<string>() ?? string.Empty;
                     var payloadBytes = System.Text.Encoding.UTF8.GetBytes(payloadJson);
-                    var rb = domainTypes.TagStatePayloadTypes.DeserializePayload(type, payloadBytes);
+                    var rb = ResultBox.WrapTry(() => domainTypes.TagStatePayloadTypes.DeserializePayload(type, payloadBytes));
                     if (!rb.IsSuccess) continue;
                     var payload = rb.GetValue();
                     var tag = TTagGroup.FromContent(id.ToString());

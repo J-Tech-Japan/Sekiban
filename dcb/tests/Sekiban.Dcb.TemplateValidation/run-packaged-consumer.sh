@@ -349,10 +349,7 @@ fi
 expect_unavailable_package_restore_and_build "$broken_reference_solution" "$broken_reference_version"
 
 currency_mutant="$work_root/mutant-currency"
-stale_version="10.23.0"
-if [[ "$version" == *-preview* ]]; then
-  stale_version="10.23.0-preview01"
-fi
+stale_version="$(bash "$script_dir/derive-stale-currency-version.sh" "$version")"
 run_net10 "$validator" mutate --source "$negative_output" --destination "$currency_mutant" --kind currency --stale-version "$stale_version"
 currency_solution="$(find "$currency_mutant" -maxdepth 1 -name '*.slnx' -print -quit)"
 if [[ -z "$currency_solution" ]]; then

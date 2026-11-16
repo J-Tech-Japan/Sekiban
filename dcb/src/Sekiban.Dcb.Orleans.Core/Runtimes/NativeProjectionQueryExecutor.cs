@@ -62,16 +62,16 @@ internal class NativeProjectionQueryExecutor
             }
 
             var state = stateResult.GetValue();
-            var projectorProvider = () => Task.FromResult(ResultBox.FromValue(state.Payload!));
+            var projectorProvider = () => Task.FromResult(state.Payload!);
 
-            var result = await _domainTypes.QueryTypes.ExecuteQueryAsync(
+            var result = await ResultBox.WrapTry(() => _domainTypes.QueryTypes.ExecuteQueryAsync(
                 typedQuery,
                 projectorProvider,
                 _serviceProvider,
                 safeVersion,
                 safeThreshold,
                 safeThresholdTime,
-                unsafeVersion);
+                unsafeVersion));
 
             if (!result.IsSuccess)
             {
@@ -125,16 +125,16 @@ internal class NativeProjectionQueryExecutor
             }
 
             var state = stateResult.GetValue();
-            var projectorProvider = () => Task.FromResult(ResultBox.FromValue(state.Payload!));
+            var projectorProvider = () => Task.FromResult(state.Payload!);
 
-            var result = await _domainTypes.QueryTypes.ExecuteListQueryAsGeneralAsync(
+            var result = await ResultBox.WrapTry(() => _domainTypes.QueryTypes.ExecuteListQueryAsGeneralAsync(
                 listQuery,
                 projectorProvider,
                 _serviceProvider,
                 safeVersion,
                 safeThreshold,
                 safeThresholdTime,
-                unsafeVersion);
+                unsafeVersion));
 
             if (!result.IsSuccess)
             {

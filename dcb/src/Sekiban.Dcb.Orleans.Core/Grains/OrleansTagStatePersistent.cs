@@ -1,3 +1,4 @@
+using ResultBoxes;
 using Sekiban.Dcb.Tags;
 using Sekiban.Dcb.Domains;
 namespace Sekiban.Dcb.Orleans.Grains;
@@ -25,9 +26,9 @@ public class OrleansTagStatePersistent : ITagStatePersistent, ISerializableTagSt
         if (serializable != null)
         {
             // Deserialize payload from SerializableTagState
-            var deserializeResult = _tagStatePayloadTypes.DeserializePayload(
+            var deserializeResult = ResultBox.WrapTry(() => _tagStatePayloadTypes.DeserializePayload(
                 serializable.ResolvedPayloadName,
-                serializable.Payload);
+                serializable.Payload));
 
             if (!deserializeResult.IsSuccess)
             {
@@ -52,7 +53,7 @@ public class OrleansTagStatePersistent : ITagStatePersistent, ISerializableTagSt
     public async Task SaveStateAsync(TagState state)
     {
         // Convert TagState to SerializableTagState
-        var serializeResult = _tagStatePayloadTypes.SerializePayload(state.Payload);
+        var serializeResult = ResultBox.WrapTry(() => _tagStatePayloadTypes.SerializePayload(state.Payload));
         if (!serializeResult.IsSuccess)
         {
             throw new InvalidOperationException(

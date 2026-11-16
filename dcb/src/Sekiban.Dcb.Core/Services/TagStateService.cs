@@ -160,14 +160,14 @@ public class TagStateService
     {
         cancellationToken.ThrowIfCancellationRequested();
         // Get the projector function
-        var projectorFuncResult = _tagProjectorTypes.GetProjectorFunction(projectorName);
+        var projectorFuncResult = ResultBox.WrapTry(() => _tagProjectorTypes.GetProjectorFunction(projectorName));
         if (!projectorFuncResult.IsSuccess)
         {
             return ResultBox.Error<TagStateProjectionResult>(projectorFuncResult.GetException());
         }
 
         // Get the projector version
-        var projectorVersionResult = _tagProjectorTypes.GetProjectorVersion(projectorName);
+        var projectorVersionResult = ResultBox.WrapTry(() => _tagProjectorTypes.GetProjectorVersion(projectorName));
         var projectorVersion = projectorVersionResult.IsSuccess ? projectorVersionResult.GetValue() : "unknown";
 
         var projectorFunc = projectorFuncResult.GetValue();

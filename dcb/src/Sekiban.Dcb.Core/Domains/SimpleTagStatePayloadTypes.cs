@@ -1,4 +1,3 @@
-using ResultBoxes;
 using Sekiban.Dcb.Tags;
 using System.Text;
 using System.Text.Json;
@@ -26,82 +25,51 @@ public class SimpleTagStatePayloadTypes : ITagStatePayloadTypes
     public Type? GetPayloadType(string payloadName) =>
         _payloadTypes.TryGetValue(payloadName, out var type) ? type : null;
 
-    public ResultBox<string> GetPayloadName(ITagStatePayload payload)
+    public string GetPayloadName(ITagStatePayload payload) =>
+        _payloadNames.TryGetValue(payload.GetType(), out var payloadName)
+            ? payloadName
+            : throw new InvalidOperationException($"Payload type '{payload.GetType().Name}' is not registered");
+
+    public ITagStatePayload DeserializePayload(string payloadName, byte[] jsonBytes)
     {
-        if (_payloadNames.TryGetValue(payload.GetType(), out var payloadName))
+        // Special handling for empty payload
+        if (payloadName == nameof(EmptyTagStatePayload))
         {
-            return ResultBox.FromValue(payloadName);
+            return new EmptyTagStatePayload();
         }
 
-        return ResultBox.Error<string>(
-            new InvalidOperationException($"Payload type '{payload.GetType().Name}' is not registered"));
+        // Get the payload type
+        var payloadType = GetPayloadType(payloadName)
+            ?? throw new InvalidOperationException($"Payload type '{payloadName}' is not registered");
+
+        // Convert bytes to JSON string
+        var json = Encoding.UTF8.GetString(jsonBytes);
+
+        // Deserialize to the specific type
+        JsonTypeInfo? typeInfo = TryResolveTypeInfo(payloadType);
+        var payload = typeInfo is not null
+            ? JsonSerializer.Deserialize(json, typeInfo)
+            : JsonSerializer.Deserialize(json, payloadType, _jsonSerializerOptions);
+
+        return payload as ITagStatePayload
+            ?? throw new InvalidCastException("Deserialized object is not an ITagStatePayload");
     }
 
-    public ResultBox<ITagStatePayload> DeserializePayload(string payloadName, byte[] jsonBytes)
+    public byte[] SerializePayload(ITagStatePayload payload)
     {
-        try
+        // Special handling for empty payload
+        if (payload is EmptyTagStatePayload)
         {
-            // Special handling for empty payload
-            if (payloadName == nameof(EmptyTagStatePayload))
-            {
-                return ResultBox.FromValue((ITagStatePayload)new EmptyTagStatePayload());
-            }
-
-            // Get the payload type
-            var payloadType = GetPayloadType(payloadName);
-            if (payloadType == null)
-            {
-                return ResultBox.Error<ITagStatePayload>(
-                    new InvalidOperationException($"Payload type '{payloadName}' is not registered"));
-            }
-
-            // Convert bytes to JSON string
-            var json = Encoding.UTF8.GetString(jsonBytes);
-
-            // Deserialize to the specific type
-            JsonTypeInfo? typeInfo = TryResolveTypeInfo(payloadType);
-            var payload = typeInfo is not null
-                ? JsonSerializer.Deserialize(json, typeInfo)
-                : JsonSerializer.Deserialize(json, payloadType, _jsonSerializerOptions);
-
-            if (payload is ITagStatePayload tagStatePayload)
-            {
-                return ResultBox.FromValue(tagStatePayload);
-            }
-
-            return ResultBox.Error<ITagStatePayload>(
-                new InvalidCastException("Deserialized object is not an ITagStatePayload"));
+            return Array.Empty<byte>();
         }
-        catch (Exception ex)
-        {
-            return ResultBox.Error<ITagStatePayload>(ex);
-        }
-    }
 
-    public ResultBox<byte[]> SerializePayload(ITagStatePayload payload)
-    {
-        try
-        {
-            // Special handling for empty payload
-            if (payload is EmptyTagStatePayload)
-            {
-                return ResultBox.FromValue(Array.Empty<byte>());
-            }
-
-            // Serialize the payload to JSON
-            Type payloadType = payload.GetType();
-            JsonTypeInfo? typeInfo = TryResolveTypeInfo(payloadType);
-            var json = typeInfo is not null
-                ? JsonSerializer.Serialize(payload, typeInfo)
-                : JsonSerializer.Serialize(payload, payloadType, _jsonSerializerOptions);
-            var jsonBytes = Encoding.UTF8.GetBytes(json);
-
-            return ResultBox.FromValue(jsonBytes);
-        }
-        catch (Exception ex)
-        {
-            return ResultBox.Error<byte[]>(ex);
-        }
+        // Serialize the payload to JSON
+        Type payloadType = payload.GetType();
+        JsonTypeInfo? typeInfo = TryResolveTypeInfo(payloadType);
+        var json = typeInfo is not null
+            ? JsonSerializer.Serialize(payload, typeInfo)
+            : JsonSerializer.Serialize(payload, payloadType, _jsonSerializerOptions);
+        return Encoding.UTF8.GetBytes(json);
     }
 
     public void RegisterPayloadType<T>(string? name = null) where T : ITagStatePayload

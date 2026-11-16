@@ -1,5 +1,4 @@
 using Dcb.Domain.WithoutResult.Student;
-using ResultBoxes;
 using Sekiban.Dcb.Boundaries;
 using Sekiban.Dcb.Commands;
 using Sekiban.Dcb.Events;
@@ -47,9 +46,9 @@ public class CommandContextBoundaryTests
     }
 
     [Fact]
-    public async Task TagExistsAsync_WhenAnInternalPathReturnsNoBox_NamesTheBoundary()
+    public async Task TagExistsAsync_WhenAnInternalPathReturnsNoTask_NamesTheBoundary()
     {
-        // The issue #1045 shape: a null ResultBox used to become a NullReferenceException with no message.
+        // The issue #1045 shape: a missing result used to become a NullReferenceException with no message.
         var thrown = await Assert.ThrowsAsync<SekibanBoundaryException>(
             () => new CommandContextAdapter(new NullReturningCoreCommandContext()).TagExistsAsync(Tag));
 
@@ -72,7 +71,7 @@ public class CommandContextBoundaryTests
     }
 
     [Fact]
-    public async Task GetStateAsync_WhenAnInternalPathReturnsNoBox_NamesTheProjectorAndTheTag()
+    public async Task GetStateAsync_WhenAnInternalPathReturnsNoTask_NamesTheProjectorAndTheTag()
     {
         var thrown = await Assert.ThrowsAsync<SekibanBoundaryException>(
             () => new CommandContextAdapter(new NullReturningCoreCommandContext()).GetStateAsync<StudentProjector>(Tag));
@@ -82,7 +81,7 @@ public class CommandContextBoundaryTests
     }
 
     [Fact]
-    public async Task AppendEvent_WhenAnInternalPathReturnsNoBox_NamesTheEvent()
+    public async Task AppendEvent_WhenAnInternalPathReturnsNoTask_NamesTheEvent()
     {
         var payload = new StudentCreated(Tag.StudentId, "Test Student", 2);
 
@@ -93,53 +92,46 @@ public class CommandContextBoundaryTests
         Assert.Equal(nameof(StudentCreated), thrown.Target);
     }
 
-    /// <summary>Every operation fails, carrying the exception it was handed.</summary>
+    /// <summary>Every operation fails with the exception it was handed.</summary>
     private sealed class FailingCoreCommandContext(Exception failure) : ICoreCommandContext
     {
-        public Task<ResultBox<TagStateTyped<TState>>> GetStateAsync<TState, TProjector>(ITag tag)
+        public Task<TagStateTyped<TState>> GetStateAsync<TState, TProjector>(ITag tag)
             where TState : ITagStatePayload where TProjector : ITagProjector<TProjector> =>
-            Task.FromResult(ResultBox<TagStateTyped<TState>>.Error(failure));
+            Task.FromException<TagStateTyped<TState>>(failure);
 
-        public Task<ResultBox<TagState>> GetStateAsync<TProjector>(ITag tag)
+        public Task<TagState> GetStateAsync<TProjector>(ITag tag)
             where TProjector : ITagProjector<TProjector> =>
-            Task.FromResult(ResultBox<TagState>.Error(failure));
+            Task.FromException<TagState>(failure);
 
-        public Task<ResultBox<bool>> TagExistsAsync(ITag tag) =>
-            Task.FromResult(ResultBox<bool>.Error(failure));
+        public Task<bool> TagExistsAsync(ITag tag) => Task.FromException<bool>(failure);
 
-        public Task<ResultBox<string>> GetTagLatestSortableUniqueIdAsync(ITag tag) =>
-            Task.FromResult(ResultBox<string>.Error(failure));
+        public Task<string> GetTagLatestSortableUniqueIdAsync(ITag tag) => Task.FromException<string>(failure);
 
-        public Task<ResultBox<EventOrNone>> AppendEvent(IEventPayload ev, params ITag[] tags) =>
-            Task.FromResult(ResultBox<EventOrNone>.Error(failure));
+        public Task<EventOrNone> AppendEvent(IEventPayload ev, params ITag[] tags) =>
+            Task.FromException<EventOrNone>(failure);
 
-        public Task<ResultBox<EventOrNone>> AppendEvent(EventPayloadWithTags eventPayloadWithTags) =>
-            Task.FromResult(ResultBox<EventOrNone>.Error(failure));
+        public Task<EventOrNone> AppendEvent(EventPayloadWithTags eventPayloadWithTags) =>
+            Task.FromException<EventOrNone>(failure);
     }
 
     /// <summary>
-    ///     Every operation returns no box at all. This is the internal-bug shape the WithoutResult facade could not
+    ///     Every operation returns no Task at all. This is the internal-bug shape the WithoutResult facade could not
     ///     describe before: it dereferenced the null and the caller got a NullReferenceException.
     /// </summary>
     private sealed class NullReturningCoreCommandContext : ICoreCommandContext
     {
-        public Task<ResultBox<TagStateTyped<TState>>> GetStateAsync<TState, TProjector>(ITag tag)
-            where TState : ITagStatePayload where TProjector : ITagProjector<TProjector> =>
-            Task.FromResult<ResultBox<TagStateTyped<TState>>>(null!);
+        public Task<TagStateTyped<TState>> GetStateAsync<TState, TProjector>(ITag tag)
+            where TState : ITagStatePayload where TProjector : ITagProjector<TProjector> => null!;
 
-        public Task<ResultBox<TagState>> GetStateAsync<TProjector>(ITag tag)
-            where TProjector : ITagProjector<TProjector> =>
-            Task.FromResult<ResultBox<TagState>>(null!);
+        public Task<TagState> GetStateAsync<TProjector>(ITag tag)
+            where TProjector : ITagProjector<TProjector> => null!;
 
-        public Task<ResultBox<bool>> TagExistsAsync(ITag tag) => Task.FromResult<ResultBox<bool>>(null!);
+        public Task<bool> TagExistsAsync(ITag tag) => null!;
 
-        public Task<ResultBox<string>> GetTagLatestSortableUniqueIdAsync(ITag tag) =>
-            Task.FromResult<ResultBox<string>>(null!);
+        public Task<string> GetTagLatestSortableUniqueIdAsync(ITag tag) => null!;
 
-        public Task<ResultBox<EventOrNone>> AppendEvent(IEventPayload ev, params ITag[] tags) =>
-            Task.FromResult<ResultBox<EventOrNone>>(null!);
+        public Task<EventOrNone> AppendEvent(IEventPayload ev, params ITag[] tags) => null!;
 
-        public Task<ResultBox<EventOrNone>> AppendEvent(EventPayloadWithTags eventPayloadWithTags) =>
-            Task.FromResult<ResultBox<EventOrNone>>(null!);
+        public Task<EventOrNone> AppendEvent(EventPayloadWithTags eventPayloadWithTags) => null!;
     }
 }
