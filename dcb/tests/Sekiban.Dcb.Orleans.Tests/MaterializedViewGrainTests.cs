@@ -988,13 +988,13 @@ public class MaterializedViewGrainTests : IAsyncLifetime
             LastHeartbeat = null;
         }
 
-        public async Task<ResultBox<ProjectionStatusWriteResult>> UpsertAsync(
+        public async Task<ProjectionStatusWriteResult> UpsertAsync(
             ProjectionStatusHeartbeat heartbeat,
             long expectedSequence,
             CancellationToken cancellationToken = default)
         {
             var result = await _inner.UpsertAsync(heartbeat, expectedSequence, cancellationToken);
-            if (result.IsSuccess && result.GetValue().Committed)
+            if (result.Committed)
             {
                 LastHeartbeat = heartbeat;
                 Written.TrySetResult();
@@ -1003,7 +1003,7 @@ public class MaterializedViewGrainTests : IAsyncLifetime
             return result;
         }
 
-        public Task<ResultBox<IReadOnlyList<ProjectionStatusHeartbeat>>> ListAsync(
+        public Task<IReadOnlyList<ProjectionStatusHeartbeat>> ListAsync(
             string? projectorName = null,
             string? projectorVersion = null,
             CancellationToken cancellationToken = default) =>

@@ -1,4 +1,3 @@
-using ResultBoxes;
 using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Events;
 
@@ -10,7 +9,7 @@ public interface IColdSegmentFormatHandler
 
     Task<IColdSegmentFileBuilder> CreateBuilderAsync(SerializableEvent firstEvent, CancellationToken ct);
 
-    Task<ResultBox<ColdSegmentStreamResult>> StreamSegmentAsync(
+    Task<ColdSegmentStreamResult> StreamSegmentAsync(
         Stream data,
         SortableUniqueId? since,
         int? maxCount,

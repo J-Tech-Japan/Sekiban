@@ -4,6 +4,7 @@ using Sekiban.Dcb.Testing;
 using Sekiban.Dcb.MultiProjections;
 using Sekiban.Dcb.Snapshots;
 using Sekiban.Dcb.Storage;
+using Sekiban.Dcb.TestSupport;
 
 namespace Sekiban.Dcb.Tests;
 
@@ -157,11 +158,11 @@ public class StreamingSnapshotIOTests
             BuildHost: "test-host");
 
         // When: calling UpsertFromStreamAsync (default impl buffers to byte[] and calls UpsertAsync)
-        var result = await store.UpsertFromStreamAsync(request, stream, 1_000_000, CancellationToken.None);
+        var result = await store.UpsertFromStreamAsync(request, stream, 1_000_000, CancellationToken.None).AsResultBoxAsync();
 
         // Then: record is stored and retrievable
         Assert.True(result.IsSuccess);
-        var stored = await store.GetLatestForVersionAsync("TestProjector", "1.0", CancellationToken.None);
+        var stored = await store.GetLatestForVersionAsync("TestProjector", "1.0", CancellationToken.None).AsOptionalResultBoxAsync();
         Assert.True(stored.IsSuccess);
         var opt = stored.GetValue();
         Assert.True(opt.HasValue);
@@ -197,11 +198,11 @@ public class StreamingSnapshotIOTests
             BuildHost: "test-host");
 
         // When
-        var result = await store.UpsertFromStreamAsync(request, stream, 1_000_000, CancellationToken.None);
+        var result = await store.UpsertFromStreamAsync(request, stream, 1_000_000, CancellationToken.None).AsResultBoxAsync();
 
         // Then
         Assert.True(result.IsSuccess);
-        var stored = await store.GetLatestForVersionAsync("EmptyProjector", "1.0", CancellationToken.None);
+        var stored = await store.GetLatestForVersionAsync("EmptyProjector", "1.0", CancellationToken.None).AsOptionalResultBoxAsync();
         Assert.True(stored.IsSuccess);
         var opt = stored.GetValue();
         Assert.True(opt.HasValue);
@@ -236,10 +237,10 @@ public class StreamingSnapshotIOTests
             BuildHost: "meta-host");
 
         // When
-        await store.UpsertFromStreamAsync(request, stream, 1_000_000, CancellationToken.None);
+        await store.UpsertFromStreamAsync(request, stream, 1_000_000, CancellationToken.None).AsResultBoxAsync();
 
         // Then: all metadata fields are preserved
-        var stored = await store.GetLatestForVersionAsync("MetadataProjector", "2.0", CancellationToken.None);
+        var stored = await store.GetLatestForVersionAsync("MetadataProjector", "2.0", CancellationToken.None).AsOptionalResultBoxAsync();
         var record = stored.GetValue().GetValue();
         Assert.Equal("MetadataPayload", record.PayloadType);
         Assert.Equal(100, record.EventsProcessed);
@@ -281,7 +282,7 @@ public class StreamingSnapshotIOTests
 
     private static async Task<byte[]> ReadStateDataAsync(IMultiProjectionStateStore store, MultiProjectionStateRecord record)
     {
-        var streamResult = await store.OpenStateDataReadStreamAsync(record, CancellationToken.None);
+        var streamResult = await store.OpenStateDataReadStreamAsync(record, CancellationToken.None).AsResultBoxAsync();
         Assert.True(streamResult.IsSuccess);
         await using var stream = streamResult.GetValue();
         using var ms = new MemoryStream();

@@ -15,6 +15,7 @@ using Sekiban.Dcb.Testing;
 using Sekiban.Dcb.TestSupport.ExecutedUser;
 using Sekiban.Dcb.Tests.Cosmos;
 using Xunit;
+using Sekiban.Dcb.TestSupport;
 namespace Sekiban.Dcb.Tests;
 
 /// <summary>
@@ -88,7 +89,7 @@ public class ExecutedUserProviderTests : ExecutedUserProviderScenarioTestsBase, 
         _executor.ExecuteAsync(new NoEventTestCommand(), HandleNoEventAsync);
 
     protected override async Task<IReadOnlyList<Event>> ReadAllEventsAsync() =>
-        (await _memoryStore.ReadAllEventsAsync()).GetValue().ToList();
+        (await _memoryStore.ReadAllEventsAsync().AsResultBoxAsync()).GetValue().ToList();
 
     protected override async Task ExecuteSingleEventViaDiAsync(IExecutedUserProvider provider, string name = "x")
     {
@@ -142,7 +143,7 @@ public class ExecutedUserProviderTests : ExecutedUserProviderScenarioTestsBase, 
             ;
 
         var readStore = new SqliteEventStore(_dbPath, _domainTypes.EventTypes);
-        var events = (await readStore.ReadAllEventsAsync()).GetValue().ToList();
+        var events = (await readStore.ReadAllEventsAsync().AsResultBoxAsync()).GetValue().ToList();
         Assert.Single(events);
         Assert.Equal("subscriber-123", events[0].EventMetadata.ExecutedUser);
     }
@@ -168,7 +169,7 @@ public class ExecutedUserProviderTests : ExecutedUserProviderScenarioTestsBase, 
                 HandleSingleEventAsync)
             ;
 
-        var events = (await store.ReadAllEventsAsync()).GetValue().ToList();
+        var events = (await store.ReadAllEventsAsync().AsResultBoxAsync()).GetValue().ToList();
         Assert.Single(events);
         Assert.Equal("entra-admin@contoso.com", events[0].EventMetadata.ExecutedUser);
     }

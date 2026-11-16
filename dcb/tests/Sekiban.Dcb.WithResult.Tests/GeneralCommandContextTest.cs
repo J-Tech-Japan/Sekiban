@@ -10,6 +10,7 @@ using System.Reflection;
 using System.Text;
 using System.Text.Json;
 using CoreInMemoryEventStore = Sekiban.Dcb.Testing.InMemoryEventStore;
+using Sekiban.Dcb.TestSupport;
 namespace Sekiban.Dcb.Tests;
 
 public class GeneralCommandContextTest
@@ -121,7 +122,7 @@ public class GeneralCommandContextTest
         // Add an event to the store
         await _eventStore.WriteEventAsync(
             EventTestHelper.CreateEvent(new TestEvent("Test"), tag),
-            _domainTypes.EventTypes);
+            _domainTypes.EventTypes).AsResultBoxAsync();
 
         // Create and catchup TagConsistentActor
         var tagConsistentActorId = tag.GetTag();
@@ -158,7 +159,7 @@ public class GeneralCommandContextTest
         // Add an event to the store
         var testEvent = EventTestHelper.CreateEvent(new TestEvent("Test"), tag);
         var sortableUniqueId = testEvent.SortableUniqueIdValue;
-        await _eventStore.WriteEventAsync(testEvent, _domainTypes.EventTypes);
+        await _eventStore.WriteEventAsync(testEvent, _domainTypes.EventTypes).AsResultBoxAsync();
 
         // Get TagConsistentActor (this will trigger catchup)
         var tagConsistentActorId = tag.GetTag();
@@ -281,7 +282,7 @@ public class GeneralCommandContextTest
         var tag = new TestTag();
         var testEvent = EventTestHelper.CreateEvent(new TestEvent("Test"), tag);
         var sortableUniqueId = testEvent.SortableUniqueIdValue;
-        await _eventStore.WriteEventAsync(testEvent, _domainTypes.EventTypes);
+        await _eventStore.WriteEventAsync(testEvent, _domainTypes.EventTypes).AsResultBoxAsync();
 
         // Act - Access state (only GetStateAsync tracks the full state)
         await _commandContext.GetStateAsync<TestProjector>(tag);
@@ -316,7 +317,7 @@ public class GeneralCommandContextTest
 
         // Add an event to store and access state
         var testEvent = EventTestHelper.CreateEvent(new TestEvent("Test"), tag);
-        await _eventStore.WriteEventAsync(testEvent, _domainTypes.EventTypes);
+        await _eventStore.WriteEventAsync(testEvent, _domainTypes.EventTypes).AsResultBoxAsync();
         await _commandContext.GetStateAsync<TestProjector>(tag);
 
         // Append an event
@@ -344,8 +345,8 @@ public class GeneralCommandContextTest
         // Add events for both tags
         var testEvent1 = EventTestHelper.CreateEvent(new TestEvent("Test1"), tag1);
         var testEvent2 = EventTestHelper.CreateEvent(new TestEvent("Test2"), tag2);
-        await _eventStore.WriteEventAsync(testEvent1, _domainTypes.EventTypes);
-        await _eventStore.WriteEventAsync(testEvent2, _domainTypes.EventTypes);
+        await _eventStore.WriteEventAsync(testEvent1, _domainTypes.EventTypes).AsResultBoxAsync();
+        await _eventStore.WriteEventAsync(testEvent2, _domainTypes.EventTypes).AsResultBoxAsync();
 
         // Act - Access states for both tags
         await _commandContext.GetStateAsync<TestProjector>(tag1);

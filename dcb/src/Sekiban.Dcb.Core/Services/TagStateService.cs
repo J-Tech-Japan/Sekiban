@@ -5,6 +5,7 @@ using Sekiban.Dcb.Events;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
 using System.Text.Json;
+using Sekiban.Dcb.Common;
 namespace Sekiban.Dcb.Services;
 
 /// <summary>
@@ -52,7 +53,7 @@ public class TagStateService
     ///     Get the latest stored tag state from the event store
     /// </summary>
     public Task<ResultBox<TagState>> GetLatestTagStateAsync(ITag tag)
-        => _eventStore.GetLatestTagAsync(tag);
+        => _eventStore.GetLatestTagAsync(tag).ToResultBoxAsync();
 
     /// <summary>
     ///     Get the latest stored tag state by tag string
@@ -209,7 +210,7 @@ public class TagStateService
         }
         else
         {
-            var eventsResult = await _eventStore.ReadEventsByTagAsync(tag, _eventTypes);
+            var eventsResult = await _eventStore.ReadEventsByTagAsync(tag, _eventTypes).ToResultBoxAsync();
             cancellationToken.ThrowIfCancellationRequested();
             if (!eventsResult.IsSuccess)
             {

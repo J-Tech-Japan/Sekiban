@@ -1,4 +1,3 @@
-using ResultBoxes;
 using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Events;
 namespace Sekiban.Dcb.Storage;
@@ -38,7 +37,7 @@ public static class ConditionalAppendExecution
     /// <summary>The default independent budget for authoritative post-ambiguity verification (winner read + committed gate).</summary>
     public static readonly TimeSpan DefaultVerificationBudget = TimeSpan.FromSeconds(30);
 
-    public static async Task<ResultBox<ConditionalAppendReceipt>> RunAsync(
+    public static async Task<ConditionalAppendReceipt> RunAsync(
         ConditionalAppendRequest request,
         string serviceId,
         IEventTypes eventTypes,
@@ -54,31 +53,17 @@ public static class ConditionalAppendExecution
         ArgumentNullException.ThrowIfNull(tryWriteClaim);
         ArgumentNullException.ThrowIfNull(readCommittedWinner);
 
-        string normalizedKey;
-        try
-        {
-            normalizedKey = OperationFingerprint.NormalizeKey(request.IdempotencyKey);
-        }
-        catch (ArgumentException ex)
-        {
-            // A malformed key is a permanent bad request, not an in-doubt/retryable state.
-            return ResultBox.Error<ConditionalAppendReceipt>(ex);
-        }
+        // A malformed key is a permanent bad request (ArgumentException), not an in-doubt/retryable state.
+        var normalizedKey = OperationFingerprint.NormalizeKey(request.IdempotencyKey);
 
         // Compute the attempt fingerprint (fail-closed on unsupported shape) BEFORE deriving an id or touching the store.
-        var attemptFingerprintResult = OperationFingerprint.ComputeCanonical(
+        var attemptFingerprint = OperationFingerprint.ComputeCanonical(
             serviceId,
             request.IdempotencyKey,
             eventTypes,
             request.Event.EventPayloadName,
             request.Event.Payload,
             request.Event.Tags);
-        if (!attemptFingerprintResult.IsSuccess)
-        {
-            return ResultBox.Error<ConditionalAppendReceipt>(attemptFingerprintResult.GetException());
-        }
-
-        var attemptFingerprint = attemptFingerprintResult.GetValue();
         var deterministicId = ConditionalAppendIdentity.DeriveEventId(serviceId, normalizedKey);
 
         // The claim event is the caller's event stored under the deterministic id (its own random id is discarded so the
@@ -87,6 +72,9 @@ public static class ConditionalAppendExecution
 
         var budget = verificationBudget ?? DefaultVerificationBudget;
 
+        // Any write failure other than a post-commit response loss — including a KNOWN pre-commit rollback
+        // cancellation/timeout/transport — is a permanent pre-commit failure and propagates as-is (exact instance/token
+        // preserved); never AmbiguousAfterWrite.
         ConditionalWriteOutcome outcome;
         try
         {
@@ -102,21 +90,14 @@ public static class ConditionalAppendExecution
                 serviceId, request.IdempotencyKey, eventTypes, providerName, deterministicId, attemptFingerprint,
                 readCommittedWinner, ensureCommittedAsync, ex.OriginalCause, budget);
         }
-        catch (Exception ex)
-        {
-            // Any other write failure — including a KNOWN pre-commit rollback cancellation/timeout/transport — is a
-            // permanent pre-commit failure and is surfaced as-is (exact instance/token preserved); never AmbiguousAfterWrite.
-            return ResultBox.Error<ConditionalAppendReceipt>(ex);
-        }
 
         if (outcome.Written)
         {
-            return ResultBox.FromValue(
-                new ConditionalAppendReceipt(
-                    ConditionalAppendStatus.Appended,
-                    deterministicId,
-                    claimEvent.SortableUniqueIdValue,
-                    attemptFingerprint));
+            return new ConditionalAppendReceipt(
+                ConditionalAppendStatus.Appended,
+                deterministicId,
+                claimEvent.SortableUniqueIdValue,
+                attemptFingerprint);
         }
 
         // A conflict: the key is already claimed. Read the committed winner back and CLASSIFY by fingerprint — a bare
@@ -137,7 +118,7 @@ public static class ConditionalAppendExecution
     ///     CancellationToken when the cause was a cancellation). A disagreeing committed row is still non-retryable
     ///     corruption; a different fingerprint is still a key-reuse conflict.
     /// </summary>
-    private static async Task<ResultBox<ConditionalAppendReceipt>> ResolveAmbiguousAfterWriteAsync(
+    private static async Task<ConditionalAppendReceipt> ResolveAmbiguousAfterWriteAsync(
         string serviceId,
         string idempotencyKey,
         IEventTypes eventTypes,
@@ -161,26 +142,19 @@ public static class ConditionalAppendExecution
         catch (OperationCanceledException)
         {
             // Bounded budget exceeded (or the read itself cancelled): unresolved — typed in-doubt, original cause preserved.
-            return ResultBox.Error<ConditionalAppendReceipt>(InDoubt());
+            throw InDoubt();
         }
 
         if (existing is null)
         {
-            return ResultBox.Error<ConditionalAppendReceipt>(InDoubt());
+            throw InDoubt();
         }
 
-        var existingFingerprintResult = OperationFingerprint.ComputeCanonical(
+        var existingFingerprint = OperationFingerprint.ComputeCanonical(
             serviceId, idempotencyKey, eventTypes, existing.EventPayloadName, existing.Payload, existing.Tags);
-        if (!existingFingerprintResult.IsSuccess)
-        {
-            return ResultBox.Error<ConditionalAppendReceipt>(existingFingerprintResult.GetException());
-        }
-
-        var existingFingerprint = existingFingerprintResult.GetValue();
         if (!string.Equals(existingFingerprint, attemptFingerprint, StringComparison.Ordinal))
         {
-            return ResultBox.Error<ConditionalAppendReceipt>(
-                new KeyReuseConflictException(existingFingerprint, attemptFingerprint, providerName, cause));
+            throw new KeyReuseConflictException(existingFingerprint, attemptFingerprint, providerName, cause);
         }
 
         if (ensureCommittedAsync is not null)
@@ -189,30 +163,29 @@ public static class ConditionalAppendExecution
             {
                 await ensureCommittedAsync(existing, cts.Token);
             }
-            catch (ConditionalAppendCommittedStateCorruptionException corruption)
+            catch (ConditionalAppendCommittedStateCorruptionException)
             {
-                return ResultBox.Error<ConditionalAppendReceipt>(corruption);
+                throw;
             }
             catch (Exception)
             {
                 // The bounded committed-state gate could not complete (budget exceeded / transient): typed in-doubt.
-                return ResultBox.Error<ConditionalAppendReceipt>(InDoubt());
+                throw InDoubt();
             }
         }
 
-        return ResultBox.FromValue(
-            new ConditionalAppendReceipt(
-                ConditionalAppendStatus.AlreadyCommittedSameOperation,
-                existing.Id,
-                existing.SortableUniqueIdValue,
-                existingFingerprint));
+        return new ConditionalAppendReceipt(
+            ConditionalAppendStatus.AlreadyCommittedSameOperation,
+            existing.Id,
+            existing.SortableUniqueIdValue,
+            existingFingerprint);
     }
 
     /// <summary>
     ///     Reads the committed winner back and classifies: same fingerprint (after the committed-state gate) →
     ///     AlreadyCommitted; different → KeyReuseConflict; unreadable/unverifiable → typed retryable in-doubt.
     /// </summary>
-    private static async Task<ResultBox<ConditionalAppendReceipt>> ResolveByReadbackAsync(
+    private static async Task<ConditionalAppendReceipt> ResolveByReadbackAsync(
         string serviceId,
         string idempotencyKey,
         IEventTypes eventTypes,
@@ -233,37 +206,28 @@ public static class ConditionalAppendExecution
         catch (Exception ex)
         {
             // The winner could not even be read — in-doubt. Prefer the original conflict/cancellation cause when present.
-            return ResultBox.Error<ConditionalAppendReceipt>(
-                ConditionalAppendInDoubtException.Create(providerName, serviceId, deterministicId, unreadableReason, cause ?? ex));
+            throw ConditionalAppendInDoubtException.Create(providerName, serviceId, deterministicId, unreadableReason, cause ?? ex);
         }
 
         if (existing is null)
         {
             // The conflict/ambiguity said the id may exist, but no committed winner could be read back. Do NOT report
             // AlreadyCommitted; the caller may retry, which converges once it commits.
-            return ResultBox.Error<ConditionalAppendReceipt>(
-                ConditionalAppendInDoubtException.Create(providerName, serviceId, deterministicId, unreadableReason, cause));
+            throw ConditionalAppendInDoubtException.Create(providerName, serviceId, deterministicId, unreadableReason, cause);
         }
 
-        var existingFingerprintResult = OperationFingerprint.ComputeCanonical(
+        var existingFingerprint = OperationFingerprint.ComputeCanonical(
             serviceId,
             idempotencyKey,
             eventTypes,
             existing.EventPayloadName,
             existing.Payload,
             existing.Tags);
-        if (!existingFingerprintResult.IsSuccess)
-        {
-            return ResultBox.Error<ConditionalAppendReceipt>(existingFingerprintResult.GetException());
-        }
-
-        var existingFingerprint = existingFingerprintResult.GetValue();
         if (!string.Equals(existingFingerprint, attemptFingerprint, StringComparison.Ordinal))
         {
             // Same key, different operation: key-reuse conflict. Preserve the provider exception as the diagnostic cause
             // ONLY when one actually occurred (a conflict discovered purely by read carries none).
-            return ResultBox.Error<ConditionalAppendReceipt>(
-                new KeyReuseConflictException(existingFingerprint, attemptFingerprint, providerName, cause));
+            throw new KeyReuseConflictException(existingFingerprint, attemptFingerprint, providerName, cause);
         }
 
         // Same operation. Before returning the ORIGINAL winner's receipt, close the roll-forward window: bring the
@@ -276,27 +240,25 @@ public static class ConditionalAppendExecution
             {
                 await ensureCommittedAsync(existing, cancellationToken);
             }
-            catch (ConditionalAppendCommittedStateCorruptionException corruption)
+            catch (ConditionalAppendCommittedStateCorruptionException)
             {
                 // A disagreeing (corrupt) committed row is NON-retryable and must never be overwritten — surface it as-is,
                 // never reclassified to a retryable in-doubt.
-                return ResultBox.Error<ConditionalAppendReceipt>(corruption);
+                throw;
             }
             catch (Exception ex)
             {
                 // A transient/unresolved repair failure (e.g. exhausted retries) is retryable in-doubt.
-                return ResultBox.Error<ConditionalAppendReceipt>(
-                    ConditionalAppendInDoubtException.Create(
-                        providerName, serviceId, deterministicId,
-                        ConditionalAppendInDoubtReason.CommittedStateUnverified, ex));
+                throw ConditionalAppendInDoubtException.Create(
+                    providerName, serviceId, deterministicId,
+                    ConditionalAppendInDoubtReason.CommittedStateUnverified, ex);
             }
         }
 
-        return ResultBox.FromValue(
-            new ConditionalAppendReceipt(
-                ConditionalAppendStatus.AlreadyCommittedSameOperation,
-                existing.Id,
-                existing.SortableUniqueIdValue,
-                existingFingerprint));
+        return new ConditionalAppendReceipt(
+            ConditionalAppendStatus.AlreadyCommittedSameOperation,
+            existing.Id,
+            existing.SortableUniqueIdValue,
+            existingFingerprint);
     }
 }

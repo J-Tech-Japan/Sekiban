@@ -101,7 +101,7 @@ public class CosmosConditionalAppendTests
                 new EventMetadata("seed", "seed", "test"),
                 ["Marker:seed"])
             .ToSerializableEvent(_domain.EventTypes);
-        Assert.True((await lineage.Store.WriteSerializableEventsAsync([persisted])).IsSuccess);
+        Assert.True((await lineage.Store.WriteSerializableEventsAsync([persisted]).AsResultBoxAsync()).IsSuccess);
 
         var generator = new MonotonicSortableUniqueIdGenerator(
             new FixedTimeProvider(new DateTimeOffset(2020, 1, 1, 0, 0, 0, TimeSpan.Zero)));
@@ -154,7 +154,7 @@ public class CosmosConditionalAppendTests
         lineage.Events.WriteFaults.Enqueue(CosmosFailures.Conflict());
 
         var result = await store.AppendIfUniqueAsync(
-            new ConditionalAppendRequest("cosmos-indoubt", ConditionalAppendScenarios.Marker(_domain, "v")));
+            new ConditionalAppendRequest("cosmos-indoubt", ConditionalAppendScenarios.Marker(_domain, "v"))).AsResultBoxAsync();
 
         Assert.False(result.IsSuccess);
         var ex = Assert.IsType<ConditionalAppendInDoubtException>(result.GetException());
@@ -164,7 +164,7 @@ public class CosmosConditionalAppendTests
 
         // Recovery: the injected fault is one-shot, so a retry converges to a durable Appended.
         var recovered = await store.AppendIfUniqueAsync(
-            new ConditionalAppendRequest("cosmos-indoubt", ConditionalAppendScenarios.Marker(_domain, "v")));
+            new ConditionalAppendRequest("cosmos-indoubt", ConditionalAppendScenarios.Marker(_domain, "v"))).AsResultBoxAsync();
         Assert.True(recovered.IsSuccess);
         Assert.Equal(ConditionalAppendStatus.Appended, recovered.GetValue().Status);
         Assert.Single(lineage.Events.Items);
@@ -193,7 +193,7 @@ public class CosmosConditionalAppendTests
         // the committed-state gate verifying all tag rows — to AlreadyCommitted with the exact stored-winner receipt.
         var deterministicId = ConditionalAppendIdentity.DeriveEventId(ServiceId, OperationFingerprint.NormalizeKey("cosmos-postcommit"));
         var resolved = await ((IConditionalEventStore)first.Store).AppendIfUniqueAsync(
-            new ConditionalAppendRequest("cosmos-postcommit", ThreeTagMarker()));
+            new ConditionalAppendRequest("cosmos-postcommit", ThreeTagMarker())).AsResultBoxAsync();
 
         Assert.True(resolved.IsSuccess, resolved.IsSuccess ? "" : resolved.GetException().ToString());
         Assert.Equal(ConditionalAppendStatus.AlreadyCommittedSameOperation, resolved.GetValue().Status);
@@ -202,10 +202,10 @@ public class CosmosConditionalAppendTests
 
         // A subsequent retry on a genuinely fresh store converges to the same AlreadyCommitted receipt, with every ordered
         // tag row present/visible and no duplicates.
-        var winner = (await first.Store.ReadSerializableEventAsync(deterministicId)).GetValue();
+        var winner = Assert.IsType<SerializableEvent>(await first.Store.ReadSerializableEventAsync(deterministicId));
         var second = NewLineage(client, options);
         var retry = await ((IConditionalEventStore)second.Store).AppendIfUniqueAsync(
-            new ConditionalAppendRequest("cosmos-postcommit", ThreeTagMarker()));
+            new ConditionalAppendRequest("cosmos-postcommit", ThreeTagMarker())).AsResultBoxAsync();
 
         Assert.True(retry.IsSuccess, retry.IsSuccess ? "" : retry.GetException().ToString());
         Assert.Equal(ConditionalAppendStatus.AlreadyCommittedSameOperation, retry.GetValue().Status);
@@ -214,7 +214,7 @@ public class CosmosConditionalAppendTests
         Assert.Equal(3, second.Tags.Items.Count);            // exactly the three tag rows, no duplicates
         foreach (var tag in new[] { "T:a", "T:b", "T:c" })
         {
-            Assert.Single((await second.Store.ReadSerializableEventsByTagAsync(new TestTag(tag))).GetValue());
+            Assert.Single((await second.Store.ReadSerializableEventsByTagAsync(new TestTag(tag)).AsResultBoxAsync()).GetValue());
         }
     }
 
@@ -239,7 +239,7 @@ public class CosmosConditionalAppendTests
 
         var sw = System.Diagnostics.Stopwatch.StartNew();
         var result = await ((IConditionalEventStore)lineage.Store).AppendIfUniqueAsync(
-            new ConditionalAppendRequest("cosmos-budget", ConditionalAppendScenarios.Marker(_domain, "v")));
+            new ConditionalAppendRequest("cosmos-budget", ConditionalAppendScenarios.Marker(_domain, "v"))).AsResultBoxAsync();
         sw.Stop();
 
         Assert.False(result.IsSuccess);
@@ -269,25 +269,25 @@ public class CosmosConditionalAppendTests
         // Crash the tag write: the event document lands, no tag row does.
         first.Store.TagWriteFaultInjector = new FailBeforeBatch(0);
         var crashed = await store.AppendIfUniqueAsync(
-            new ConditionalAppendRequest("cosmos-crash", ConditionalAppendScenarios.Marker(_domain, "v")));
+            new ConditionalAppendRequest("cosmos-crash", ConditionalAppendScenarios.Marker(_domain, "v"))).AsResultBoxAsync();
 
         Assert.False(crashed.IsSuccess);          // the attempt did not reach committed state
         Assert.Single(first.Events.Items);         // event is durable
         Assert.Empty(first.Tags.Items);            // tag row never landed — the open window
-        Assert.Empty((await first.Store.ReadSerializableEventsByTagAsync(new TestTag("Migration:once"))).GetValue());
+        Assert.Empty((await first.Store.ReadSerializableEventsByTagAsync(new TestTag("Migration:once")).AsResultBoxAsync()).GetValue());
 
         // Retry on a FRESH store instance (as a restarted host would). The event-only 409 must NOT short-circuit to
         // AlreadyCommitted: the gate repairs the missing tag row first, then returns the original winner's receipt.
         var second = NewLineage(client, options);
         var retryStore = (IConditionalEventStore)second.Store;
         var repaired = await retryStore.AppendIfUniqueAsync(
-            new ConditionalAppendRequest("cosmos-crash", ConditionalAppendScenarios.Marker(_domain, "v")));
+            new ConditionalAppendRequest("cosmos-crash", ConditionalAppendScenarios.Marker(_domain, "v"))).AsResultBoxAsync();
 
         Assert.True(repaired.IsSuccess);
         Assert.Equal(ConditionalAppendStatus.AlreadyCommittedSameOperation, repaired.GetValue().Status);
         Assert.Single(second.Events.Items);        // still exactly one durable event
         Assert.Single(second.Tags.Items);          // the tag row is now present — window closed
-        var byTag = await second.Store.ReadSerializableEventsByTagAsync(new TestTag("Migration:once"));
+        var byTag = await second.Store.ReadSerializableEventsByTagAsync(new TestTag("Migration:once")).AsResultBoxAsync();
         Assert.Single(byTag.GetValue());           // exact tag-scoped visibility, not merely one event document
     }
 
@@ -300,7 +300,7 @@ public class CosmosConditionalAppendTests
 
         first.Store.TagWriteFaultInjector = new FailBeforeBatch(0);
         await ((IConditionalEventStore)first.Store).AppendIfUniqueAsync(
-            new ConditionalAppendRequest("cosmos-stuck", ConditionalAppendScenarios.Marker(_domain, "v")));
+            new ConditionalAppendRequest("cosmos-stuck", ConditionalAppendScenarios.Marker(_domain, "v"))).AsResultBoxAsync();
         Assert.Single(first.Events.Items);
         Assert.Empty(first.Tags.Items);
 
@@ -309,7 +309,7 @@ public class CosmosConditionalAppendTests
         var second = NewLineage(client, options);
         second.Store.TagWriteFaultInjector = new FailBeforeBatch(0);
         var result = await ((IConditionalEventStore)second.Store).AppendIfUniqueAsync(
-            new ConditionalAppendRequest("cosmos-stuck", ConditionalAppendScenarios.Marker(_domain, "v")));
+            new ConditionalAppendRequest("cosmos-stuck", ConditionalAppendScenarios.Marker(_domain, "v"))).AsResultBoxAsync();
 
         Assert.False(result.IsSuccess);
         var ex = Assert.IsType<ConditionalAppendInDoubtException>(result.GetException());
@@ -335,14 +335,14 @@ public class CosmosConditionalAppendTests
                 .ToSerializableEvent(_domain.EventTypes);
 
         first.Store.TagWriteFaultInjector = new FailBeforeBatch(0);
-        await ((IConditionalEventStore)first.Store).AppendIfUniqueAsync(new ConditionalAppendRequest(key, TwoTagMarker()));
+        await ((IConditionalEventStore)first.Store).AppendIfUniqueAsync(new ConditionalAppendRequest(key, TwoTagMarker())).AsResultBoxAsync();
         Assert.Single(first.Events.Items);
         Assert.Empty(first.Tags.Items);
 
         // Seed ONE DISAGREEING row for the FIRST tag (wrong event type carrying a sentinel secret). The second tag's row
         // stays missing. Repair must not overwrite the corrupt row nor proceed to create the missing one.
         var deterministicId = ConditionalAppendIdentity.DeriveEventId(ServiceId, OperationFingerprint.NormalizeKey(key));
-        var winner = (await first.Store.ReadSerializableEventAsync(deterministicId)).GetValue();
+        var winner = Assert.IsType<SerializableEvent>(await first.Store.ReadSerializableEventAsync(deterministicId));
         first.Tags.Seed(CosmosTagIdentity.DeriveRow(ServiceId, "Corrupt:a", deterministicId, winner.SortableUniqueIdValue, sentinel));
 
         static string Snapshot(InMemoryCosmosContainer c) =>
@@ -350,7 +350,7 @@ public class CosmosConditionalAppendTests
         var before = Snapshot(first.Tags);
 
         var second = NewLineage(client, options);
-        var result = await ((IConditionalEventStore)second.Store).AppendIfUniqueAsync(new ConditionalAppendRequest(key, TwoTagMarker()));
+        var result = await ((IConditionalEventStore)second.Store).AppendIfUniqueAsync(new ConditionalAppendRequest(key, TwoTagMarker())).AsResultBoxAsync();
 
         Assert.False(result.IsSuccess);
         var ex = Assert.IsType<ConditionalAppendCommittedStateCorruptionException>(result.GetException());
@@ -361,7 +361,7 @@ public class CosmosConditionalAppendTests
         Assert.Equal(before, Snapshot(second.Tags));                    // every existing byte unchanged (no overwrite)
 
         // Repeated retry stays corruption and still changes nothing.
-        var again = await ((IConditionalEventStore)second.Store).AppendIfUniqueAsync(new ConditionalAppendRequest(key, TwoTagMarker()));
+        var again = await ((IConditionalEventStore)second.Store).AppendIfUniqueAsync(new ConditionalAppendRequest(key, TwoTagMarker())).AsResultBoxAsync();
         Assert.IsType<ConditionalAppendCommittedStateCorruptionException>(again.GetException());
         Assert.Equal(before, Snapshot(second.Tags));
     }
@@ -374,14 +374,14 @@ public class CosmosConditionalAppendTests
         var first = NewLineage(client, options);
         first.Store.TagWriteFaultInjector = new FailBeforeBatch(0);
         await ((IConditionalEventStore)first.Store).AppendIfUniqueAsync(
-            new ConditionalAppendRequest("cosmos-diff", ConditionalAppendScenarios.Marker(_domain, "original")));
+            new ConditionalAppendRequest("cosmos-diff", ConditionalAppendScenarios.Marker(_domain, "original"))).AsResultBoxAsync();
         Assert.Single(first.Events.Items);
 
         // A DIFFERENT operation reusing the key must still be a key-reuse conflict (fingerprint differs), regardless of
         // the prior partial commit — the repair gate is only reached on a fingerprint match.
         var second = NewLineage(client, options);
         var conflict = await ((IConditionalEventStore)second.Store).AppendIfUniqueAsync(
-            new ConditionalAppendRequest("cosmos-diff", ConditionalAppendScenarios.Marker(_domain, "DIFFERENT")));
+            new ConditionalAppendRequest("cosmos-diff", ConditionalAppendScenarios.Marker(_domain, "DIFFERENT"))).AsResultBoxAsync();
 
         Assert.False(conflict.IsSuccess);
         Assert.IsType<KeyReuseConflictException>(conflict.GetException());

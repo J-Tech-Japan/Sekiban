@@ -25,6 +25,7 @@ using Sekiban.Dcb.Tags;
 using Sekiban.Dcb.Tests.Cosmos;
 using CoreInMemoryEventStore = Sekiban.Dcb.Testing.InMemoryEventStore;
 using CoreInMemoryMultiProjectionStateStore = Sekiban.Dcb.Testing.InMemoryMultiProjectionStateStore;
+using Sekiban.Dcb.TestSupport;
 
 namespace Sekiban.Dcb.Tests;
 
@@ -45,7 +46,7 @@ public sealed class ProjectionStatusRegistryTests
                 new StudentTag(Guid.NewGuid()))
         }.OrderBy(item => item.SortableUniqueIdValue).ToArray();
 
-        var write = await eventStore.WriteEventsAsync(events, domainTypes.EventTypes);
+        var write = await eventStore.WriteEventsAsync(events, domainTypes.EventTypes).AsResultBoxAsync();
         Assert.True(write.IsSuccess);
 
         var heartbeat = new ProjectionStatusHeartbeat(
@@ -62,7 +63,7 @@ public sealed class ProjectionStatusRegistryTests
         {
             Phase = ProjectionStatusPhases.Active
         };
-        var heartbeatWrite = await statusStore.UpsertAsync(heartbeat, 0);
+        var heartbeatWrite = await statusStore.UpsertAsync(heartbeat, 0).AsResultBoxAsync();
         Assert.True(heartbeatWrite.IsSuccess);
 
         var reader = new ProjectionStatusReader(statusStore, eventStore, provider);
@@ -87,15 +88,15 @@ public sealed class ProjectionStatusRegistryTests
         var first = CreateHeartbeat("activation-a", 1, now);
         var second = CreateHeartbeat("activation-c", 1, now) with { ClusterId = "cluster-b" };
 
-        var committed = await statusStore.UpsertAsync(first, 0);
-        var stale = await statusStore.UpsertAsync(first, 0);
+        var committed = await statusStore.UpsertAsync(first, 0).AsResultBoxAsync();
+        var stale = await statusStore.UpsertAsync(first, 0).AsResultBoxAsync();
         var replacement = await statusStore.UpsertAsync(
             first with { ActivationId = "activation-b", Sequence = 2 },
-            1);
+            1).AsResultBoxAsync();
         var staleReplacement = await statusStore.UpsertAsync(
             first with { ActivationId = "activation-a", Sequence = 3 },
-            1);
-        var secondCommitted = await statusStore.UpsertAsync(second, 0);
+            1).AsResultBoxAsync();
+        var secondCommitted = await statusStore.UpsertAsync(second, 0).AsResultBoxAsync();
 
         Assert.True(committed.IsSuccess);
         Assert.True(committed.GetValue().Committed);
@@ -254,19 +255,19 @@ public sealed class ProjectionStatusRegistryTests
             ProjectorVersion = "v1",
             Phase = ProjectionStatusPhases.Active,
             LeaseExpiresAtUtc = now.AddMinutes(1)
-        }, 0);
+        }, 0).AsResultBoxAsync();
         await statusStore.UpsertAsync(CreateHeartbeat("fresh-v2", 1, now) with
         {
             ProjectorVersion = "v2",
             Phase = ProjectionStatusPhases.Active,
             LeaseExpiresAtUtc = now.AddMinutes(1)
-        }, 0);
+        }, 0).AsResultBoxAsync();
         await statusStore.UpsertAsync(CreateHeartbeat("expired-v0", 1, now.AddMinutes(-10)) with
         {
             ProjectorVersion = "v0",
             Phase = ProjectionStatusPhases.Active,
             LeaseExpiresAtUtc = now.AddMinutes(-1)
-        }, 0);
+        }, 0).AsResultBoxAsync();
 
         var request = new ProjectionStatusReadRequest(ProjectorName: "students")
         {
@@ -519,21 +520,21 @@ public sealed class ProjectionStatusRegistryTests
             LastTraversedSortableUniqueId = "0002",
             Phase = ProjectionStatusPhases.Active,
             LeaseExpiresAtUtc = now.AddMinutes(1)
-        }, 0);
+        }, 0).AsResultBoxAsync();
         await stateStore.UpsertAsync(CreateHeartbeat("b", 1, now) with
         {
             ClusterId = "cluster-b",
             LastTraversedSortableUniqueId = "0002",
             Phase = ProjectionStatusPhases.Active,
             LeaseExpiresAtUtc = now.AddMinutes(1)
-        }, 0);
+        }, 0).AsResultBoxAsync();
         await stateStore.UpsertAsync(CreateHeartbeat("c", 1, now) with
         {
             ClusterId = "cluster-c",
             LastTraversedSortableUniqueId = "0003",
             Phase = ProjectionStatusPhases.Active,
             LeaseExpiresAtUtc = now.AddMinutes(1)
-        }, 0);
+        }, 0).AsResultBoxAsync();
 
         var reader = new ProjectionStatusReader(
             new CountingStatusStore(stateStore),
@@ -566,7 +567,7 @@ public sealed class ProjectionStatusRegistryTests
         {
             Phase = ProjectionStatusPhases.Active,
             LeaseExpiresAtUtc = now.AddMinutes(1)
-        }, 0);
+        }, 0).AsResultBoxAsync();
         var reader = new ProjectionStatusReader(
             stateStore,
             eventStore,
@@ -585,7 +586,7 @@ public sealed class ProjectionStatusRegistryTests
             IsFaulted = true,
             FaultMessage = "fold failed",
             LeaseExpiresAtUtc = now.AddMinutes(1)
-        }, 0);
+        }, 0).AsResultBoxAsync();
         var withFault = await reader.ReadAsync();
         Assert.True(withFault.IsSuccess);
         Assert.Contains(withFault.GetValue(), item => item.IsFaulted && !item.IsCaughtUp);
@@ -636,10 +637,10 @@ public sealed class ProjectionStatusRegistryTests
                 LeaseExpiresAtUtc = DateTimeOffset.UtcNow.AddMinutes(5)
             };
 
-            var firstWrite = await store.UpsertAsync(firstHeartbeat, 0);
+            var firstWrite = await store.UpsertAsync(firstHeartbeat, 0).AsResultBoxAsync();
             Assert.True(firstWrite.IsSuccess, firstWrite.IsSuccess ? string.Empty : firstWrite.GetException().ToString());
             Assert.True(firstWrite.GetValue().Committed);
-            var persistedFirst = Assert.Single((await store.ListAsync("students", "v1")).GetValue());
+            var persistedFirst = Assert.Single((await store.ListAsync("students", "v1").AsResultBoxAsync()).GetValue());
             Assert.Equal(1, persistedFirst.Sequence);
             Assert.Equal(t1, persistedFirst.RecordedAtUtc);
             var firstSnapshot = Assert.Single((await reader.ReadAsync()).GetValue());
@@ -653,10 +654,10 @@ public sealed class ProjectionStatusRegistryTests
                 AppliedEventCount = 2,
                 RecordedAtUtc = t2
             };
-            var secondWrite = await store.UpsertAsync(secondHeartbeat, 1);
+            var secondWrite = await store.UpsertAsync(secondHeartbeat, 1).AsResultBoxAsync();
             Assert.True(secondWrite.IsSuccess, secondWrite.IsSuccess ? string.Empty : secondWrite.GetException().ToString());
             Assert.True(secondWrite.GetValue().Committed);
-            var persistedSecond = Assert.Single((await store.ListAsync("students", "v1")).GetValue());
+            var persistedSecond = Assert.Single((await store.ListAsync("students", "v1").AsResultBoxAsync()).GetValue());
             Assert.Equal(2, persistedSecond.Sequence);
             Assert.Equal(t2, persistedSecond.RecordedAtUtc);
             var secondSnapshot = Assert.Single((await reader.ReadAsync()).GetValue());
@@ -786,7 +787,7 @@ public sealed class ProjectionStatusRegistryTests
             }));
         var status = CreateHeartbeat("status-activation", 1, DateTimeOffset.UtcNow);
 
-        Assert.True((await store.UpsertAsync(status, 0)).GetValue().Committed);
+        Assert.True((await store.UpsertAsync(status, 0).AsResultBoxAsync()).GetValue().Committed);
 
         var checkpoint = (IGenerationAwareCheckpointStore)store;
         var created = await checkpoint.ConditionalUpsertAsync(
@@ -796,20 +797,20 @@ public sealed class ProjectionStatusRegistryTests
             1_000_000);
         Assert.Equal(CheckpointCasStatus.Committed, created.Status);
 
-        var listed = await store.ListAllAsync();
+        var listed = await store.ListAllAsync().AsResultBoxAsync();
         Assert.True(listed.IsSuccess);
         Assert.Single(listed.GetValue());
         Assert.Equal("students", listed.GetValue()[0].ProjectorName);
-        Assert.Single((await store.ListAsync()).GetValue());
+        Assert.Single((await store.ListAsync().AsResultBoxAsync()).GetValue());
 
-        var restored = await store.GetLatestForVersionAsync("students", "v1");
+        var restored = await store.GetLatestForVersionAsync("students", "v1").AsOptionalResultBoxAsync();
         Assert.True(restored.IsSuccess);
         Assert.True(restored.GetValue().HasValue);
 
-        var deleted = await store.DeleteAllAsync();
+        var deleted = await store.DeleteAllAsync().AsResultBoxAsync();
         Assert.True(deleted.IsSuccess);
         Assert.Equal(1, deleted.GetValue());
-        Assert.Single((await store.ListAsync()).GetValue());
+        Assert.Single((await store.ListAsync().AsResultBoxAsync()).GetValue());
 
         // A discriminator-less pre-G24 snapshot is accepted by the restore path after status rows have been written.
         var legacy = CosmosMultiProjectionState.FromRecord(
@@ -817,16 +818,16 @@ public sealed class ProjectionStatusRegistryTests
             "alpha");
         legacy.DocumentType = null;
         client.Container("multiProjectionStates").Seed(legacy);
-        var legacyRestored = await store.GetLatestForVersionAsync("students", "v1");
+        var legacyRestored = await store.GetLatestForVersionAsync("students", "v1").AsOptionalResultBoxAsync();
         Assert.True(legacyRestored.IsSuccess);
         Assert.True(legacyRestored.GetValue().HasValue);
         Assert.Equal("students", legacyRestored.GetValue().Value!.ProjectorName);
 
-        var deletedLegacy = await store.DeleteAllAsync("students");
+        var deletedLegacy = await store.DeleteAllAsync("students").AsResultBoxAsync();
         Assert.True(deletedLegacy.IsSuccess);
         Assert.Equal(1, deletedLegacy.GetValue());
-        Assert.Empty((await store.ListAllAsync()).GetValue());
-        Assert.Single((await store.ListAsync()).GetValue());
+        Assert.Empty((await store.ListAllAsync().AsResultBoxAsync()).GetValue());
+        Assert.Single((await store.ListAsync().AsResultBoxAsync()).GetValue());
     }
 
     [Fact]
@@ -844,7 +845,7 @@ public sealed class ProjectionStatusRegistryTests
             new MutableServiceIdProvider("alpha"));
         var status = CreateHeartbeat("status-activation", 1, DateTimeOffset.UtcNow);
 
-        Assert.True((await store.UpsertAsync(status, 0)).GetValue().Committed);
+        Assert.True((await store.UpsertAsync(status, 0).AsResultBoxAsync()).GetValue().Committed);
 
         var checkpoint = (IGenerationAwareCheckpointStore)store;
         var created = await checkpoint.ConditionalUpsertAsync(
@@ -854,19 +855,19 @@ public sealed class ProjectionStatusRegistryTests
             1_000_000);
         Assert.Equal(CheckpointCasStatus.Committed, created.Status);
 
-        var listed = await store.ListAllAsync();
+        var listed = await store.ListAllAsync().AsResultBoxAsync();
         Assert.True(listed.IsSuccess);
         Assert.Single(listed.GetValue());
-        Assert.Single((await store.ListAsync()).GetValue());
+        Assert.Single((await store.ListAsync().AsResultBoxAsync()).GetValue());
 
-        var restored = await store.GetLatestForVersionAsync("students", "v1");
+        var restored = await store.GetLatestForVersionAsync("students", "v1").AsOptionalResultBoxAsync();
         Assert.True(restored.IsSuccess);
         Assert.True(restored.GetValue().HasValue);
 
-        var deleted = await store.DeleteAllAsync();
+        var deleted = await store.DeleteAllAsync().AsResultBoxAsync();
         Assert.True(deleted.IsSuccess);
         Assert.Equal(1, deleted.GetValue());
-        Assert.Single((await store.ListAsync()).GetValue());
+        Assert.Single((await store.ListAsync().AsResultBoxAsync()).GetValue());
 
         // A discriminator-less pre-G24 snapshot is accepted by Dynamo restore and snapshot cleanup paths.
         var legacy = Sekiban.Dcb.DynamoDB.Models.DynamoMultiProjectionState
@@ -875,16 +876,16 @@ public sealed class ProjectionStatusRegistryTests
         legacy.Remove("documentType");
         MixedDynamoDb.LastCreated!.Seed(legacy);
 
-        var legacyRestored = await store.GetLatestForVersionAsync("students", "v1");
+        var legacyRestored = await store.GetLatestForVersionAsync("students", "v1").AsOptionalResultBoxAsync();
         Assert.True(legacyRestored.IsSuccess);
         Assert.True(legacyRestored.GetValue().HasValue);
         Assert.Equal("students", legacyRestored.GetValue().Value!.ProjectorName);
 
-        var deletedLegacy = await store.DeleteAllAsync("students");
+        var deletedLegacy = await store.DeleteAllAsync("students").AsResultBoxAsync();
         Assert.True(deletedLegacy.IsSuccess);
         Assert.Equal(1, deletedLegacy.GetValue());
-        Assert.Empty((await store.ListAllAsync()).GetValue());
-        Assert.Single((await store.ListAsync()).GetValue());
+        Assert.Empty((await store.ListAllAsync().AsResultBoxAsync()).GetValue());
+        Assert.Single((await store.ListAsync().AsResultBoxAsync()).GetValue());
     }
 
     private static ProjectionStatusHeartbeat CreateHeartbeat(
@@ -920,7 +921,7 @@ public sealed class ProjectionStatusRegistryTests
             Phase = ProjectionStatusPhases.Active,
             LeaseExpiresAtUtc = leaseExpiresAtUtc
         };
-        var write = await statusStore.UpsertAsync(heartbeat, 0);
+        var write = await statusStore.UpsertAsync(heartbeat, 0).AsResultBoxAsync();
         Assert.True(write.IsSuccess, write.IsSuccess ? string.Empty : write.GetException().ToString());
         Assert.True(write.GetValue().Committed);
 
@@ -973,23 +974,23 @@ public sealed class ProjectionStatusRegistryTests
     private static async Task AssertProjectionStatusCasContractAsync(IProjectionStatusStore store)
     {
         var first = CreateHeartbeat("activation-a", 1, DateTimeOffset.UtcNow);
-        var created = await store.UpsertAsync(first, 0);
+        var created = await store.UpsertAsync(first, 0).AsResultBoxAsync();
         Assert.True(created.IsSuccess, created.IsSuccess ? string.Empty : created.GetException().ToString());
         Assert.True(created.GetValue().Committed);
 
         var updatedHeartbeat = first with { Sequence = 2, AppliedEventCount = 2 };
-        var updated = await store.UpsertAsync(updatedHeartbeat, 1);
+        var updated = await store.UpsertAsync(updatedHeartbeat, 1).AsResultBoxAsync();
         Assert.True(updated.IsSuccess, updated.IsSuccess ? string.Empty : updated.GetException().ToString());
         Assert.True(updated.GetValue().Committed);
         Assert.Equal(2, updated.GetValue().Current!.Sequence);
         Assert.Equal(2, updated.GetValue().Current!.AppliedEventCount);
-        var rowsAfterUpdate = await store.ListAsync("students", "v1");
+        var rowsAfterUpdate = await store.ListAsync("students", "v1").AsResultBoxAsync();
         Assert.True(rowsAfterUpdate.IsSuccess, rowsAfterUpdate.IsSuccess ? string.Empty : rowsAfterUpdate.GetException().ToString());
         var rowAfterUpdate = Assert.Single(rowsAfterUpdate.GetValue());
         Assert.Equal(2, rowAfterUpdate.Sequence);
         Assert.Equal(2, rowAfterUpdate.AppliedEventCount);
 
-        var createRace = await store.UpsertAsync(first with { Sequence = 3 }, 0);
+        var createRace = await store.UpsertAsync(first with { Sequence = 3 }, 0).AsResultBoxAsync();
         Assert.True(createRace.IsSuccess, createRace.IsSuccess ? string.Empty : createRace.GetException().ToString());
         var createRaceConflict = Assert.IsType<ProjectionStatusWriteConflict>(createRace.GetValue().ConflictDetails);
         Assert.Equal(ProjectionStatusConflictReason.RowAlreadyExists, createRaceConflict.Reason);
@@ -1000,7 +1001,7 @@ public sealed class ProjectionStatusRegistryTests
         Assert.Equal(createRaceConflict.ToCompatibilityReason(), createRace.GetValue().ConflictReason);
         Assert.DoesNotContain("activation row already exists", createRace.GetValue().ConflictReason!, StringComparison.OrdinalIgnoreCase);
 
-        var staleUpdate = await store.UpsertAsync(first with { Sequence = 3 }, 1);
+        var staleUpdate = await store.UpsertAsync(first with { Sequence = 3 }, 1).AsResultBoxAsync();
         Assert.True(staleUpdate.IsSuccess, staleUpdate.IsSuccess ? string.Empty : staleUpdate.GetException().ToString());
         Assert.True(staleUpdate.GetValue().Conflict, staleUpdate.GetValue().ToString());
         var staleUpdateConflict = Assert.IsType<ProjectionStatusWriteConflict>(staleUpdate.GetValue().ConflictDetails);
@@ -1009,7 +1010,7 @@ public sealed class ProjectionStatusRegistryTests
         Assert.Equal(2, staleUpdateConflict.ObservedSequence);
 
         var missing = first with { ClusterId = "missing-cluster", Sequence = 2 };
-        var absent = await store.UpsertAsync(missing, 1);
+        var absent = await store.UpsertAsync(missing, 1).AsResultBoxAsync();
         Assert.True(absent.IsSuccess, absent.IsSuccess ? string.Empty : absent.GetException().ToString());
         var absentConflict = Assert.IsType<ProjectionStatusWriteConflict>(absent.GetValue().ConflictDetails);
         Assert.Equal(ProjectionStatusConflictReason.RowAbsent, absentConflict.Reason);
@@ -1018,19 +1019,19 @@ public sealed class ProjectionStatusRegistryTests
         Assert.Equal(missing.ProjectorVersion, absentConflict.ExpectedProjectorVersion);
         Assert.Null(absentConflict.ObservedProjectorVersion);
 
-        var afterAbsent = await store.ListAsync("students", "v1");
+        var afterAbsent = await store.ListAsync("students", "v1").AsResultBoxAsync();
         Assert.True(afterAbsent.IsSuccess, afterAbsent.IsSuccess ? string.Empty : afterAbsent.GetException().ToString());
         Assert.DoesNotContain(afterAbsent.GetValue(), row => row.ClusterId == "missing-cluster");
 
         // A later, still-conditional create can lose a race. It must report the winner rather than overwrite it.
         var competingCreate = missing with { ActivationId = "competing", Sequence = 1 };
-        var competitor = await store.UpsertAsync(competingCreate, 0);
+        var competitor = await store.UpsertAsync(competingCreate, 0).AsResultBoxAsync();
         Assert.True(competitor.IsSuccess, competitor.IsSuccess ? string.Empty : competitor.GetException().ToString());
         Assert.True(competitor.GetValue().Committed);
 
         var losingCreate = await store.UpsertAsync(
             missing with { ActivationId = "retrying", Sequence = 1 },
-            0);
+            0).AsResultBoxAsync();
         Assert.True(losingCreate.IsSuccess, losingCreate.IsSuccess ? string.Empty : losingCreate.GetException().ToString());
         var losingConflict = Assert.IsType<ProjectionStatusWriteConflict>(losingCreate.GetValue().ConflictDetails);
         Assert.Equal(ProjectionStatusConflictReason.RowAlreadyExists, losingConflict.Reason);
@@ -1039,7 +1040,7 @@ public sealed class ProjectionStatusRegistryTests
 
         var rebasedUpdate = await store.UpsertAsync(
             missing with { ActivationId = "retrying", Sequence = 2 },
-            1);
+            1).AsResultBoxAsync();
         Assert.True(rebasedUpdate.IsSuccess, rebasedUpdate.IsSuccess ? string.Empty : rebasedUpdate.GetException().ToString());
         Assert.True(rebasedUpdate.GetValue().Committed);
         Assert.Equal(2, rebasedUpdate.GetValue().Current!.Sequence);
@@ -1082,13 +1083,13 @@ public sealed class ProjectionStatusRegistryTests
 
         public int ListCalls { get; private set; }
 
-        public Task<ResultBox<ProjectionStatusWriteResult>> UpsertAsync(
+        public Task<ProjectionStatusWriteResult> UpsertAsync(
             ProjectionStatusHeartbeat heartbeat,
             long expectedSequence,
             CancellationToken cancellationToken = default) =>
             _inner.UpsertAsync(heartbeat, expectedSequence, cancellationToken);
 
-        public Task<ResultBox<IReadOnlyList<ProjectionStatusHeartbeat>>> ListAsync(
+        public Task<IReadOnlyList<ProjectionStatusHeartbeat>> ListAsync(
             string? projectorName = null,
             string? projectorVersion = null,
             CancellationToken cancellationToken = default)
@@ -1113,11 +1114,11 @@ public sealed class ProjectionStatusRegistryTests
         public int MaxConcurrentCursorReads { get; private set; }
         public TimeSpan CursorDelay { get; set; }
 
-        public Task<ResultBox<IEnumerable<TagStream>>> ReadTagsAsync(ITag tag) => _inner.ReadTagsAsync(tag);
-        public Task<ResultBox<TagState>> GetLatestTagAsync(ITag tag) => _inner.GetLatestTagAsync(tag);
-        public Task<ResultBox<bool>> TagExistsAsync(ITag tag) => _inner.TagExistsAsync(tag);
+        public Task<IEnumerable<TagStream>> ReadTagsAsync(ITag tag) => _inner.ReadTagsAsync(tag);
+        public Task<TagState> GetLatestTagAsync(ITag tag) => _inner.GetLatestTagAsync(tag);
+        public Task<bool> TagExistsAsync(ITag tag) => _inner.TagExistsAsync(tag);
 
-        public async Task<ResultBox<long>> GetEventCountAsync(SortableUniqueId? since = null)
+        public async Task<long> GetEventCountAsync(SortableUniqueId? since = null)
         {
             if (since is null)
             {
@@ -1143,13 +1144,13 @@ public sealed class ProjectionStatusRegistryTests
             }
         }
 
-        public Task<ResultBox<IEnumerable<TagInfo>>> GetAllTagsAsync(string? tagGroup = null) => _inner.GetAllTagsAsync(tagGroup);
-        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null) => _inner.ReadAllSerializableEventsAsync(since);
-        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(SortableUniqueId? since, int? maxCount) => _inner.ReadAllSerializableEventsAsync(since, maxCount);
-        public Task<ResultBox<SerializableEvent>> ReadSerializableEventAsync(Guid eventId) => _inner.ReadSerializableEventAsync(eventId);
-        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadSerializableEventsByTagAsync(ITag tag, SortableUniqueId? since = null) => _inner.ReadSerializableEventsByTagAsync(tag, since);
-        public Task<ResultBox<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>> WriteSerializableEventsAsync(IEnumerable<SerializableEvent> events) => _inner.WriteSerializableEventsAsync(events);
-        public Task<ResultBox<string>> GetLatestSortableUniqueIdAsync() => _inner.GetLatestSortableUniqueIdAsync();
+        public Task<IEnumerable<TagInfo>> GetAllTagsAsync(string? tagGroup = null) => _inner.GetAllTagsAsync(tagGroup);
+        public Task<IEnumerable<SerializableEvent>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null) => _inner.ReadAllSerializableEventsAsync(since);
+        public Task<IEnumerable<SerializableEvent>> ReadAllSerializableEventsAsync(SortableUniqueId? since, int? maxCount) => _inner.ReadAllSerializableEventsAsync(since, maxCount);
+        public Task<SerializableEvent?> ReadSerializableEventAsync(Guid eventId) => _inner.ReadSerializableEventAsync(eventId);
+        public Task<IEnumerable<SerializableEvent>> ReadSerializableEventsByTagAsync(ITag tag, SortableUniqueId? since = null) => _inner.ReadSerializableEventsByTagAsync(tag, since);
+        public Task<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)> WriteSerializableEventsAsync(IEnumerable<SerializableEvent> events) => _inner.WriteSerializableEventsAsync(events);
+        public Task<string> GetLatestSortableUniqueIdAsync() => _inner.GetLatestSortableUniqueIdAsync();
     }
 
     private class MixedDynamoDb : DispatchProxy

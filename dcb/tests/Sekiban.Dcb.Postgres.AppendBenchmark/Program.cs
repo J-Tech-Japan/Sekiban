@@ -38,8 +38,7 @@ foreach (var scenario in cases)
         // Ordinary typed append -> TagHeadWriter.TypedBatch, no expectations. Create fixed heads outside timing.
         for (var w = 0; w < scenario.Writers; w++)
         {
-            var seed = await stores[w].WriteEventsAsync([Next(w)]);
-            if (!seed.IsSuccess) throw seed.GetException();
+            await stores[w].WriteEventsAsync([Next(w)]);
         }
         var timer = Stopwatch.StartNew();
         var tasks = Enumerable.Range(0, scenario.Writers).Select(async w =>
@@ -48,9 +47,8 @@ foreach (var scenario in cases)
             while (timer.Elapsed.TotalSeconds < seconds)
             {
                 var start = Stopwatch.GetTimestamp();
-                var result = await stores[w].WriteEventsAsync([Next(w)]);
+                await stores[w].WriteEventsAsync([Next(w)]); // a failed write throws
                 var elapsed = Stopwatch.GetElapsedTime(start).TotalMilliseconds;
-                if (!result.IsSuccess) throw result.GetException();
                 latencies.Add(elapsed); // Only successful writes contribute to throughput and latency.
             }
             return latencies;

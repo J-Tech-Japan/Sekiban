@@ -1,7 +1,6 @@
 using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using ResultBoxes;
 using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Capabilities;
 using Sekiban.Dcb.Events;
@@ -69,7 +68,7 @@ public sealed class HybridEventStore : IEventStore, IStreamingSerializableEventS
     ///     <see cref="IConditionalEventStore" /> (otherwise <see cref="DescribeWriteConditions" /> reports nothing and the
     ///     caller fails closed before getting here); the guard is defensive.
     /// </summary>
-    public Task<ResultBox<ConditionalAppendReceipt>> AppendIfUniqueAsync(
+    public Task<ConditionalAppendReceipt> AppendIfUniqueAsync(
         ConditionalAppendRequest request,
         CancellationToken cancellationToken = default)
     {
@@ -79,15 +78,14 @@ public sealed class HybridEventStore : IEventStore, IStreamingSerializableEventS
         }
 
         var descriptor = SekibanDcbCapabilityResolver.DescribeWriteConditions(_hotStore, "hot event store");
-        return Task.FromResult(
-            ResultBox.Error<ConditionalAppendReceipt>(
-                new ConditionNotSupportedException(
-                    WriteConditionKind.SingleEventUniqueKey,
-                    $"HybridEventStore({descriptor.ProviderName})")));
+        return Task.FromException<ConditionalAppendReceipt>(
+            new ConditionNotSupportedException(
+                WriteConditionKind.SingleEventUniqueKey,
+                $"HybridEventStore({descriptor.ProviderName})"));
     }
 
     /// <inheritdoc />
-    public Task<ResultBox<bool>> EnsureExpectedTagPositionEnforcementEnabledAsync(
+    public Task<bool> EnsureExpectedTagPositionEnforcementEnabledAsync(
         CancellationToken cancellationToken = default)
     {
         if (_hotStore is IExpectedTagPositionEventStore expectedHot)
@@ -96,13 +94,13 @@ public sealed class HybridEventStore : IEventStore, IStreamingSerializableEventS
         }
 
         var descriptor = SekibanDcbCapabilityResolver.DescribeWriteConditions(_hotStore, "hot event store");
-        return Task.FromResult(ResultBox.Error<bool>(new ConditionNotSupportedException(
+        return Task.FromException<bool>(new ConditionNotSupportedException(
             WriteConditionKind.ExpectedTagPosition,
-            $"HybridEventStore({descriptor.ProviderName})")));
+            $"HybridEventStore({descriptor.ProviderName})"));
     }
 
     /// <inheritdoc />
-    public Task<ResultBox<ExpectedTagPositionWriteResult>> WriteSerializableEventsWithExpectedTagPositionsAsync(
+    public Task<ExpectedTagPositionWriteResult> WriteSerializableEventsWithExpectedTagPositionsAsync(
         IReadOnlyList<SerializableEvent> events,
         ExpectedTagPositionSpecification specification,
         CancellationToken cancellationToken = default)
@@ -113,9 +111,9 @@ public sealed class HybridEventStore : IEventStore, IStreamingSerializableEventS
         }
 
         var descriptor = SekibanDcbCapabilityResolver.DescribeWriteConditions(_hotStore, "hot event store");
-        return Task.FromResult(ResultBox.Error<ExpectedTagPositionWriteResult>(new ConditionNotSupportedException(
+        return Task.FromException<ExpectedTagPositionWriteResult>(new ConditionNotSupportedException(
             WriteConditionKind.ExpectedTagPosition,
-            $"HybridEventStore({descriptor.ProviderName})")));
+            $"HybridEventStore({descriptor.ProviderName})"));
     }
     private readonly RetainedColdSegmentHolder _retainedSegment;
     private readonly TimeProvider _timeProvider;
@@ -172,25 +170,25 @@ public sealed class HybridEventStore : IEventStore, IStreamingSerializableEventS
             ? _options.CatchUpPersistMaxInterval
             : TimeSpan.FromMinutes(5);
 
-    public Task<ResultBox<IEnumerable<TagStream>>> ReadTagsAsync(ITag tag)
+    public Task<IEnumerable<TagStream>> ReadTagsAsync(ITag tag)
         => _hotStore.ReadTagsAsync(tag);
 
-    public Task<ResultBox<TagState>> GetLatestTagAsync(ITag tag)
+    public Task<TagState> GetLatestTagAsync(ITag tag)
         => _hotStore.GetLatestTagAsync(tag);
 
-    public Task<ResultBox<bool>> TagExistsAsync(ITag tag)
+    public Task<bool> TagExistsAsync(ITag tag)
         => _hotStore.TagExistsAsync(tag);
 
-    public Task<ResultBox<long>> GetEventCountAsync(SortableUniqueId? since = null)
+    public Task<long> GetEventCountAsync(SortableUniqueId? since = null)
         => _hotStore.GetEventCountAsync(since);
 
-    public Task<ResultBox<IEnumerable<TagInfo>>> GetAllTagsAsync(string? tagGroup = null)
+    public Task<IEnumerable<TagInfo>> GetAllTagsAsync(string? tagGroup = null)
         => _hotStore.GetAllTagsAsync(tagGroup);
 
-    public Task<ResultBox<string>> GetLatestSortableUniqueIdAsync()
+    public Task<string> GetLatestSortableUniqueIdAsync()
         => _hotStore.GetLatestSortableUniqueIdAsync();
 
-    public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadSerializableEventsByTagAsync(
+    public Task<IEnumerable<SerializableEvent>> ReadSerializableEventsByTagAsync(
         ITag tag, SortableUniqueId? since = null)
         => _hotStore.ReadSerializableEventsByTagAsync(tag, since);
 
@@ -198,7 +196,7 @@ public sealed class HybridEventStore : IEventStore, IStreamingSerializableEventS
     ///     Forwards only a verified native tagged stream from the hot store. In particular, this never calls the hot
     ///     list API as a pretend stream: unsupported configurations fail deterministically before any read.
     /// </summary>
-    public Task<ResultBox<SerializableEventStreamReadResult>> StreamSerializableEventsByTagAsync(
+    public Task<SerializableEventStreamReadResult> StreamSerializableEventsByTagAsync(
         ITag tag,
         SortableUniqueId? since,
         SortableUniqueId? until,
@@ -216,24 +214,24 @@ public sealed class HybridEventStore : IEventStore, IStreamingSerializableEventS
                 cancellationToken);
         }
 
-        return Task.FromResult(ResultBox.Error<SerializableEventStreamReadResult>(
+        return Task.FromException<SerializableEventStreamReadResult>(
             new NotSupportedException(
                 $"Tagged streaming is not supported by HybridEventStore({hot.Descriptor.ProviderName}): " +
-                hot.UnsupportedReason)));
+                hot.UnsupportedReason));
     }
 
-    public Task<ResultBox<SerializableEvent>> ReadSerializableEventAsync(Guid eventId)
+    public Task<SerializableEvent?> ReadSerializableEventAsync(Guid eventId)
         => _hotStore.ReadSerializableEventAsync(eventId);
 
-    public Task<ResultBox<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>>
+    public Task<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>
         WriteSerializableEventsAsync(IEnumerable<SerializableEvent> events)
         => _hotStore.WriteSerializableEventsAsync(events);
 
-    public async Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(
+    public Task<IEnumerable<SerializableEvent>> ReadAllSerializableEventsAsync(
         SortableUniqueId? since = null)
-        => await ReadAllSerializableEventsAsync(since, maxCount: null);
+        => ReadAllSerializableEventsAsync(since, maxCount: null);
 
-    public async Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(
+    public async Task<IEnumerable<SerializableEvent>> ReadAllSerializableEventsAsync(
         SortableUniqueId? since,
         int? maxCount)
     {
@@ -241,24 +239,13 @@ public sealed class HybridEventStore : IEventStore, IStreamingSerializableEventS
         if (!_options.Enabled)
         {
             var context = StartHybridReadLogContext(_serviceIdProvider.GetCurrentServiceId(), since, maxCount);
-            var hotResult = await _hotStore.ReadAllSerializableEventsAsync(since, maxCount);
-            LogHybridReadOutcome(
-                context,
-                new HybridReadOutcome(
-                    Source: "hot_only_cold_disabled",
-                    ColdEventsRead: 0,
-                    HotEventsRead: hotResult.IsSuccess ? TryGetEventCountWithoutEnumeration(hotResult.GetValue()) : null,
-                    ColdBoundary: null,
-                    SegmentCount: 0,
-                    ReachedColdSegmentBoundary: false,
-                    Succeeded: hotResult.IsSuccess));
-            return hotResult;
+            return await ReadHotOnlyAsync(context, "hot_only_cold_disabled", coldBoundary: null, segmentCount: 0);
         }
 
         return await ReadHybridSerializableEventsAsync(since, maxCount);
     }
 
-    public async Task<ResultBox<SerializableEventStreamReadResult>> StreamAllSerializableEventsAsync(
+    public async Task<SerializableEventStreamReadResult> StreamAllSerializableEventsAsync(
         SortableUniqueId? since,
         int? maxCount,
         Func<SerializableEvent, ValueTask> onEvent,
@@ -281,7 +268,7 @@ public sealed class HybridEventStore : IEventStore, IStreamingSerializableEventS
         return await StreamHybridSerializableEventsAsync(since, maxCount, onEvent, cancellationToken);
     }
 
-    private async Task<ResultBox<IEnumerable<SerializableEvent>>> ReadHybridSerializableEventsAsync(
+    private async Task<IEnumerable<SerializableEvent>> ReadHybridSerializableEventsAsync(
         SortableUniqueId? since,
         int? maxCount)
     {
@@ -297,7 +284,7 @@ public sealed class HybridEventStore : IEventStore, IStreamingSerializableEventS
                 UseRetained(retained!, selection.HasMore);
                 LogHybridReadOutcome(context, new HybridReadOutcome(
                     "cold_only", events.Count, 0, retained!.ColdBoundary, retained.SegmentCount, false, true));
-                return ResultBox.FromValue<IEnumerable<SerializableEvent>>(events);
+                return events;
             }
         }
         var manifest = await ColdControlFileHelper.LoadManifestAsync(_coldStorage, serviceId, CancellationToken.None);
@@ -307,7 +294,8 @@ public sealed class HybridEventStore : IEventStore, IStreamingSerializableEventS
 
         if (manifest is null || manifest.LatestSafeSortableUniqueId is null)
         {
-            return await ReadHotWithoutManifestAsync(context);
+            _logger.LogDebug("No cold manifest found for {ServiceId}, falling back to hot store", context.ServiceId);
+            return await ReadHotOnlyAsync(context, "hot_only_no_manifest", coldBoundary: null, segmentCount: 0);
         }
 
         var coldBoundary = new SortableUniqueId(manifest.LatestSafeSortableUniqueId);
@@ -320,13 +308,22 @@ public sealed class HybridEventStore : IEventStore, IStreamingSerializableEventS
 
         if (since is not null && since.IsLaterThan(coldBoundary))
         {
-            return await ReadHotAfterColdBoundaryAsync(context, manifest, coldBoundary);
+            _logger.LogDebug(
+                "Skipping cold read for {ServiceId} because since={Since} is newer than latestSafe={LatestSafe}",
+                context.ServiceId,
+                context.Since!.Value,
+                manifest.LatestSafeSortableUniqueId);
+            return await ReadHotOnlyAsync(
+                context,
+                "hot_only_since_after_cold_boundary",
+                coldBoundary.Value,
+                manifest.Segments.Count);
         }
 
         return await ReadColdAndHotEventsAsync(context, manifest, coldBoundary);
     }
 
-    private async Task<ResultBox<SerializableEventStreamReadResult>> StreamHybridSerializableEventsAsync(
+    private async Task<SerializableEventStreamReadResult> StreamHybridSerializableEventsAsync(
         SortableUniqueId? since,
         int? maxCount,
         Func<SerializableEvent, ValueTask> onEvent,
@@ -378,24 +375,52 @@ public sealed class HybridEventStore : IEventStore, IStreamingSerializableEventS
             cancellationToken);
     }
 
-    private async Task<ResultBox<IEnumerable<SerializableEvent>>> ReadHotWithoutManifestAsync(HybridReadLogContext context)
+    /// <summary>
+    ///     Reads the hot store. A failed read is logged as a failed hybrid read with <paramref name="failureOutcome" />
+    ///     and rethrown unchanged.
+    /// </summary>
+    private async Task<IEnumerable<SerializableEvent>> ReadHotOrLogFailureAsync(
+        HybridReadLogContext context,
+        SortableUniqueId? since,
+        int? maxCount,
+        HybridReadOutcome failureOutcome)
     {
-        _logger.LogDebug("No cold manifest found for {ServiceId}, falling back to hot store", context.ServiceId);
-        var hotResult = await _hotStore.ReadAllSerializableEventsAsync(context.Since, context.MaxCount);
+        try
+        {
+            return await _hotStore.ReadAllSerializableEventsAsync(since, maxCount);
+        }
+        catch
+        {
+            LogHybridReadOutcome(context, failureOutcome);
+            throw;
+        }
+    }
+
+    private async Task<IEnumerable<SerializableEvent>> ReadHotOnlyAsync(
+        HybridReadLogContext context,
+        string source,
+        string? coldBoundary,
+        int segmentCount)
+    {
+        var hotEvents = await ReadHotOrLogFailureAsync(
+            context,
+            context.Since,
+            context.MaxCount,
+            new HybridReadOutcome(source, 0, null, coldBoundary, segmentCount, false, false));
         LogHybridReadOutcome(
             context,
             new HybridReadOutcome(
-                Source: "hot_only_no_manifest",
+                Source: source,
                 ColdEventsRead: 0,
-                HotEventsRead: hotResult.IsSuccess ? TryGetEventCountWithoutEnumeration(hotResult.GetValue()) : null,
-                ColdBoundary: null,
-                SegmentCount: 0,
+                HotEventsRead: TryGetEventCountWithoutEnumeration(hotEvents),
+                ColdBoundary: coldBoundary,
+                SegmentCount: segmentCount,
                 ReachedColdSegmentBoundary: false,
-                Succeeded: hotResult.IsSuccess));
-        return hotResult;
+                Succeeded: true));
+        return hotEvents;
     }
 
-    private async Task<ResultBox<SerializableEventStreamReadResult>> StreamHotOnlyAsync(
+    private async Task<SerializableEventStreamReadResult> StreamHotOnlyAsync(
         HybridReadLogContext context,
         SortableUniqueId? since,
         int? maxCount,
@@ -418,24 +443,14 @@ public sealed class HybridEventStore : IEventStore, IStreamingSerializableEventS
                 coldBoundary);
         }
 
-        var hotResult = await _hotStore.ReadAllSerializableEventsAsync(since, maxCount);
-        if (!hotResult.IsSuccess)
-        {
-            LogHybridReadOutcome(
-                context,
-                new HybridReadOutcome(
-                    Source: source,
-                    ColdEventsRead: 0,
-                    HotEventsRead: null,
-                    ColdBoundary: coldBoundary,
-                    SegmentCount: segmentCount,
-                    ReachedColdSegmentBoundary: false,
-                    Succeeded: false));
-            return ResultBox.Error<SerializableEventStreamReadResult>(hotResult.GetException());
-        }
+        var hotEvents = await ReadHotOrLogFailureAsync(
+            context,
+            since,
+            maxCount,
+            new HybridReadOutcome(source, 0, null, coldBoundary, segmentCount, false, false));
 
         var streamResult = await StreamEnumerableAsync(
-            hotResult.GetValue(),
+            hotEvents,
             onEvent,
             cancellationToken);
         LogHybridReadOutcome(
@@ -448,53 +463,37 @@ public sealed class HybridEventStore : IEventStore, IStreamingSerializableEventS
                 SegmentCount: segmentCount,
                 ReachedColdSegmentBoundary: false,
                 Succeeded: true));
-        return ResultBox.FromValue(streamResult);
+        return streamResult;
     }
 
-    private async Task<ResultBox<IEnumerable<SerializableEvent>>> ReadHotAfterColdBoundaryAsync(
-        HybridReadLogContext context,
-        ColdManifest manifest,
-        SortableUniqueId coldBoundary)
-    {
-        _logger.LogDebug(
-            "Skipping cold read for {ServiceId} because since={Since} is newer than latestSafe={LatestSafe}",
-            context.ServiceId,
-            context.Since!.Value,
-            manifest.LatestSafeSortableUniqueId);
-        var hotResult = await _hotStore.ReadAllSerializableEventsAsync(context.Since, context.MaxCount);
-        LogHybridReadOutcome(
-            context,
-            new HybridReadOutcome(
-                Source: "hot_only_since_after_cold_boundary",
-                ColdEventsRead: 0,
-                HotEventsRead: hotResult.IsSuccess ? TryGetEventCountWithoutEnumeration(hotResult.GetValue()) : null,
-                ColdBoundary: coldBoundary.Value,
-                SegmentCount: manifest.Segments.Count,
-                ReachedColdSegmentBoundary: false,
-                Succeeded: hotResult.IsSuccess));
-        return hotResult;
-    }
-
-    private async Task<ResultBox<IEnumerable<SerializableEvent>>> ReadColdAndHotEventsAsync(
+    private async Task<IEnumerable<SerializableEvent>> ReadColdAndHotEventsAsync(
         HybridReadLogContext context,
         ColdManifest manifest,
         SortableUniqueId coldBoundary)
     {
         var events = new List<SerializableEvent>(context.MaxCount.GetValueOrDefault());
         var alignToSegmentBoundary = ShouldAlignCatchUpReadsToSegmentBoundary();
-        var coldResult = await ReadFromColdSegmentsAsync(
-            context.ServiceId,
-            manifest,
-            context.Since,
-            context.MaxCount,
-            events,
-            alignToSegmentBoundary);
-        if (!coldResult.IsSuccess)
+        ColdReadResult coldRead;
+        try
         {
-            return await ReadHotAfterColdReadFailureAsync(context, manifest, coldBoundary);
+            coldRead = await ReadFromColdSegmentsAsync(
+                context.ServiceId,
+                manifest,
+                context.Since,
+                context.MaxCount,
+                events,
+                alignToSegmentBoundary);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning("Cold read failed for {ServiceId}, falling back to hot store", context.ServiceId);
+            return await ReadHotOnlyAsync(
+                context,
+                "hot_only_cold_read_failed",
+                coldBoundary.Value,
+                manifest.Segments.Count);
         }
 
-        var coldRead = coldResult.GetValue();
         var coldEventsRead = coldRead.ColdEventsRead;
         var remainingCount = context.MaxCount.HasValue
             ? Math.Max(context.MaxCount.Value - events.Count, 0)
@@ -512,26 +511,22 @@ public sealed class HybridEventStore : IEventStore, IStreamingSerializableEventS
                     SegmentCount: manifest.Segments.Count,
                     ReachedColdSegmentBoundary: coldRead.ReachedColdSegmentBoundary,
                     Succeeded: true));
-            return ResultBox.FromValue<IEnumerable<SerializableEvent>>(events);
+            return events;
         }
 
-        var hotResult = await _hotStore.ReadAllSerializableEventsAsync(coldBoundary, remainingCount);
-        if (!hotResult.IsSuccess)
-        {
-            LogHybridReadOutcome(
-                context,
-                new HybridReadOutcome(
-                    Source: coldEventsRead > 0 ? "cold_then_hot_failed" : "hot_only_hot_failed",
-                    ColdEventsRead: coldEventsRead,
-                    HotEventsRead: 0,
-                    ColdBoundary: coldBoundary.Value,
-                    SegmentCount: manifest.Segments.Count,
-                    ReachedColdSegmentBoundary: coldRead.ReachedColdSegmentBoundary,
-                    Succeeded: false));
-            return hotResult;
-        }
-
-        var hotEvents = hotResult.GetValue().ToList();
+        var hotRead = await ReadHotOrLogFailureAsync(
+            context,
+            coldBoundary,
+            remainingCount,
+            new HybridReadOutcome(
+                Source: coldEventsRead > 0 ? "cold_then_hot_failed" : "hot_only_hot_failed",
+                ColdEventsRead: coldEventsRead,
+                HotEventsRead: 0,
+                ColdBoundary: coldBoundary.Value,
+                SegmentCount: manifest.Segments.Count,
+                ReachedColdSegmentBoundary: coldRead.ReachedColdSegmentBoundary,
+                Succeeded: false));
+        var hotEvents = hotRead.ToList();
         events.AddRange(hotEvents);
         LogHybridReadOutcome(
             context,
@@ -543,10 +538,10 @@ public sealed class HybridEventStore : IEventStore, IStreamingSerializableEventS
                 SegmentCount: manifest.Segments.Count,
                 ReachedColdSegmentBoundary: coldRead.ReachedColdSegmentBoundary,
                 Succeeded: true));
-        return ResultBox.FromValue<IEnumerable<SerializableEvent>>(events);
+        return events;
     }
 
-    private async Task<ResultBox<SerializableEventStreamReadResult>> StreamColdAndHotEventsAsync(
+    private async Task<SerializableEventStreamReadResult> StreamColdAndHotEventsAsync(
         HybridReadLogContext context,
         ColdManifest manifest,
         SortableUniqueId coldBoundary,
@@ -554,24 +549,31 @@ public sealed class HybridEventStore : IEventStore, IStreamingSerializableEventS
         CancellationToken cancellationToken)
     {
         var alignToSegmentBoundary = ShouldAlignCatchUpReadsToSegmentBoundary();
-        var coldResult = await StreamFromColdSegmentsAsync(
-            manifest,
-            context.Since,
-            context.MaxCount,
-            onEvent,
-            cancellationToken,
-            alignToSegmentBoundary);
-        if (!coldResult.IsSuccess)
+        ColdStreamReadResult coldRead;
+        try
         {
-            return await StreamHotAfterColdReadFailureAsync(
-                context,
+            coldRead = await StreamFromColdSegmentsAsync(
                 manifest,
-                coldBoundary,
+                context.Since,
+                context.MaxCount,
                 onEvent,
-                cancellationToken);
+                cancellationToken,
+                alignToSegmentBoundary);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning("Cold read failed for {ServiceId}, falling back to hot store", context.ServiceId);
+            return await StreamHotOnlyAsync(
+                context,
+                context.Since,
+                context.MaxCount,
+                onEvent,
+                cancellationToken,
+                source: "hot_only_cold_read_failed",
+                coldBoundary: coldBoundary.Value,
+                segmentCount: manifest.Segments.Count);
         }
 
-        var coldRead = coldResult.GetValue();
         var remainingCount = context.MaxCount.HasValue
             ? Math.Max(context.MaxCount.Value - coldRead.EventsRead, 0)
             : (int?)null;
@@ -588,30 +590,26 @@ public sealed class HybridEventStore : IEventStore, IStreamingSerializableEventS
                     SegmentCount: manifest.Segments.Count,
                     ReachedColdSegmentBoundary: coldRead.ReachedColdSegmentBoundary,
                     Succeeded: true));
-            return ResultBox.FromValue(
-                new SerializableEventStreamReadResult(
-                    coldRead.EventsRead,
-                    coldRead.LastSortableUniqueId));
+            return new SerializableEventStreamReadResult(
+                coldRead.EventsRead,
+                coldRead.LastSortableUniqueId);
         }
 
-        var hotResult = await _hotStore.ReadAllSerializableEventsAsync(coldBoundary, remainingCount);
-        if (!hotResult.IsSuccess)
-        {
-            LogHybridReadOutcome(
-                context,
-                new HybridReadOutcome(
-                    Source: coldRead.EventsRead > 0 ? "cold_then_hot_failed" : "hot_only_hot_failed",
-                    ColdEventsRead: coldRead.EventsRead,
-                    HotEventsRead: 0,
-                    ColdBoundary: coldBoundary.Value,
-                    SegmentCount: manifest.Segments.Count,
-                    ReachedColdSegmentBoundary: coldRead.ReachedColdSegmentBoundary,
-                    Succeeded: false));
-            return ResultBox.Error<SerializableEventStreamReadResult>(hotResult.GetException());
-        }
+        var hotEvents = await ReadHotOrLogFailureAsync(
+            context,
+            coldBoundary,
+            remainingCount,
+            new HybridReadOutcome(
+                Source: coldRead.EventsRead > 0 ? "cold_then_hot_failed" : "hot_only_hot_failed",
+                ColdEventsRead: coldRead.EventsRead,
+                HotEventsRead: 0,
+                ColdBoundary: coldBoundary.Value,
+                SegmentCount: manifest.Segments.Count,
+                ReachedColdSegmentBoundary: coldRead.ReachedColdSegmentBoundary,
+                Succeeded: false));
 
         var hotStreamResult = await StreamEnumerableAsync(
-            hotResult.GetValue(),
+            hotEvents,
             onEvent,
             cancellationToken);
         var totalEventsRead = coldRead.EventsRead + hotStreamResult.EventsRead;
@@ -625,71 +623,9 @@ public sealed class HybridEventStore : IEventStore, IStreamingSerializableEventS
                 SegmentCount: manifest.Segments.Count,
                 ReachedColdSegmentBoundary: coldRead.ReachedColdSegmentBoundary,
                 Succeeded: true));
-        return ResultBox.FromValue(
-            new SerializableEventStreamReadResult(
-                totalEventsRead,
-                hotStreamResult.LastSortableUniqueId ?? coldRead.LastSortableUniqueId));
-    }
-
-    private async Task<ResultBox<IEnumerable<SerializableEvent>>> ReadHotAfterColdReadFailureAsync(
-        HybridReadLogContext context,
-        ColdManifest manifest,
-        SortableUniqueId coldBoundary)
-    {
-        _logger.LogWarning("Cold read failed for {ServiceId}, falling back to hot store", context.ServiceId);
-        var hotResult = await _hotStore.ReadAllSerializableEventsAsync(context.Since, context.MaxCount);
-        LogHybridReadOutcome(
-            context,
-            new HybridReadOutcome(
-                Source: "hot_only_cold_read_failed",
-                ColdEventsRead: 0,
-                HotEventsRead: hotResult.IsSuccess ? TryGetEventCountWithoutEnumeration(hotResult.GetValue()) : null,
-                ColdBoundary: coldBoundary.Value,
-                SegmentCount: manifest.Segments.Count,
-                ReachedColdSegmentBoundary: false,
-                Succeeded: hotResult.IsSuccess));
-        return hotResult;
-    }
-
-    private async Task<ResultBox<SerializableEventStreamReadResult>> StreamHotAfterColdReadFailureAsync(
-        HybridReadLogContext context,
-        ColdManifest manifest,
-        SortableUniqueId coldBoundary,
-        Func<SerializableEvent, ValueTask> onEvent,
-        CancellationToken cancellationToken)
-    {
-        _logger.LogWarning("Cold read failed for {ServiceId}, falling back to hot store", context.ServiceId);
-        var hotResult = await _hotStore.ReadAllSerializableEventsAsync(context.Since, context.MaxCount);
-        if (!hotResult.IsSuccess)
-        {
-            LogHybridReadOutcome(
-                context,
-                new HybridReadOutcome(
-                    Source: "hot_only_cold_read_failed",
-                    ColdEventsRead: 0,
-                    HotEventsRead: null,
-                    ColdBoundary: coldBoundary.Value,
-                    SegmentCount: manifest.Segments.Count,
-                    ReachedColdSegmentBoundary: false,
-                    Succeeded: false));
-            return ResultBox.Error<SerializableEventStreamReadResult>(hotResult.GetException());
-        }
-
-        var streamResult = await StreamEnumerableAsync(
-            hotResult.GetValue(),
-            onEvent,
-            cancellationToken);
-        LogHybridReadOutcome(
-            context,
-            new HybridReadOutcome(
-                Source: "hot_only_cold_read_failed",
-                ColdEventsRead: 0,
-                HotEventsRead: streamResult.EventsRead,
-                ColdBoundary: coldBoundary.Value,
-                SegmentCount: manifest.Segments.Count,
-                ReachedColdSegmentBoundary: false,
-                Succeeded: true));
-        return ResultBox.FromValue(streamResult);
+        return new SerializableEventStreamReadResult(
+            totalEventsRead,
+            hotStreamResult.LastSortableUniqueId ?? coldRead.LastSortableUniqueId);
     }
 
     private static int? TryGetEventCountWithoutEnumeration(IEnumerable<SerializableEvent> events)
@@ -839,7 +775,7 @@ public sealed class HybridEventStore : IEventStore, IStreamingSerializableEventS
             _retainedSegment.Touch(retained, _timeProvider.GetUtcNow());
     }
 
-    private async Task<ResultBox<ColdReadResult>> ReadFromColdSegmentsAsync(
+    private async Task<ColdReadResult> ReadFromColdSegmentsAsync(
         string serviceId,
         ColdManifest manifest,
         SortableUniqueId? since,
@@ -872,13 +808,16 @@ public sealed class HybridEventStore : IEventStore, IStreamingSerializableEventS
             {
                 parsed = new List<SerializableEvent>();
                 // Parse once to the end, including validation of lines beyond this batch.
-                var parseResult = await StreamColdSegmentAsync(segment.Path, since, null,
-                    evt => { parsed.Add(evt); return ValueTask.CompletedTask; }, CancellationToken.None);
-                if (!parseResult.IsSuccess)
+                try
+                {
+                    await StreamColdSegmentAsync(segment.Path, since, null,
+                        evt => { parsed.Add(evt); return ValueTask.CompletedTask; }, CancellationToken.None);
+                }
+                catch (Exception ex)
                 {
                     _retainedSegment.Clear(retained);
-                    _logger.LogWarning(parseResult.GetException(), "Failed to parse cold segment {Path}", segment.Path);
-                    return ResultBox.Error<ColdReadResult>(parseResult.GetException());
+                    _logger.LogWarning(ex, "Failed to parse cold segment {Path}", segment.Path);
+                    throw;
                 }
 
                 if (remainingCount is > 0 && parsed.Count > remainingCount.Value)
@@ -921,7 +860,7 @@ public sealed class HybridEventStore : IEventStore, IStreamingSerializableEventS
         string? LastSortableUniqueId,
         bool ReachedColdSegmentBoundary);
 
-    private async Task<ResultBox<ColdStreamReadResult>> StreamFromColdSegmentsAsync(
+    private async Task<ColdStreamReadResult> StreamFromColdSegmentsAsync(
         ColdManifest manifest,
         SortableUniqueId? since,
         int? maxCount,
@@ -941,29 +880,31 @@ public sealed class HybridEventStore : IEventStore, IStreamingSerializableEventS
             var remainingCount = CalculateRemainingCount(maxCount, totalEventsRead);
             if (remainingCount == 0)
             {
-                return ResultBox.FromValue(
-                    new ColdStreamReadResult(
-                        totalEventsRead,
-                        lastSortableUniqueId,
-                        ReachedColdSegmentBoundary: false));
+                return new ColdStreamReadResult(
+                    totalEventsRead,
+                    lastSortableUniqueId,
+                    ReachedColdSegmentBoundary: false);
             }
 
-            var parseResult = await StreamColdSegmentAsync(
-                segment.Path,
-                since,
-                remainingCount,
-                onEvent,
-                cancellationToken);
-            if (!parseResult.IsSuccess)
+            ColdSegmentStreamResult appendResult;
+            try
+            {
+                appendResult = await StreamColdSegmentAsync(
+                    segment.Path,
+                    since,
+                    remainingCount,
+                    onEvent,
+                    cancellationToken);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 _logger.LogWarning(
-                    parseResult.GetException(),
+                    ex,
                     "Failed to parse cold segment {Path}",
                     segment.Path);
-                return ResultBox.Error<ColdStreamReadResult>(parseResult.GetException());
+                throw;
             }
 
-            var appendResult = parseResult.GetValue();
             if (appendResult.EventsRead == 0)
             {
                 continue;
@@ -971,47 +912,40 @@ public sealed class HybridEventStore : IEventStore, IStreamingSerializableEventS
 
             totalEventsRead += appendResult.EventsRead;
             lastSortableUniqueId = appendResult.LastSortableUniqueId ?? lastSortableUniqueId;
-            if (maxCount.HasValue && totalEventsRead >= maxCount.Value)
+            if ((maxCount.HasValue && totalEventsRead >= maxCount.Value) || alignToSegmentBoundary)
             {
-                return ResultBox.FromValue(
-                    new ColdStreamReadResult(
-                        totalEventsRead,
-                        lastSortableUniqueId,
-                        appendResult.ReachedEndOfSegment));
-            }
-
-            if (alignToSegmentBoundary)
-            {
-                return ResultBox.FromValue(
-                    new ColdStreamReadResult(
-                        totalEventsRead,
-                        lastSortableUniqueId,
-                        appendResult.ReachedEndOfSegment));
+                return new ColdStreamReadResult(
+                    totalEventsRead,
+                    lastSortableUniqueId,
+                    appendResult.ReachedEndOfSegment);
             }
         }
 
-        return ResultBox.FromValue(
-            new ColdStreamReadResult(
-                totalEventsRead,
-                lastSortableUniqueId,
-                ReachedColdSegmentBoundary: false));
+        return new ColdStreamReadResult(
+            totalEventsRead,
+            lastSortableUniqueId,
+            ReachedColdSegmentBoundary: false);
     }
 
-    private async Task<ResultBox<ColdSegmentStreamResult>> StreamColdSegmentAsync(
+    private async Task<ColdSegmentStreamResult> StreamColdSegmentAsync(
         string path,
         SortableUniqueId? since,
         int? maxCount,
         Func<SerializableEvent, ValueTask> onEvent,
         CancellationToken cancellationToken)
     {
-        var streamResult = await _coldStorage.OpenReadAsync(path, cancellationToken);
-        if (!streamResult.IsSuccess)
+        Stream stream;
+        try
+        {
+            stream = await _coldStorage.OpenReadAsync(path, cancellationToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogWarning("Failed to read cold segment {Path}", path);
-            return ResultBox.Error<ColdSegmentStreamResult>(streamResult.GetException());
+            throw;
         }
 
-        await using var stream = streamResult.GetValue();
+        await using var _ = stream;
         return await _segmentFormatHandler.StreamSegmentAsync(
             stream,
             since,
@@ -1025,8 +959,8 @@ public sealed class HybridEventStore : IEventStore, IStreamingSerializableEventS
             ? Math.Max(maxCount.Value - currentCount, 0)
             : null;
 
-    private static ResultBox<ColdReadResult> CreateColdReadResult(int eventCount, bool reachedColdSegmentBoundary)
-        => ResultBox.FromValue(new ColdReadResult(eventCount, reachedColdSegmentBoundary));
+    private static ColdReadResult CreateColdReadResult(int eventCount, bool reachedColdSegmentBoundary)
+        => new(eventCount, reachedColdSegmentBoundary);
 
     private static bool ShouldSkipColdSegment(ColdSegmentInfo segment, SortableUniqueId? since)
         => since is not null

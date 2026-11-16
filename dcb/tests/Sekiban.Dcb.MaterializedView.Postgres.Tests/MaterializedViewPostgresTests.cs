@@ -10,6 +10,7 @@ using Sekiban.Dcb.MaterializedView;
 using Sekiban.Dcb.MaterializedView.Postgres;
 using Sekiban.Dcb.ServiceId;
 using Xunit;
+using Sekiban.Dcb.TestSupport;
 
 namespace Sekiban.Dcb.MaterializedView.Postgres.Tests;
 
@@ -160,7 +161,7 @@ public sealed class MaterializedViewPostgresTests(MaterializedViewPostgresFixtur
             WHERE view_name = 'OrderSummary' AND logical_table = 'orders';
             """);
 
-        var latestSortableUniqueId = (await fixture.EventStore.ReadAllSerializableEventsAsync()).GetValue()
+        var latestSortableUniqueId = (await fixture.EventStore.ReadAllSerializableEventsAsync().AsResultBoxAsync()).GetValue()
             .Max(serializableEvent => serializableEvent.SortableUniqueIdValue);
 
         Assert.Equal(3, firstCatchUp.AppliedEvents);

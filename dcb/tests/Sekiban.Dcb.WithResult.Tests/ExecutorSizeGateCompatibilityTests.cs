@@ -12,6 +12,7 @@ using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
 using CoreInMemoryEventStore = Sekiban.Dcb.Testing.InMemoryEventStore;
 using OrleansExecutor = Sekiban.Dcb.Orleans.OrleansDcbExecutor;
+using Sekiban.Dcb.TestSupport;
 
 namespace Sekiban.Dcb.Tests;
 
@@ -56,7 +57,7 @@ public sealed class ExecutorSizeGateCompatibilityTests
                 new FallbackTag("gate", command.Id.ToString("N")))));
 
         Assert.IsType<ExecutorSizeLimitExceededException>(result.GetException());
-        Assert.Empty((await store.ReadAllSerializableEventsAsync()).GetValue());
+        Assert.Empty((await store.ReadAllSerializableEventsAsync().AsResultBoxAsync()).GetValue());
     }
 
     private sealed record OrleansGateCommand(Guid Id) : ICommand;

@@ -265,7 +265,7 @@ public class MultiProjectionStateBuilder
         }
 
         // Get total event count
-        var totalEventsResult = await _eventStore.GetEventCountAsync(since: null);
+        var totalEventsResult = await _eventStore.GetEventCountAsync(since: null).ToResultBoxAsync();
         if (!totalEventsResult.IsSuccess)
         {
             return (false, $"Failed to get event count: {totalEventsResult.GetException().Message}", null, 0);
@@ -273,7 +273,7 @@ public class MultiProjectionStateBuilder
         var totalEvents = totalEventsResult.GetValue();
 
         // Get current version state
-        var currentStateResult = await _stateStore.GetLatestForVersionAsync(projectorName, projectorVersion, ct);
+        var currentStateResult = await _stateStore.GetLatestForVersionAsync(projectorName, projectorVersion, ct).ToOptionalResultBoxAsync();
         if (!currentStateResult.IsSuccess)
         {
             return (false, $"Failed to get current state: {currentStateResult.GetException().Message}", null, 0);
@@ -300,7 +300,7 @@ public class MultiProjectionStateBuilder
         }
 
         // Get any version state
-        var anyVersionResult = await _stateStore.GetLatestAnyVersionAsync(projectorName, ct);
+        var anyVersionResult = await _stateStore.GetLatestAnyVersionAsync(projectorName, ct).ToOptionalResultBoxAsync();
         if (!anyVersionResult.IsSuccess)
         {
             return (false, $"Failed to get any version state: {anyVersionResult.GetException().Message}", null, 0);
@@ -346,7 +346,7 @@ public class MultiProjectionStateBuilder
         {
             ct.ThrowIfCancellationRequested();
 
-            var eventsResult = await _eventStore.ReadAllSerializableEventsAsync(since, batchSize);
+            var eventsResult = await _eventStore.ReadAllSerializableEventsAsync(since, batchSize).ToResultBoxAsync();
             if (!eventsResult.IsSuccess)
             {
                 _logger.LogError(
@@ -402,7 +402,7 @@ public class MultiProjectionStateBuilder
         MultiProjectionStateRecord record,
         CancellationToken ct)
     {
-        var openResult = await _stateStore.OpenStateDataReadStreamAsync(record, ct);
+        var openResult = await _stateStore.OpenStateDataReadStreamAsync(record, ct).ToResultBoxAsync();
         if (!openResult.IsSuccess)
         {
             throw openResult.GetException();

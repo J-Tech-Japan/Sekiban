@@ -9,6 +9,7 @@ using Sekiban.Dcb.Storage.Checkpoints;
 using Sekiban.Dcb.Testing;
 using Store = Sekiban.Dcb.Testing.InMemoryMultiProjectionStateStore;
 using Blob = Sekiban.Dcb.Testing.InMemoryBlobStorageSnapshotAccessor;
+using Sekiban.Dcb.TestSupport;
 
 namespace Sekiban.Dcb.WithResult.Tests;
 
@@ -26,7 +27,7 @@ public class OffloadKeyEnumeratorTests
     {
         store ??= new Store();
         using var stream = new MemoryStream(bytes);
-        Assert.True((await store.UpsertFromStreamAsync(Request(version), stream, int.MaxValue)).GetValue());
+        Assert.True((await store.UpsertFromStreamAsync(Request(version), stream, int.MaxValue).AsResultBoxAsync()).GetValue());
         return store;
     }
     private static async Task<List<OffloadKeyReference>> Scan(IMultiProjectionStateStore store,
@@ -51,7 +52,7 @@ public class OffloadKeyEnumeratorTests
     {
         var store = await Saved(Envelope());
         await Saved(Envelope(), "2", store);
-        var slot = (await store.ReadCheckpointSlotAsync("p", "1")).GetValue();
+        var slot = (await store.ReadCheckpointSlotAsync("p", "1").AsResultBoxAsync()).GetValue();
         await store.InvalidateWithTombstoneAsync("p", "1", CheckpointExpectation.FromSlot(slot));
         var refs = await Scan(store);
         Assert.Equal(2, refs.Count);
@@ -256,38 +257,37 @@ public class OffloadKeyEnumeratorTests
             if (Fault == step + "-cancel") { Cancellation!.Cancel(); return new OperationCanceledException(Cancellation.Token); }
             return new IOException(step + " failed");
         }
-        Task<ResultBox<IReadOnlyList<ProjectorStateInfo>>> IMultiProjectionStateStore.ListAllAsync(CancellationToken ct) =>
-            Fault == "list-error" ? Task.FromResult(ResultBox.Error<IReadOnlyList<ProjectorStateInfo>>(new IOException("list failed")))
+        Task<IReadOnlyList<ProjectorStateInfo>> IMultiProjectionStateStore.ListAllAsync(CancellationToken ct) =>
+            Fault == "list-error" ? Task.FromException<IReadOnlyList<ProjectorStateInfo>>(new IOException("list failed"))
                 : Inner.ListAllAsync(ct);
-        async Task<ResultBox<OptionalValue<MultiProjectionStateRecord>>> IMultiProjectionStateStore.GetLatestForVersionAsync(string p, string v, CancellationToken ct)
+        async Task<MultiProjectionStateRecord?> IMultiProjectionStateStore.GetLatestForVersionAsync(string p, string v, CancellationToken ct)
         {
             if (Fault == "lookup-throw") throw Error("lookup");
-            if (Fault is "lookup-error" or "lookup-cancel") return ResultBox.Error<OptionalValue<MultiProjectionStateRecord>>(Error("lookup"));
-            if (Fault == "lookup-missing") return ResultBox.FromValue(OptionalValue<MultiProjectionStateRecord>.Empty);
+            if (Fault is "lookup-error" or "lookup-cancel") throw Error("lookup");
+            if (Fault == "lookup-missing") return null;
             var result = await Inner.GetLatestForVersionAsync(p, v, ct);
             if (RowKey is null) return result;
-            var record = result.GetValue().GetValue() with { IsOffloaded = true, OffloadKey = RowKey, OffloadProvider = Blobs!.ProviderName };
-            return ResultBox.FromValue(OptionalValue.FromValue(record));
+            return result! with { IsOffloaded = true, OffloadKey = RowKey, OffloadProvider = Blobs!.ProviderName };
         }
-        async Task<ResultBox<Stream>> IMultiProjectionStateStore.OpenStateDataReadStreamAsync(MultiProjectionStateRecord r, CancellationToken ct)
+        async Task<Stream> IMultiProjectionStateStore.OpenStateDataReadStreamAsync(MultiProjectionStateRecord r, CancellationToken ct)
         {
             if (Fault == "open-throw") throw Error("open");
-            if (Fault is "open-error" or "open-cancel") return ResultBox.Error<Stream>(Error("open"));
-            var stream = RowKey is null ? (await Inner.OpenStateDataReadStreamAsync(r, ct)).GetValue()
+            if (Fault is "open-error" or "open-cancel") throw Error("open");
+            var stream = RowKey is null ? await Inner.OpenStateDataReadStreamAsync(r, ct)
                 : await Blobs!.OpenReadAsync(r.OffloadKey!, ct);
             if (Fault == "open-success-cancel")
             {
                 OpenedStream = new ShortReadStream(stream);
                 Cancellation!.Cancel();
-                return ResultBox.FromValue<Stream>(OpenedStream);
+                return OpenedStream;
             }
-            return ResultBox.FromValue<Stream>(ShortReads ? new ShortReadStream(stream) : stream);
+            return ShortReads ? new ShortReadStream(stream) : stream;
         }
-        public override Task<ResultBox<CheckpointSlot>> ReadCheckpointSlotAsync(string p, string v, CancellationToken ct = default)
+        public override Task<CheckpointSlot> ReadCheckpointSlotAsync(string p, string v, CancellationToken ct = default)
         {
             if (Fault == "slot-throw") throw Error("slot");
-            if (Fault is "slot-error" or "slot-cancel") return Task.FromResult(ResultBox.Error<CheckpointSlot>(Error("slot")));
-            if (Fault == "slot-missing") return Task.FromResult(ResultBox.FromValue(CheckpointSlot.Absent));
+            if (Fault is "slot-error" or "slot-cancel") return Task.FromException<CheckpointSlot>(Error("slot"));
+            if (Fault == "slot-missing") return Task.FromResult(CheckpointSlot.Absent);
             return base.ReadCheckpointSlotAsync(p, v, ct);
         }
     }

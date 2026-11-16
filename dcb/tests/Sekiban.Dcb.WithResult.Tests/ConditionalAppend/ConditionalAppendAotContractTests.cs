@@ -62,7 +62,7 @@ public class ConditionalAppendAotContractTests
         var aot = AotEventTypesUnderTest();
         var payload = Encoding.UTF8.GetBytes(aot.SerializeEventPayload(Sample()));
         return OperationFingerprint.ComputeCanonical(
-            "svc-aot", "key-aot", aot, nameof(FixtureStudentCreated), payload, new[] { "Tag:1" }).GetValue();
+            "svc-aot", "key-aot", aot, nameof(FixtureStudentCreated), payload, new[] { "Tag:1" });
     }
 
 
@@ -82,9 +82,9 @@ public class ConditionalAppendAotContractTests
         var reflectionPayload = Encoding.UTF8.GetBytes(reflection.SerializeEventPayload(Sample()));
 
         var aotFp = OperationFingerprint.ComputeCanonical(
-            "svc", "key", aot, nameof(FixtureStudentCreated), aotPayload, new[] { "Tag:1" }).GetValue();
+            "svc", "key", aot, nameof(FixtureStudentCreated), aotPayload, new[] { "Tag:1" });
         var reflectionFp = OperationFingerprint.ComputeCanonical(
-            "svc", "key", reflection, nameof(FixtureStudentCreated), reflectionPayload, new[] { "Tag:1" }).GetValue();
+            "svc", "key", reflection, nameof(FixtureStudentCreated), reflectionPayload, new[] { "Tag:1" });
 
         Assert.Equal(aotFp, reflectionFp);
     }
@@ -103,7 +103,7 @@ public class ConditionalAppendAotContractTests
         var serializable = new SerializableEvent(payload, Common.SortableUniqueId.GenerateNew(), Guid.CreateVersion7(),
             new EventMetadata("c", "c", "u"), new List<string>(), nameof(AotHostileEnumEvent));
 
-        var r = await store.AppendIfUniqueAsync(new ConditionalAppendRequest(keySentinel, serializable));
+        var r = await store.AppendIfUniqueAsync(new ConditionalAppendRequest(keySentinel, serializable)).AsResultBoxAsync();
 
         Assert.False(r.IsSuccess);
         var ex = Assert.IsType<OperationCanonicalizationException>(r.GetException());
@@ -111,7 +111,7 @@ public class ConditionalAppendAotContractTests
         ExceptionGraphSecretAssert.ContainsNoneOf(ex, keySentinel); // key never leaks into the observable graph
         Assert.Equal(0, store.AppendAttempts); // rejected before the durable-write step
         Assert.Equal(0, store.WriteCalls);
-        Assert.Empty((await store.ReadAllSerializableEventsAsync()).GetValue()); // no event / no claim / no receipt
+        Assert.Empty((await store.ReadAllSerializableEventsAsync().AsResultBoxAsync()).GetValue()); // no event / no claim / no receipt
     }
 
     [Fact]
@@ -122,6 +122,6 @@ public class ConditionalAppendAotContractTests
         var payload = Encoding.UTF8.GetBytes(aot.SerializeEventPayload(Sample()));
         var r = OperationFingerprint.ComputeCanonical(
             "svc", "key", aot, nameof(FixtureStudentCreated), payload, new[] { "Tag:1" });
-        Assert.True(r.IsSuccess);
+        Assert.NotEmpty(r);
     }
 }

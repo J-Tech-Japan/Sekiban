@@ -8,6 +8,7 @@ using Sekiban.Dcb.ServiceId;
 using Sekiban.Dcb.Storage;
 using Xunit;
 using Xunit.Abstractions;
+using Sekiban.Dcb.TestSupport;
 
 namespace Sekiban.Dcb.Postgres.Tests;
 
@@ -28,7 +29,7 @@ public sealed class PostgresSetBasedAppendTests(PostgresTestFixture fixture, ITe
         using var recorder = new CommandRecorder();
         using var parent = new Activity("untagged-count").Start();
         recorder.TraceId = parent.TraceId;
-        var result = await store.WriteSerializableEventsAsync([Event("0010", [])]);
+        var result = await store.WriteSerializableEventsAsync([Event("0010", [])]).AsResultBoxAsync();
         Assert.True(result.IsSuccess, result.IsSuccess ? "" : result.GetException().ToString());
         Assert.Empty(recorder.Commands);
         Assert.Equal(6, hooks);
@@ -49,7 +50,7 @@ public sealed class PostgresSetBasedAppendTests(PostgresTestFixture fixture, ITe
                 context.Tags.Add(DbTag.FromEventTag(tag, "many", "0020", Guid.CreateVersion7(), "Bypass", Service));
             await context.SaveChangesAsync();
         }
-        var result = await Store().WriteSerializableEventsAsync([Event("0030", tags)]);
+        var result = await Store().WriteSerializableEventsAsync([Event("0030", tags)]).AsResultBoxAsync();
         Assert.True(result.IsSuccess, result.IsSuccess ? "" : result.GetException().ToString());
         await using var inspect = await Fixture.GetDbContextAsync();
         Assert.Equal(24, await inspect.TagHeads.CountAsync(h => h.HeadPosition == "0030"));
@@ -70,7 +71,7 @@ public sealed class PostgresSetBasedAppendTests(PostgresTestFixture fixture, ITe
             setup.TagHeads.Add(new DbTagHead { ServiceId = Service, Tag = "gap:c" });
             await setup.SaveChangesAsync();
         }
-        var result = await Store().WriteSerializableEventsAsync([Event("0030", tags)]);
+        var result = await Store().WriteSerializableEventsAsync([Event("0030", tags)]).AsResultBoxAsync();
         Assert.True(result.IsSuccess, result.IsSuccess ? "" : result.GetException().ToString());
         await using var inspect = await Fixture.GetDbContextAsync();
         Assert.Equal(3, await inspect.TagHeads.CountAsync(h => h.ServiceId == Service && h.HeadPosition == "0030"));
@@ -111,7 +112,7 @@ public sealed class PostgresSetBasedAppendTests(PostgresTestFixture fixture, ITe
                 {
                     var lazy = cleanup ? tags.Select(t => t + ":lazy").ToArray() : [];
                     var spec = new ExpectedTagPositionSpecification(tags.Select(t => new TagHeadExpectationEntry(Service, t, TagHeadExpectation.Exact("0010"))).ToArray());
-                    var result = await Store().WriteSerializableEventsWithExpectedTagPositionsAsync([Event("0030", tags.Concat(lazy).ToArray())], spec);
+                    var result = await Store().WriteSerializableEventsWithExpectedTagPositionsAsync([Event("0030", tags.Concat(lazy).ToArray())], spec).AsResultBoxAsync();
                     Assert.False(result.IsSuccess);
                     Assert.IsType<ExpectedTagPositionConflictException>(result.GetException());
                     recorder.TraceId = default;
@@ -121,7 +122,7 @@ public sealed class PostgresSetBasedAppendTests(PostgresTestFixture fixture, ITe
                 }
                 else
                 {
-                    var result = await Store().WriteSerializableEventsAsync([Event("0030", tags)]);
+                    var result = await Store().WriteSerializableEventsAsync([Event("0030", tags)]).AsResultBoxAsync();
                     Assert.True(result.IsSuccess, result.IsSuccess ? "" : result.GetException().ToString());
                 }
                 var count = recorder.Commands.Count;
@@ -171,9 +172,9 @@ public sealed class PostgresSetBasedAppendTests(PostgresTestFixture fixture, ITe
             locked.SetResult(); // Phase 2 owns all of the first writer's keys.
             await release.Task.WaitAsync(TimeSpan.FromSeconds(30));
         };
-        var firstWrite = first.WriteSerializableEventsAsync([Event("0010", singleFirst ? ["mixed:shared"] : many)]);
+        var firstWrite = first.WriteSerializableEventsAsync([Event("0010", singleFirst ? ["mixed:shared"] : many)]).AsResultBoxAsync();
         await locked.Task.WaitAsync(TimeSpan.FromSeconds(30));
-        var secondWrite = second.WriteSerializableEventsAsync([Event("0020", singleFirst ? many : ["mixed:shared"])]);
+        var secondWrite = second.WriteSerializableEventsAsync([Event("0020", singleFirst ? many : ["mixed:shared"])]).AsResultBoxAsync();
         try
         {
             await using var observer = new NpgsqlConnection(Fixture.ConnectionString);
@@ -208,8 +209,8 @@ public sealed class PostgresSetBasedAppendTests(PostgresTestFixture fixture, ITe
         Assert.True(StringComparer.Ordinal.Compare(tags[3], tags[4]) < 0);
         Assert.True(System.Text.Encoding.UTF8.GetBytes(tags[3]).AsSpan().SequenceCompareTo(System.Text.Encoding.UTF8.GetBytes(tags[4])) > 0);
         var writes = await Task.WhenAll(
-            Store().WriteSerializableEventsAsync([Event("0010", tags)]),
-            Store().WriteSerializableEventsAsync([Event("0020", tags.Reverse().ToArray())])).WaitAsync(TimeSpan.FromSeconds(30));
+            Store().WriteSerializableEventsAsync([Event("0010", tags)]).AsResultBoxAsync(),
+            Store().WriteSerializableEventsAsync([Event("0020", tags.Reverse().ToArray())]).AsResultBoxAsync()).WaitAsync(TimeSpan.FromSeconds(30));
         Assert.All(writes, r => Assert.True(r.IsSuccess, r.IsSuccess ? "" : r.GetException().ToString()));
         await using var inspect = await Fixture.GetDbContextAsync();
         Assert.Equal(tags.Length, await inspect.TagHeads.CountAsync(h => h.HeadPosition == "0020"));
@@ -240,7 +241,7 @@ public sealed class PostgresSetBasedAppendTests(PostgresTestFixture fixture, ITe
             command.Parameters.AddWithValue("t", keys[blockedIndex]);
             await command.ExecuteNonQueryAsync();
         }
-        var write = Store().WriteSerializableEventsAsync([Event("0010", keys.Reverse().ToArray())]);
+        var write = Store().WriteSerializableEventsAsync([Event("0010", keys.Reverse().ToArray())]).AsResultBoxAsync();
         try
         {
             var timer = Stopwatch.StartNew();

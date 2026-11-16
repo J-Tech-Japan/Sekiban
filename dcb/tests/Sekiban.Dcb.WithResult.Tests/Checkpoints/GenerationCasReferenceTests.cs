@@ -5,6 +5,7 @@ using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Storage.Checkpoints;
 using Sekiban.Dcb.Testing;
 using Xunit;
+using Sekiban.Dcb.TestSupport;
 namespace Sekiban.Dcb.Tests.Checkpoints;
 
 /// <summary>
@@ -40,7 +41,7 @@ public class GenerationCasReferenceTests
     private static Stream Payload(string s) => new MemoryStream(Encoding.UTF8.GetBytes(s));
 
     private static async Task<CheckpointSlot> ReadAsync(IGenerationAwareCheckpointStore store) =>
-        (await store.ReadCheckpointSlotAsync(Projector, Version)).GetValue();
+        (await store.ReadCheckpointSlotAsync(Projector, Version).AsResultBoxAsync()).GetValue();
 
     [Fact]
     public void Capability_advertised()
@@ -154,13 +155,13 @@ public class GenerationCasReferenceTests
         var cas = (IGenerationAwareCheckpointStore)store;
 
         await cas.ConditionalUpsertAsync(Req(1), Payload("a"), CheckpointExpectation.Absent, 1_000_000);
-        var active = (await cas.ReadCheckpointSlotAsync(Projector, Version)).GetValue();
+        var active = (await cas.ReadCheckpointSlotAsync(Projector, Version).AsResultBoxAsync()).GetValue();
         await cas.InvalidateWithTombstoneAsync(Projector, Version, CheckpointExpectation.FromSlot(active));
 
         // Capable reader sees the tombstone...
-        Assert.True((await cas.ReadCheckpointSlotAsync(Projector, Version)).GetValue().IsTombstoned);
+        Assert.True((await cas.ReadCheckpointSlotAsync(Projector, Version).AsResultBoxAsync()).GetValue().IsTombstoned);
         // ...but the legacy reader still sees a (retained) record — the documented old-reader hazard.
-        Assert.True((await store.GetLatestForVersionAsync(Projector, Version)).GetValue().HasValue);
+        Assert.True((await store.GetLatestForVersionAsync(Projector, Version).AsOptionalResultBoxAsync()).GetValue().HasValue);
     }
 
     [Fact]

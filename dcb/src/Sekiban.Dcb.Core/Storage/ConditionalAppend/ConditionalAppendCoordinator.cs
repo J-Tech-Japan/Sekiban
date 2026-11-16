@@ -1,4 +1,3 @@
-using ResultBoxes;
 using Sekiban.Dcb.Capabilities;
 using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Events;
@@ -52,7 +51,7 @@ public sealed class ConditionalAppendCoordinator
         WriteConditionCapabilityDescriptor.Supporting(_providerName, WriteConditionKind.SingleEventUniqueKey);
 
     /// <summary>Runs the shared conditional-append outcome machine with this provider's primitives.</summary>
-    public Task<ResultBox<ConditionalAppendReceipt>> AppendIfUniqueAsync(
+    public Task<ConditionalAppendReceipt> AppendIfUniqueAsync(
         ConditionalAppendRequest request,
         CancellationToken cancellationToken) =>
         ConditionalAppendExecution.RunAsync(

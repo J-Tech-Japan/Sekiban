@@ -12,6 +12,7 @@ using Sekiban.Dcb.CosmosDb.Sweep;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.ServiceId;
 using Sekiban.Dcb.Tags;
+using Sekiban.Dcb.TestSupport;
 
 namespace Sekiban.Dcb.CosmosDb.Emulator.Tests;
 
@@ -42,29 +43,29 @@ public sealed class RealStoreTests(CosmosEmulatorFixture fixture)
             new StudentCreated(Guid.NewGuid(), "n", 5),
             SortableUniqueId.Generate(new DateTime(2026, 1, 1, 0, 0, i, DateTimeKind.Utc), Guid.Empty),
             nameof(StudentCreated), Guid.NewGuid(), new EventMetadata("c", "c", "test"), [tagString])).ToList();
-        var write = await store.WriteEventsAsync(events);
+        var write = await store.WriteEventsAsync(events).AsResultBoxAsync();
         Assert.True(write.IsSuccess, write.IsSuccess ? "" : write.GetException().ToString());
-        Assert.Equal(rowCount > 0, (await store.TagExistsAsync(tag)).GetValue());
-        Assert.Equal(events.Select(e => e.Id), (await store.ReadTagsAsync(tag)).GetValue().Select(r => r.EventId));
+        Assert.Equal(rowCount > 0, (await store.TagExistsAsync(tag).AsResultBoxAsync()).GetValue());
+        Assert.Equal(events.Select(e => e.Id), (await store.ReadTagsAsync(tag).AsResultBoxAsync()).GetValue().Select(r => r.EventId));
         Assert.Equal(events.LastOrDefault()?.SortableUniqueIdValue ?? string.Empty,
-            (await store.GetLatestTagAsync(tag)).GetValue().LastSortedUniqueId);
+            (await store.GetLatestTagAsync(tag).AsResultBoxAsync()).GetValue().LastSortedUniqueId);
         var boundary = new SortableUniqueId(SortableUniqueId.Generate(new DateTime(2026, 1, 1, 0, 0, 1, DateTimeKind.Utc), Guid.Empty));
         foreach (var since in new SortableUniqueId?[] { null, boundary })
         {
             var expected = events.Where(e => since == null || string.CompareOrdinal(e.SortableUniqueIdValue, since.Value) > 0).ToList();
-            Assert.Equal(expected.Select(e => e.Id), (await store.ReadEventsByTagAsync(tag, since)).GetValue().Select(e => e.Id));
-            Assert.Equal(expected.Select(e => e.Id), (await store.ReadSerializableEventsByTagAsync(tag, since)).GetValue().Select(e => e.Id));
+            Assert.Equal(expected.Select(e => e.Id), (await store.ReadEventsByTagAsync(tag, since).AsResultBoxAsync()).GetValue().Select(e => e.Id));
+            Assert.Equal(expected.Select(e => e.Id), (await store.ReadSerializableEventsByTagAsync(tag, since).AsResultBoxAsync()).GetValue().Select(e => e.Id));
             foreach (var until in new SortableUniqueId?[] { null, boundary })
             {
                 var streamed = new List<Guid>();
                 var result = await store.StreamSerializableEventsByTagAsync(tag, since, until,
-                    e => { streamed.Add(e.Id); return ValueTask.CompletedTask; });
+                    e => { streamed.Add(e.Id); return ValueTask.CompletedTask; }).AsResultBoxAsync();
                 Assert.True(result.IsSuccess);
                 Assert.Equal(expected.Where(e => until == null || string.CompareOrdinal(e.SortableUniqueIdValue, until.Value) <= 0).Select(e => e.Id), streamed);
             }
         }
-        Assert.Equal(events.Select(e => e.Id), (await store.ReadAllEventsAsync()).GetValue().Select(e => e.Id));
-        Assert.Equal(rowCount, (await store.GetEventCountAsync()).GetValue());
+        Assert.Equal(events.Select(e => e.Id), (await store.ReadAllEventsAsync().AsResultBoxAsync()).GetValue().Select(e => e.Id));
+        Assert.Equal(rowCount, (await store.GetEventCountAsync().AsResultBoxAsync()).GetValue());
     }
 
     [SkippableTheory]
@@ -83,7 +84,7 @@ public sealed class RealStoreTests(CosmosEmulatorFixture fixture)
         var events = Enumerable.Range(0, rowCount).Select(i => new Event(
             new StudentCreated(Guid.NewGuid(), "n", 5), SortableUniqueId.GenerateNew(),
             nameof(StudentCreated), Guid.NewGuid(), new EventMetadata("c", "c", "test"), [tag])).ToList();
-        Assert.True((await store.WriteEventsAsync(events)).IsSuccess);
+        Assert.True((await store.WriteEventsAsync(events).AsResultBoxAsync()).IsSuccess);
         var tags = db.Client.GetContainer(db.Name, options.TagsContainerName);
         var eventContainer = db.Client.GetContainer(db.Name, options.EventsContainerName);
         var eventsBefore = await SnapshotAsync(eventContainer);

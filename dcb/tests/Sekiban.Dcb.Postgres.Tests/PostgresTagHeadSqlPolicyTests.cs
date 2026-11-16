@@ -9,6 +9,7 @@ using Sekiban.Dcb.Postgres.DbModels;
 using Sekiban.Dcb.ServiceId;
 using Sekiban.Dcb.Storage;
 using Xunit;
+using Sekiban.Dcb.TestSupport;
 
 namespace Sekiban.Dcb.Postgres.Tests;
 
@@ -79,7 +80,7 @@ public sealed class PostgresTagHeadSqlPolicyTests : PostgresTestBase
                     "{}"u8.ToArray(), "7000", Guid.CreateVersion7(), new EventMetadata("c", "r", "u"),
                     ["Order:dml-only"], "G40Marker")],
                 new ExpectedTagPositionSpecification(
-                    [new TagHeadExpectationEntry(DefaultServiceIdProvider.DefaultServiceId, "Order:dml-only", TagHeadExpectation.NoEnforcement())]));
+                    [new TagHeadExpectationEntry(DefaultServiceIdProvider.DefaultServiceId, "Order:dml-only", TagHeadExpectation.NoEnforcement())])).AsResultBoxAsync();
             Assert.True(write.IsSuccess, write.IsSuccess ? "" : write.GetException().ToString());
         }
         finally
@@ -108,7 +109,7 @@ public sealed class PostgresTagHeadSqlPolicyTests : PostgresTestBase
                 Fixture.DomainTypes.EventTypes,
                 new FixedServiceIdProvider(DefaultServiceIdProvider.DefaultServiceId));
 
-            var result = await store.EnsureExpectedTagPositionEnforcementEnabledAsync();
+            var result = await store.EnsureExpectedTagPositionEnforcementEnabledAsync().AsResultBoxAsync();
 
             Assert.False(result.IsSuccess);
             var failure = Assert.IsType<PostgresException>(result.GetException());

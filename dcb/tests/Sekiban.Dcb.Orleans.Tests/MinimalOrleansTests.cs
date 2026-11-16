@@ -22,6 +22,7 @@ using Sekiban.Dcb.Testing;
 using System.Text;
 using System.Text.Json;
 using Xunit;
+using Sekiban.Dcb.TestSupport;
 namespace Sekiban.Dcb.Orleans.Tests;
 
 /// <summary>
@@ -125,7 +126,7 @@ public class MinimalOrleansTests : IAsyncLifetime
         var before = await reader.ReadAsync(new ProjectionStatusReadRequest(ProjectorName: projectorName));
         Assert.True(before.IsSuccess);
         Assert.Empty(before.GetValue());
-        Assert.Empty((await SharedStateStore.ListAsync(projectorName, "1.0")).GetValue());
+        Assert.Empty((await SharedStateStore.ListAsync(projectorName, "1.0").AsResultBoxAsync()).GetValue());
 
         // Wait through the lifecycle/background-start interval. A passive reader must not cause even the grain
         // lifecycle participant to run, so this is stronger than observing an empty heartbeat table.
@@ -148,7 +149,7 @@ public class MinimalOrleansTests : IAsyncLifetime
         IReadOnlyList<ProjectionStatusHeartbeat> rows = Array.Empty<ProjectionStatusHeartbeat>();
         while (DateTime.UtcNow < deadline)
         {
-            rows = (await SharedStateStore.ListAsync(projectorName, "1.0")).GetValue();
+            rows = (await SharedStateStore.ListAsync(projectorName, "1.0").AsResultBoxAsync()).GetValue();
             if (rows.Count > 0)
             {
                 break;
@@ -331,7 +332,7 @@ public class MinimalOrleansTests : IAsyncLifetime
         ProjectionStatusHeartbeat? heartbeat = null;
         while (DateTime.UtcNow < deadline)
         {
-            heartbeat = (await SharedStateStore.ListAsync("test-projector", "1.0")).GetValue().SingleOrDefault();
+            heartbeat = (await SharedStateStore.ListAsync("test-projector", "1.0").AsResultBoxAsync()).GetValue().SingleOrDefault();
             if (heartbeat?.LastTraversedSortableUniqueId == positions[^1])
             {
                 break;
@@ -440,7 +441,7 @@ public class MinimalOrleansTests : IAsyncLifetime
 
         var c0Result = await SharedStateStore.GetLatestForVersionAsync(
             PersistenceTestMulti.MultiProjectorName,
-            PersistenceTestMulti.MultiProjectorVersion);
+            PersistenceTestMulti.MultiProjectorVersion).AsOptionalResultBoxAsync();
         Assert.True(c0Result.IsSuccess);
         Assert.True(c0Result.GetValue().HasValue);
         var c0 = c0Result.GetValue().GetValue();
@@ -456,7 +457,7 @@ public class MinimalOrleansTests : IAsyncLifetime
 
         var c1Result = await SharedStateStore.GetLatestForVersionAsync(
             PersistenceTestMulti.MultiProjectorName,
-            PersistenceTestMulti.MultiProjectorVersion);
+            PersistenceTestMulti.MultiProjectorVersion).AsOptionalResultBoxAsync();
         Assert.True(c1Result.IsSuccess);
         Assert.True(c1Result.GetValue().HasValue);
         var c1 = c1Result.GetValue().GetValue();
@@ -498,7 +499,7 @@ public class MinimalOrleansTests : IAsyncLifetime
 
         var c0Result = await SharedStateStore.GetLatestForVersionAsync(
             PersistenceTestMulti.MultiProjectorName,
-            PersistenceTestMulti.MultiProjectorVersion);
+            PersistenceTestMulti.MultiProjectorVersion).AsOptionalResultBoxAsync();
         Assert.True(c0Result.IsSuccess);
         Assert.True(c0Result.GetValue().HasValue);
         var c0 = c0Result.GetValue().GetValue();
@@ -529,7 +530,7 @@ public class MinimalOrleansTests : IAsyncLifetime
 
         // Put the exact stream-delivered events into the authoritative store only after stream application has finished.
         // The subsequent refresh must therefore fetch a non-empty range whose every event is already ID-filtered.
-        var writeResult = await SharedEventStore.WriteSerializableEventsAsync(secondSerializableEvents);
+        var writeResult = await SharedEventStore.WriteSerializableEventsAsync(secondSerializableEvents).AsResultBoxAsync();
         Assert.True(writeResult.IsSuccess, writeResult.IsSuccess ? string.Empty : writeResult.GetException().ToString());
         SharedEventStore.ClearReadAllEventsTracking();
         var firstReadStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -547,7 +548,7 @@ public class MinimalOrleansTests : IAsyncLifetime
 
         var c1Result = await SharedStateStore.GetLatestForVersionAsync(
             PersistenceTestMulti.MultiProjectorName,
-            PersistenceTestMulti.MultiProjectorVersion);
+            PersistenceTestMulti.MultiProjectorVersion).AsOptionalResultBoxAsync();
         Assert.True(c1Result.IsSuccess);
         Assert.True(c1Result.GetValue().HasValue);
         var c1 = c1Result.GetValue().GetValue();
@@ -875,7 +876,7 @@ public class MinimalOrleansTests : IAsyncLifetime
             }
         }
 
-        public Task<ResultBox<IEnumerable<Event>>> ReadAllEventsAsync(SortableUniqueId? since = null, int? maxCount = null)
+        public Task<IEnumerable<Event>> ReadAllEventsAsync(SortableUniqueId? since = null, int? maxCount = null)
         {
             lock (_lock)
             {
@@ -886,10 +887,10 @@ public class MinimalOrleansTests : IAsyncLifetime
             return _inner.ReadAllEventsAsync(since, maxCount);
         }
 
-        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null)
+        public Task<IEnumerable<SerializableEvent>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null)
             => ReadAllSerializableEventsAsync(since, maxCount: null);
 
-        public async Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(
+        public async Task<IEnumerable<SerializableEvent>> ReadAllSerializableEventsAsync(
             SortableUniqueId? since,
             int? maxCount)
         {
@@ -923,34 +924,34 @@ public class MinimalOrleansTests : IAsyncLifetime
             return await _inner.ReadAllSerializableEventsAsync(since, maxCount);
         }
 
-        public Task<ResultBox<IEnumerable<Event>>> ReadEventsByTagAsync(ITag tag, SortableUniqueId? since = null) =>
+        public Task<IEnumerable<Event>> ReadEventsByTagAsync(ITag tag, SortableUniqueId? since = null) =>
             _inner.ReadEventsByTagAsync(tag, since);
 
-        public Task<ResultBox<Event>> ReadEventAsync(Guid eventId) => _inner.ReadEventAsync(eventId);
+        public Task<Event?> ReadEventAsync(Guid eventId) => _inner.ReadEventAsync(eventId);
 
-        public Task<ResultBox<(IReadOnlyList<Event> Events, IReadOnlyList<TagWriteResult> TagWrites)>> WriteEventsAsync(
+        public Task<(IReadOnlyList<Event> Events, IReadOnlyList<TagWriteResult> TagWrites)> WriteEventsAsync(
             IEnumerable<Event> events) => _inner.WriteEventsAsync(events);
 
-        public Task<ResultBox<IEnumerable<TagStream>>> ReadTagsAsync(ITag tag) => _inner.ReadTagsAsync(tag);
+        public Task<IEnumerable<TagStream>> ReadTagsAsync(ITag tag) => _inner.ReadTagsAsync(tag);
 
-        public Task<ResultBox<TagState>> GetLatestTagAsync(ITag tag) => _inner.GetLatestTagAsync(tag);
+        public Task<TagState> GetLatestTagAsync(ITag tag) => _inner.GetLatestTagAsync(tag);
 
-        public Task<ResultBox<bool>> TagExistsAsync(ITag tag) => _inner.TagExistsAsync(tag);
+        public Task<bool> TagExistsAsync(ITag tag) => _inner.TagExistsAsync(tag);
 
-        public Task<ResultBox<long>> GetEventCountAsync(SortableUniqueId? since = null) => _inner.GetEventCountAsync(since);
+        public Task<long> GetEventCountAsync(SortableUniqueId? since = null) => _inner.GetEventCountAsync(since);
 
-        public Task<ResultBox<IEnumerable<TagInfo>>> GetAllTagsAsync(string? tagGroup = null) => _inner.GetAllTagsAsync(tagGroup);
+        public Task<IEnumerable<TagInfo>> GetAllTagsAsync(string? tagGroup = null) => _inner.GetAllTagsAsync(tagGroup);
 
-        public Task<ResultBox<string>> GetLatestSortableUniqueIdAsync() => _inner.GetLatestSortableUniqueIdAsync();
+        public Task<string> GetLatestSortableUniqueIdAsync() => _inner.GetLatestSortableUniqueIdAsync();
 
-        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadSerializableEventsByTagAsync(
+        public Task<IEnumerable<SerializableEvent>> ReadSerializableEventsByTagAsync(
             ITag tag,
             SortableUniqueId? since = null) => _inner.ReadSerializableEventsByTagAsync(tag, since);
 
-        public Task<ResultBox<SerializableEvent>> ReadSerializableEventAsync(Guid eventId)
+        public Task<SerializableEvent?> ReadSerializableEventAsync(Guid eventId)
             => _inner.ReadSerializableEventAsync(eventId);
 
-        public Task<ResultBox<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>>
+        public Task<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>
             WriteSerializableEventsAsync(IEnumerable<SerializableEvent> events) => _inner.WriteSerializableEventsAsync(events);
     }
 
@@ -986,7 +987,7 @@ public class MinimalOrleansTests : IAsyncLifetime
         public bool SawCancelableToken => Volatile.Read(ref _sawCancelableToken) != 0;
         public IReadOnlyList<DateTimeOffset> UpsertCallTimes => _upsertCallTimes.ToArray();
 
-        public async Task<ResultBox<ProjectionStatusWriteResult>> UpsertAsync(
+        public async Task<ProjectionStatusWriteResult> UpsertAsync(
             ProjectionStatusHeartbeat heartbeat,
             long expectedSequence,
             CancellationToken cancellationToken = default)
@@ -1011,7 +1012,7 @@ public class MinimalOrleansTests : IAsyncLifetime
             return await _inner.UpsertAsync(heartbeat, expectedSequence, cancellationToken);
         }
 
-        public Task<ResultBox<IReadOnlyList<ProjectionStatusHeartbeat>>> ListAsync(
+        public Task<IReadOnlyList<ProjectionStatusHeartbeat>> ListAsync(
             string? projectorName = null,
             string? projectorVersion = null,
             CancellationToken cancellationToken = default) =>

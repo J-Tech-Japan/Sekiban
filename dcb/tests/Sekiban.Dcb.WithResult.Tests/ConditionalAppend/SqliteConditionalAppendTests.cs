@@ -24,7 +24,7 @@ public sealed class SqliteConditionalAppendTests : IDisposable
     private SqliteEventStore NewStore() => new(_dbPath, _domain.EventTypes);
 
     private async Task<int> DurableCount(SqliteEventStore store) =>
-        (await store.ReadAllSerializableEventsAsync()).GetValue().Count();
+        (await store.ReadAllSerializableEventsAsync().AsResultBoxAsync()).GetValue().Count();
 
     [Fact]
     public void Capability_ReportsSingleEventUniqueKey() =>
@@ -56,7 +56,7 @@ public sealed class SqliteConditionalAppendTests : IDisposable
         var stores = Enumerable.Range(0, writers).Select(_ => NewStore()).ToList();
         var attempts = await Task.WhenAll(
             stores.Select(s => s.AppendIfUniqueAsync(
-                new ConditionalAppendRequest("mig-race", ConditionalAppendScenarios.Marker(_domain, "payload")))));
+                new ConditionalAppendRequest("mig-race", ConditionalAppendScenarios.Marker(_domain, "payload"))).AsResultBoxAsync()));
 
         var receipts = attempts.Where(r => r.IsSuccess).Select(r => r.GetValue()).ToList();
         Assert.Equal(writers, receipts.Count); // no writer errored (losers converge, not fail)
@@ -64,7 +64,7 @@ public sealed class SqliteConditionalAppendTests : IDisposable
         Assert.Equal(writers - 1, receipts.Count(r => r.Status == ConditionalAppendStatus.AlreadyCommittedSameOperation));
         Assert.Single(receipts.Select(r => r.WinnerEventId).Distinct());
         Assert.Single(receipts.Select(r => r.OperationFingerprint).Distinct());
-        Assert.Single((await NewStore().ReadAllSerializableEventsAsync()).GetValue()); // exactly one durable event
+        Assert.Single((await NewStore().ReadAllSerializableEventsAsync().AsResultBoxAsync()).GetValue()); // exactly one durable event
     }
 
     [Fact]
@@ -75,12 +75,12 @@ public sealed class SqliteConditionalAppendTests : IDisposable
         var a = NewStore();
         var b = NewStore();
         var results = await Task.WhenAll(
-            a.AppendIfUniqueAsync(new ConditionalAppendRequest("mig-diff", ConditionalAppendScenarios.Marker(_domain, "A"))),
-            b.AppendIfUniqueAsync(new ConditionalAppendRequest("mig-diff", ConditionalAppendScenarios.Marker(_domain, "B"))));
+            a.AppendIfUniqueAsync(new ConditionalAppendRequest("mig-diff", ConditionalAppendScenarios.Marker(_domain, "A"))).AsResultBoxAsync(),
+            b.AppendIfUniqueAsync(new ConditionalAppendRequest("mig-diff", ConditionalAppendScenarios.Marker(_domain, "B"))).AsResultBoxAsync());
 
         Assert.Equal(1, results.Count(r => r.IsSuccess && r.GetValue().Status == ConditionalAppendStatus.Appended));
         Assert.Equal(1, results.Count(r => !r.IsSuccess && r.GetException() is KeyReuseConflictException));
-        Assert.Single((await NewStore().ReadAllSerializableEventsAsync()).GetValue());
+        Assert.Single((await NewStore().ReadAllSerializableEventsAsync().AsResultBoxAsync()).GetValue());
     }
 
     [Fact]
@@ -94,19 +94,19 @@ public sealed class SqliteConditionalAppendTests : IDisposable
         // OperationCanceledException carrying the caller's token, NEVER a typed AmbiguousAfterWrite (which is reserved for
         // provider-declared post-commit response loss). Nothing is durable.
         var cancelled = await store.AppendIfUniqueAsync(
-            new ConditionalAppendRequest("mig-cancel", ConditionalAppendScenarios.Marker(_domain, "v")), cts.Token);
+            new ConditionalAppendRequest("mig-cancel", ConditionalAppendScenarios.Marker(_domain, "v")), cts.Token).AsResultBoxAsync();
 
         Assert.False(cancelled.IsSuccess);
         Assert.IsNotType<ConditionalAppendInDoubtException>(cancelled.GetException());
         var oce = Assert.IsAssignableFrom<OperationCanceledException>(cancelled.GetException());
         Assert.Equal(cts.Token, oce.CancellationToken);
-        Assert.Empty((await NewStore().ReadAllSerializableEventsAsync()).GetValue()); // rollback-before-commit: nothing durable
+        Assert.Empty((await NewStore().ReadAllSerializableEventsAsync().AsResultBoxAsync()).GetValue()); // rollback-before-commit: nothing durable
 
         // Recovery: a normal retry converges to a durable Appended.
         var retry = (await store.AppendIfUniqueAsync(
-            new ConditionalAppendRequest("mig-cancel", ConditionalAppendScenarios.Marker(_domain, "v")))).GetValue();
+            new ConditionalAppendRequest("mig-cancel", ConditionalAppendScenarios.Marker(_domain, "v"))).AsResultBoxAsync()).GetValue();
         Assert.Equal(ConditionalAppendStatus.Appended, retry.Status);
-        Assert.Single((await NewStore().ReadAllSerializableEventsAsync()).GetValue());
+        Assert.Single((await NewStore().ReadAllSerializableEventsAsync().AsResultBoxAsync()).GetValue());
     }
 
     [Fact]
@@ -120,14 +120,14 @@ public sealed class SqliteConditionalAppendTests : IDisposable
         writer.AfterConditionalCommitHook = () => throw new InvalidOperationException("connection reset after commit");
 
         var first = await writer.AppendIfUniqueAsync(
-            new ConditionalAppendRequest("mig-postcommit", ConditionalAppendScenarios.Marker(_domain, "v")));
+            new ConditionalAppendRequest("mig-postcommit", ConditionalAppendScenarios.Marker(_domain, "v"))).AsResultBoxAsync();
 
         Assert.True(first.IsSuccess, first.IsSuccess ? "" : first.GetException().ToString());
         Assert.Equal(ConditionalAppendStatus.AlreadyCommittedSameOperation, first.GetValue().Status);
         var deterministicId = ConditionalAppendIdentity.DeriveEventId("default", OperationFingerprint.NormalizeKey("mig-postcommit"));
-        var winner = (await NewStore().ReadSerializableEventAsync(deterministicId)).GetValue();
+        var winner = Assert.IsType<SerializableEvent>(await NewStore().ReadSerializableEventAsync(deterministicId));
         ConditionalAppendScenarios.AssertReceiptMatchesStoredWinner(first.GetValue(), "default", "mig-postcommit", _domain, winner);
-        Assert.Single((await NewStore().ReadAllSerializableEventsAsync()).GetValue()); // exactly one durable event
+        Assert.Single((await NewStore().ReadAllSerializableEventsAsync().AsResultBoxAsync()).GetValue()); // exactly one durable event
     }
 
     [Fact]
@@ -139,11 +139,11 @@ public sealed class SqliteConditionalAppendTests : IDisposable
         writer.AfterConditionalCommitHook = () => throw new OperationCanceledException("cancelled after commit");
 
         var result = await writer.AppendIfUniqueAsync(
-            new ConditionalAppendRequest("mig-postcancel", ConditionalAppendScenarios.Marker(_domain, "v")));
+            new ConditionalAppendRequest("mig-postcancel", ConditionalAppendScenarios.Marker(_domain, "v"))).AsResultBoxAsync();
 
         Assert.True(result.IsSuccess);
         Assert.Equal(ConditionalAppendStatus.AlreadyCommittedSameOperation, result.GetValue().Status);
-        Assert.Single((await NewStore().ReadAllSerializableEventsAsync()).GetValue());
+        Assert.Single((await NewStore().ReadAllSerializableEventsAsync().AsResultBoxAsync()).GetValue());
     }
 
     [Fact]
@@ -168,10 +168,10 @@ public sealed class SqliteConditionalAppendTests : IDisposable
                 .ToSerializableEvent(_domain.EventTypes);
         var sortableId = SortableUniqueId.GenerateNew();
 
-        var first = await store.AppendIfUniqueAsync(new ConditionalAppendRequest("mig-unrel-A", Fixed("A", sortableId)));
+        var first = await store.AppendIfUniqueAsync(new ConditionalAppendRequest("mig-unrel-A", Fixed("A", sortableId))).AsResultBoxAsync();
         Assert.Equal(ConditionalAppendStatus.Appended, first.GetValue().Status);
 
-        var clash = await store.AppendIfUniqueAsync(new ConditionalAppendRequest("mig-unrel-B", Fixed("B", sortableId)));
+        var clash = await store.AppendIfUniqueAsync(new ConditionalAppendRequest("mig-unrel-B", Fixed("B", sortableId))).AsResultBoxAsync();
 
         Assert.False(clash.IsSuccess);
         Assert.IsType<SqliteException>(clash.GetException());
@@ -191,9 +191,9 @@ public sealed class SqliteConditionalAppendTests : IDisposable
                     new EventMetadata("c", "c", "u"), new List<string>())
                 .ToSerializableEvent(_domain.EventTypes);
 
-        Assert.True((await store.WriteSerializableEventsAsync(new[] { Fixed("a") })).IsSuccess);
-        Assert.True((await store.WriteSerializableEventsAsync(new[] { Fixed("b") })).IsSuccess); // no throw: OR REPLACE
-        Assert.Single((await store.ReadAllSerializableEventsAsync()).GetValue());
+        Assert.True((await store.WriteSerializableEventsAsync(new[] { Fixed("a") }).AsResultBoxAsync()).IsSuccess);
+        Assert.True((await store.WriteSerializableEventsAsync(new[] { Fixed("b") }).AsResultBoxAsync()).IsSuccess); // no throw: OR REPLACE
+        Assert.Single((await store.ReadAllSerializableEventsAsync().AsResultBoxAsync()).GetValue());
     }
 
     public void Dispose()

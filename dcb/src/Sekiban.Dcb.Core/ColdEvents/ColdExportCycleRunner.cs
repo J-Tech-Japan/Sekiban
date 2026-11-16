@@ -90,19 +90,21 @@ public sealed class ColdExportCycleRunner
         while (!ct.IsCancellationRequested)
         {
             iteration++;
-            var result = await _exporter.ExportIncrementalAsync(serviceId, ct);
-
-            if (!result.IsSuccess)
+            ExportResult value;
+            try
+            {
+                value = await _exporter.ExportIncrementalAsync(serviceId, ct);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 _logger.LogError(
-                    result.GetException(),
+                    ex,
                     "Cold event export failed for {ServiceId} on iteration {Iteration}",
                     serviceId,
                     iteration);
                 return;
             }
 
-            var value = result.GetValue();
             totalExported += value.ExportedEventCount;
             totalSegments += value.NewSegments.Count;
 

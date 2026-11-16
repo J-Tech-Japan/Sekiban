@@ -52,18 +52,15 @@ public class EventStoreCacheSync
             }
 
             // 2. Get event counts
-            var remoteCountResult = await _remoteStore.GetEventCountAsync();
-            if (!remoteCountResult.IsSuccess)
+            var (remoteCount, remoteCountError) = await CaptureAsync(_remoteStore.GetEventCountAsync());
+            if (remoteCountError is not null)
             {
                 return CacheSyncResult.Failed(
-                    $"Failed to get remote event count: {remoteCountResult.GetException().Message}",
+                    $"Failed to get remote event count: {remoteCountError.Message}",
                     stopwatch.Elapsed);
             }
 
-            var remoteCount = remoteCountResult.GetValue();
-
-            var localCountResult = await _localStore.GetEventCountAsync();
-            var localCount = localCountResult.IsSuccess ? localCountResult.GetValue() : 0;
+            var localCount = await GetLocalEventCountOrZeroAsync();
 
             _logger?.LogInformation("Remote: {RemoteCount} events, Local: {LocalCount} events", remoteCount, localCount);
 
@@ -100,15 +97,16 @@ public class EventStoreCacheSync
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
-                var remoteEventsResult = await _remoteStore.ReadAllSerializableEventsAsync(currentSince, batchSize);
-                if (!remoteEventsResult.IsSuccess)
+                var (remoteRead, remoteReadError) =
+                    await CaptureAsync(_remoteStore.ReadAllSerializableEventsAsync(currentSince, batchSize));
+                if (remoteReadError is not null)
                 {
                     return CacheSyncResult.Failed(
-                        $"Failed to read remote events: {remoteEventsResult.GetException().Message}",
+                        $"Failed to read remote events: {remoteReadError.Message}",
                         stopwatch.Elapsed);
                 }
 
-                var remoteEvents = remoteEventsResult.GetValue()
+                var remoteEvents = remoteRead
                     .OrderBy(e => e.SortableUniqueIdValue, StringComparer.Ordinal)
                     .ToList();
 
@@ -125,11 +123,11 @@ public class EventStoreCacheSync
                 {
                     _logger?.LogInformation("Caching batch of {Count} events...", eventsToCache.Count);
 
-                    var writeResult = await _localStore.WriteSerializableEventsAsync(eventsToCache);
-                    if (!writeResult.IsSuccess)
+                    var (_, writeError) = await CaptureAsync(_localStore.WriteSerializableEventsAsync(eventsToCache));
+                    if (writeError is not null)
                     {
                         return CacheSyncResult.Failed(
-                            $"Failed to write events to cache: {writeResult.GetException().Message}",
+                            $"Failed to write events to cache: {writeError.Message}",
                             stopwatch.Elapsed);
                     }
 
@@ -195,8 +193,7 @@ public class EventStoreCacheSync
     public async Task<CacheStatistics> GetStatisticsAsync()
     {
         var metadata = await _localStore.GetMetadataAsync();
-        var eventCountResult = await _localStore.GetEventCountAsync();
-        var eventCount = eventCountResult.IsSuccess ? eventCountResult.GetValue() : 0;
+        var eventCount = await GetLocalEventCountOrZeroAsync();
 
         var fileInfo = new FileInfo(_localStore.DatabasePath);
         var databaseSize = fileInfo.Exists ? fileInfo.Length : 0;
@@ -228,15 +225,16 @@ public class EventStoreCacheSync
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            var remoteEventsResult = await _remoteStore.ReadAllSerializableEventsAsync(currentSince, batchSize);
-            if (!remoteEventsResult.IsSuccess)
+            var (remoteRead, remoteReadError) =
+                await CaptureAsync(_remoteStore.ReadAllSerializableEventsAsync(currentSince, batchSize));
+            if (remoteReadError is not null)
             {
                 return CacheSyncResult.Failed(
-                    $"Failed to read remote events: {remoteEventsResult.GetException().Message}",
+                    $"Failed to read remote events: {remoteReadError.Message}",
                     stopwatch.Elapsed);
             }
 
-            var remoteEvents = remoteEventsResult.GetValue()
+            var remoteEvents = remoteRead
                 .OrderBy(e => e.SortableUniqueIdValue, StringComparer.Ordinal)
                 .ToList();
 
@@ -253,11 +251,11 @@ public class EventStoreCacheSync
             {
                 _logger?.LogInformation("Caching batch of {Count} events...", eventsToCache.Count);
 
-                var writeResult = await _localStore.WriteSerializableEventsAsync(eventsToCache);
-                if (!writeResult.IsSuccess)
+                var (_, writeError) = await CaptureAsync(_localStore.WriteSerializableEventsAsync(eventsToCache));
+                if (writeError is not null)
                 {
                     return CacheSyncResult.Failed(
-                        $"Failed to write events to cache: {writeResult.GetException().Message}",
+                        $"Failed to write events to cache: {writeError.Message}",
                         stopwatch.Elapsed);
                 }
 
@@ -298,6 +296,26 @@ public class EventStoreCacheSync
             totalEventsAdded,
             CacheSyncAction.RebuiltFromScratch,
             stopwatch.Elapsed);
+    }
+
+    /// <summary>Awaits a store call and returns its value, or the exception it failed with (reported, not thrown).</summary>
+    private static async Task<(T Value, Exception? Error)> CaptureAsync<T>(Task<T> task)
+    {
+        try
+        {
+            return (await task, null);
+        }
+        catch (Exception ex)
+        {
+            return (default!, ex);
+        }
+    }
+
+    /// <summary>An unreadable local cache counts as empty.</summary>
+    private async Task<long> GetLocalEventCountOrZeroAsync()
+    {
+        var (count, error) = await CaptureAsync(_localStore.GetEventCountAsync());
+        return error is null ? count : 0;
     }
 
     private bool ValidateMetadata(CacheMetadata? metadata)

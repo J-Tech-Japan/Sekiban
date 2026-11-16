@@ -247,7 +247,7 @@ public sealed class DurableSubscriptionRunner : BackgroundService
 
                 var read = await store.ReadAllSerializableEventsAsync(
                         state.AcknowledgedPosition is null ? null : new SortableUniqueId(state.AcknowledgedPosition),
-                        _registration.Options.MaxBatchSize)
+                        _registration.Options.MaxBatchSize).ToResultBoxAsync()
                     .ConfigureAwait(false);
                 if (!read.IsSuccess)
                 {

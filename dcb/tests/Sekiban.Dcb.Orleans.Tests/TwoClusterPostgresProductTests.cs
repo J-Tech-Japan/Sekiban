@@ -25,6 +25,7 @@ using Sekiban.Dcb.Testing;
 using Testcontainers.PostgreSql;
 using Xunit;
 using static Sekiban.Dcb.Orleans.Tests.G20Shared;
+using Sekiban.Dcb.TestSupport;
 namespace Sekiban.Dcb.Orleans.Tests;
 
 /// <summary>
@@ -119,7 +120,7 @@ public class TwoClusterPostgresProductTests : IAsyncLifetime
         new(_dbFactory, new DefaultServiceIdProvider(), Blob);
 
     private async Task<CheckpointSlot> ReadRowAsync() =>
-        (await AssertionStore().ReadCheckpointSlotAsync(Projector, Version)).GetValue();
+        (await AssertionStore().ReadCheckpointSlotAsync(Projector, Version).AsResultBoxAsync()).GetValue();
 
     private async Task WriteEventAsync(string id, string value, int secondsAgo)
     {
@@ -260,31 +261,31 @@ public class TwoClusterPostgresProductTests : IAsyncLifetime
         }
         public string? ExpectedTagPositionServiceId => inner.ExpectedTagPositionServiceId;
         public WriteConditionCapabilityDescriptor DescribeWriteConditions() => inner.DescribeWriteConditions();
-        public Task<ResultBox<bool>> EnsureExpectedTagPositionEnforcementEnabledAsync(CancellationToken ct = default) =>
+        public Task<bool> EnsureExpectedTagPositionEnforcementEnabledAsync(CancellationToken ct = default) =>
             inner.EnsureExpectedTagPositionEnforcementEnabledAsync(ct);
-        public async Task<ResultBox<ExpectedTagPositionWriteResult>> WriteSerializableEventsWithExpectedTagPositionsAsync(
+        public async Task<ExpectedTagPositionWriteResult> WriteSerializableEventsWithExpectedTagPositionsAsync(
             IReadOnlyList<SerializableEvent> events, ExpectedTagPositionSpecification specification, CancellationToken ct = default)
         {
             Interlocked.Increment(ref _fenced);
             await ArriveAsync();
             return await inner.WriteSerializableEventsWithExpectedTagPositionsAsync(events, specification, ct);
         }
-        public async Task<ResultBox<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>> WriteSerializableEventsAsync(IEnumerable<SerializableEvent> events)
+        public async Task<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)> WriteSerializableEventsAsync(IEnumerable<SerializableEvent> events)
         {
             Interlocked.Increment(ref _legacy);
             await ArriveAsync();
             return await inner.WriteSerializableEventsAsync(events);
         }
-        public Task<ResultBox<IEnumerable<TagStream>>> ReadTagsAsync(ITag tag) => inner.ReadTagsAsync(tag);
-        public Task<ResultBox<TagState>> GetLatestTagAsync(ITag tag) => inner.GetLatestTagAsync(tag);
-        public Task<ResultBox<bool>> TagExistsAsync(ITag tag) => inner.TagExistsAsync(tag);
-        public Task<ResultBox<long>> GetEventCountAsync(SortableUniqueId? since = null) => inner.GetEventCountAsync(since);
-        public Task<ResultBox<IEnumerable<TagInfo>>> GetAllTagsAsync(string? group = null) => inner.GetAllTagsAsync(group);
-        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null) => inner.ReadAllSerializableEventsAsync(since);
-        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(SortableUniqueId? since, int? count) => inner.ReadAllSerializableEventsAsync(since, count);
-        public Task<ResultBox<SerializableEvent>> ReadSerializableEventAsync(Guid id) => inner.ReadSerializableEventAsync(id);
-        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadSerializableEventsByTagAsync(ITag tag, SortableUniqueId? since = null) => inner.ReadSerializableEventsByTagAsync(tag, since);
-        public Task<ResultBox<string>> GetLatestSortableUniqueIdAsync() => inner.GetLatestSortableUniqueIdAsync();
+        public Task<IEnumerable<TagStream>> ReadTagsAsync(ITag tag) => inner.ReadTagsAsync(tag);
+        public Task<TagState> GetLatestTagAsync(ITag tag) => inner.GetLatestTagAsync(tag);
+        public Task<bool> TagExistsAsync(ITag tag) => inner.TagExistsAsync(tag);
+        public Task<long> GetEventCountAsync(SortableUniqueId? since = null) => inner.GetEventCountAsync(since);
+        public Task<IEnumerable<TagInfo>> GetAllTagsAsync(string? group = null) => inner.GetAllTagsAsync(group);
+        public Task<IEnumerable<SerializableEvent>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null) => inner.ReadAllSerializableEventsAsync(since);
+        public Task<IEnumerable<SerializableEvent>> ReadAllSerializableEventsAsync(SortableUniqueId? since, int? count) => inner.ReadAllSerializableEventsAsync(since, count);
+        public Task<SerializableEvent?> ReadSerializableEventAsync(Guid id) => inner.ReadSerializableEventAsync(id);
+        public Task<IEnumerable<SerializableEvent>> ReadSerializableEventsByTagAsync(ITag tag, SortableUniqueId? since = null) => inner.ReadSerializableEventsByTagAsync(tag, since);
+        public Task<string> GetLatestSortableUniqueIdAsync() => inner.GetLatestSortableUniqueIdAsync();
     }
 
     [Fact]
@@ -317,7 +318,7 @@ public class TwoClusterPostgresProductTests : IAsyncLifetime
         var a = await execA.ExecuteAsync(new G22UpsertCommand(id, "A"));
         Assert.True(a.IsSuccess, a.IsSuccess ? string.Empty : a.GetException().ToString());
 
-        var durable = (await eventStore.ReadSerializableEventsByTagAsync(tag)).GetValue().ToList();
+        var durable = (await eventStore.ReadSerializableEventsByTagAsync(tag).AsResultBoxAsync()).GetValue().ToList();
         Assert.Equal(2, durable.Count);
 
         // Deterministic convergence: clear both cluster-local tag-state caches, then each folds the same two Postgres

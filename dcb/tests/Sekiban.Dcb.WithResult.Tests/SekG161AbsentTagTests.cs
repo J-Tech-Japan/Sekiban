@@ -3,6 +3,7 @@ using Dcb.Domain.Student;
 using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Tags;
 using CoreInMemoryEventStore = Sekiban.Dcb.Testing.InMemoryEventStore;
+using Sekiban.Dcb.TestSupport;
 
 namespace Sekiban.Dcb.Tests;
 
@@ -14,7 +15,7 @@ public class SekG161AbsentTagTests
         var domain = DomainType.GetDomainTypes();
         var store = new CoreInMemoryEventStore(domain.EventTypes);
         ITag tag = new StudentTag(Guid.NewGuid());
-        var result = await store.GetLatestTagAsync(tag);
+        var result = await store.GetLatestTagAsync(tag).AsResultBoxAsync();
         Assert.True(result.IsSuccess, result.IsSuccess ? null : result.GetException().Message);
         var state = result.GetValue();
         Assert.Equal(0, state.Version);
@@ -24,7 +25,7 @@ public class SekG161AbsentTagTests
         Assert.Equal(string.Empty, state.LastSortedUniqueId);
         Assert.Equal(tag.GetTagGroup(), state.TagGroup);
         Assert.Equal(tag.GetTag()[(tag.GetTagGroup().Length + 1)..], state.TagContent);
-        Assert.False((await store.TagExistsAsync(tag)).GetValue());
+        Assert.False((await store.TagExistsAsync(tag).AsResultBoxAsync()).GetValue());
     }
 
     [Fact]

@@ -8,6 +8,7 @@ using Sekiban.Dcb.Orleans.ServiceId;
 using Sekiban.Dcb.ServiceId;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
+using Sekiban.Dcb.Common;
 namespace Sekiban.Dcb.Orleans;
 
 /// <summary>
@@ -108,7 +109,7 @@ public class OrleansActorObjectAccessor : IActorObjectAccessor, IExecutorRuntime
             return false;
         }
 
-        var result = await _eventStore.TagExistsAsync(tag);
+        var result = await _eventStore.TagExistsAsync(tag).ToResultBoxAsync();
         return result.IsSuccess && result.GetValue();
     }
 

@@ -764,25 +764,28 @@ if (TemplateEnvironment.IsDevelopment(app.Environment.EnvironmentName))
             {
                 try
                 {
-                    var result = await eventStore.ReadAllEventsAsync();
-                    if (result.IsSuccess)
+                    List<Sekiban.Dcb.Events.Event> events;
+                    try
                     {
-                        var events = result.GetValue().ToList();
-                        return Results.Ok(
-                            new
-                            {
-                                totalEvents = events.Count,
-                                events = events.Select(e => new
-                                {
-                                    id = e.Id,
-                                    type = e.EventType,
-                                    sortableId = e.SortableUniqueIdValue,
-                                    tags = e.Tags
-                                })
-                            });
+                        events = (await eventStore.ReadAllEventsAsync()).ToList();
+                    }
+                    catch (Exception readError)
+                    {
+                        return ProjectionErrors.Map(readError, Results.BadRequest(new { error = readError.Message }));
                     }
 
-                    return ProjectionErrors.Map(result.GetException(), Results.BadRequest(new { error = result.GetException()?.Message }));
+                    return Results.Ok(
+                        new
+                        {
+                            totalEvents = events.Count,
+                            events = events.Select(e => new
+                            {
+                                id = e.Id,
+                                type = e.EventType,
+                                sortableId = e.SortableUniqueIdValue,
+                                tags = e.Tags
+                            })
+                        });
                 }
                 catch (Exception ex)
                 {

@@ -15,6 +15,7 @@ using Sekiban.Dcb.ServiceId;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Testing;
 using Xunit;
+using Sekiban.Dcb.TestSupport;
 
 namespace Sekiban.Dcb.MaterializedView.Tests;
 
@@ -151,7 +152,7 @@ public sealed class MvActivationEligibilityTests
                 Phase = ProjectionStatusPhases.CaughtUp,
                 LeaseExpiresAtUtc = now.AddMinutes(1)
             },
-            expectedSequence: 0);
+            expectedSequence: 0).AsResultBoxAsync();
         Assert.True(write.IsSuccess);
         var statusResult = await provider.GetRequiredService<IProjectionStatusReader>()
             .ReadAsync(new ProjectionStatusReadRequest(serviceId, "Weather", "2"));

@@ -26,6 +26,7 @@ using Sekiban.Dcb.Testing;
 using System.Text;
 using System.Text.Json;
 using Xunit;
+using Sekiban.Dcb.TestSupport;
 namespace Sekiban.Dcb.Orleans.Tests;
 
 /// <summary>
@@ -159,7 +160,7 @@ public class SimpleOrleansCommandQueryTests : IAsyncLifetime
 
         // Check events in the event store directly
         var testTag = new TestAggregateTag(aggregateId);
-        var eventsResult = await _eventStore.ReadEventsByTagAsync(testTag);
+        var eventsResult = await _eventStore.ReadEventsByTagAsync(testTag).AsResultBoxAsync();
         Assert.True(eventsResult.IsSuccess, "Failed to read events from store");
         var events = eventsResult.GetValue().ToList();
 

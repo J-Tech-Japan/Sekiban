@@ -2,7 +2,6 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using Npgsql;
 using NpgsqlTypes;
-using ResultBoxes;
 using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Events;
@@ -68,7 +67,7 @@ public class PostgresEventStore : IHotEventStore, ISerializableEventStreamReader
     ///     and the retrying execution strategy it uses are untouched; the conditional path uses a plain transaction
     ///     because a 23505 is a genuine conflict, not a transient to retry.
     /// </summary>
-    public Task<ResultBox<ConditionalAppendReceipt>> AppendIfUniqueAsync(
+    public Task<ConditionalAppendReceipt> AppendIfUniqueAsync(
         ConditionalAppendRequest request,
         CancellationToken cancellationToken = default) =>
         _conditionalAppend.AppendIfUniqueAsync(request, cancellationToken);
@@ -93,16 +92,12 @@ public class PostgresEventStore : IHotEventStore, ISerializableEventStreamReader
         {
             // This is intentionally the same private seam used by both ordinary batch writers. A successful conditional
             // claim can therefore never be a tagged event invisible to the durable head protocol.
-            var result = await WriteSerializableBatchThroughCanonicalHeadSeamAsync(
+            (await WriteSerializableBatchThroughCanonicalHeadSeamAsync(
                 [claimEvent],
                 specification: null,
                 writer: TagHeadWriter.ConditionalClaim,
                 useExecutionStrategy: false,
-                cancellationToken);
-            if (!result.IsSuccess)
-            {
-                throw result.GetException();
-            }
+                cancellationToken)).GetValueOrThrow();
 
             // The claim is now durably committed. A failure past this point is a LOST RESPONSE, not a failed write: signal
             // it as the post-commit ambiguity marker so the shared orchestrator resolves it authoritatively rather than
@@ -141,15 +136,17 @@ public class PostgresEventStore : IHotEventStore, ISerializableEventStreamReader
             return null;
         }
 
-        var tags = JsonSerializer.Deserialize<List<string>>(dbEvent.Tags) ?? new List<string>();
-        return new SerializableEvent(
+        return ToSerializableEvent(dbEvent);
+    }
+
+    private static SerializableEvent ToSerializableEvent(DbEvent dbEvent) =>
+        new(
             Encoding.UTF8.GetBytes(dbEvent.Payload),
             dbEvent.SortableUniqueId,
             dbEvent.Id,
             new EventMetadata(dbEvent.CausationId ?? "", dbEvent.CorrelationId ?? "", dbEvent.ExecutedUser ?? ""),
-            tags,
+            JsonSerializer.Deserialize<List<string>>(dbEvent.Tags) ?? new List<string>(),
             dbEvent.EventType);
-    }
 
     private readonly IDbContextFactory<SekibanDcbDbContext> _contextFactory;
     private readonly IEventTypes _eventTypes;
@@ -175,414 +172,257 @@ public class PostgresEventStore : IHotEventStore, ISerializableEventStreamReader
 
     public string? ExpectedTagPositionServiceId => CurrentServiceId;
 
-    public async Task<ResultBox<IEnumerable<Event>>> ReadAllEventsAsync(SortableUniqueId? since = null, int? maxCount = null)
+    public async Task<IEnumerable<Event>> ReadAllEventsAsync(SortableUniqueId? since = null, int? maxCount = null)
     {
-        try
-        {
-            await using var context = await _contextFactory.CreateDbContextAsync();
-            var serviceId = CurrentServiceId;
-
-            var query = context.Events.AsQueryable().Where(e => e.ServiceId == serviceId);
-
-            if (since != null)
-            {
-                query = query.Where(e => string.Compare(e.SortableUniqueId, since.Value) > 0);
-            }
-
-            var orderedQuery = query.OrderBy(e => e.SortableUniqueId);
-            var limitedQuery = maxCount.HasValue
-                ? orderedQuery.Take(maxCount.Value)
-                : orderedQuery;
-
-            var dbEvents = await limitedQuery.ToListAsync();
-
-            var events = new List<Event>();
-            foreach (var dbEvent in dbEvents)
-            {
-                var payloadResult = DeserializeEventPayload(dbEvent.EventType, dbEvent.Payload);
-                if (!payloadResult.IsSuccess)
-                {
-                    return ResultBox.Error<IEnumerable<Event>>(payloadResult.GetException());
-                }
-
-                events.Add(dbEvent.ToEvent(payloadResult.GetValue()));
-            }
-
-            return ResultBox.FromValue<IEnumerable<Event>>(events);
-        }
-        catch (Exception ex)
-        {
-            return ResultBox.Error<IEnumerable<Event>>(ex);
-        }
+        await using var context = await _contextFactory.CreateDbContextAsync();
+        var dbEvents = await QueryAllEvents(context, since, maxCount).ToListAsync();
+        return ToEvents(dbEvents);
     }
 
-    public async Task<ResultBox<IEnumerable<Event>>> ReadEventsByTagAsync(ITag tag, SortableUniqueId? since = null)
+    public async Task<IEnumerable<Event>> ReadEventsByTagAsync(ITag tag, SortableUniqueId? since = null)
     {
-        try
-        {
-            await using var context = await _contextFactory.CreateDbContextAsync();
-            var serviceId = CurrentServiceId;
-
-            var tagString = tag.GetTag();
-
-            // Query via dcb_tags table (indexed) instead of dcb_events.Tags jsonb scan
-            var tagQuery = context.Tags.Where(t =>
-                t.ServiceId == serviceId && t.Tag == tagString);
-
-            if (since != null)
-            {
-                var sinceValue = since.Value;
-                tagQuery = tagQuery.Where(t => string.Compare(t.SortableUniqueId, sinceValue) > 0);
-            }
-
-            var dbEvents = await tagQuery
-                .OrderBy(t => t.SortableUniqueId)
-                .Join(
-                    context.Events,
-                    t => new { t.ServiceId, EventId = t.EventId },
-                    e => new { e.ServiceId, EventId = e.Id },
-                    (t, e) => e)
-                .ToListAsync();
-
-            var events = new List<Event>();
-            foreach (var dbEvent in dbEvents)
-            {
-                var payloadResult = DeserializeEventPayload(dbEvent.EventType, dbEvent.Payload);
-                if (!payloadResult.IsSuccess)
-                {
-                    return ResultBox.Error<IEnumerable<Event>>(payloadResult.GetException());
-                }
-
-                events.Add(dbEvent.ToEvent(payloadResult.GetValue()));
-            }
-
-            return ResultBox.FromValue<IEnumerable<Event>>(events);
-        }
-        catch (Exception ex)
-        {
-            return ResultBox.Error<IEnumerable<Event>>(ex);
-        }
+        await using var context = await _contextFactory.CreateDbContextAsync();
+        var dbEvents = await QueryEventsByTag(context, tag, since).ToListAsync();
+        return ToEvents(dbEvents);
     }
 
-    public async Task<ResultBox<Event>> ReadEventAsync(Guid eventId)
+    /// <summary>Returns the event, or <c>null</c> when no event with <paramref name="eventId" /> exists.</summary>
+    public async Task<Event?> ReadEventAsync(Guid eventId)
     {
-        try
-        {
-            await using var context = await _contextFactory.CreateDbContextAsync();
-            var serviceId = CurrentServiceId;
-
-            var dbEvent = await context.Events.FirstOrDefaultAsync(e =>
-                e.ServiceId == serviceId &&
-                e.Id == eventId);
-
-            if (dbEvent == null)
-            {
-                return ResultBox.Error<Event>(new Exception($"Event with ID {eventId} not found"));
-            }
-
-            var payloadResult = DeserializeEventPayload(dbEvent.EventType, dbEvent.Payload);
-            if (!payloadResult.IsSuccess)
-            {
-                return ResultBox.Error<Event>(payloadResult.GetException());
-            }
-
-            return ResultBox.FromValue(dbEvent.ToEvent(payloadResult.GetValue()));
-        }
-        catch (Exception ex)
-        {
-            return ResultBox.Error<Event>(ex);
-        }
+        await using var context = await _contextFactory.CreateDbContextAsync();
+        var dbEvent = await FindEventAsync(context, eventId);
+        return dbEvent is null ? null : dbEvent.ToEvent(DeserializeEventPayload(dbEvent.EventType, dbEvent.Payload));
     }
 
-    public async Task<ResultBox<(IReadOnlyList<Event> Events, IReadOnlyList<TagWriteResult> TagWrites)>>
+    public async Task<(IReadOnlyList<Event> Events, IReadOnlyList<TagWriteResult> TagWrites)>
         WriteEventsAsync(IEnumerable<Event> events)
     {
+        List<Event> typedEvents;
+        CanonicalHeadSeamOutcome write;
         try
         {
-            var typedEvents = events.ToList();
+            typedEvents = events.ToList();
             var serializableEvents = typedEvents
                 .Select(ev => ev.ToSerializableEvent(_eventTypes))
                 .ToList();
-            var write = await WriteSerializableBatchThroughCanonicalHeadSeamAsync(
+            write = await WriteSerializableBatchThroughCanonicalHeadSeamAsync(
                 serializableEvents,
                 specification: null,
                 writer: TagHeadWriter.TypedBatch,
                 useExecutionStrategy: true,
                 CancellationToken.None);
-            if (!write.IsSuccess)
-            {
-                return ResultBox.Error<(IReadOnlyList<Event> Events, IReadOnlyList<TagWriteResult> TagWrites)>(
-                    write.GetException());
-            }
-
-            return ResultBox.FromValue(
-                (Events: (IReadOnlyList<Event>)typedEvents,
-                    TagWrites: write.GetValue().TagWrites));
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "WriteEventsAsync failed");
-            return ResultBox.Error<(IReadOnlyList<Event> Events, IReadOnlyList<TagWriteResult> TagWrites)>(ex);
+            throw;
         }
+
+        return (Events: typedEvents, TagWrites: write.GetValueOrThrow().TagWrites);
     }
 
-    public async Task<ResultBox<IEnumerable<TagStream>>> ReadTagsAsync(ITag tag)
+    public async Task<IEnumerable<TagStream>> ReadTagsAsync(ITag tag)
     {
-        try
+        await using var context = await _contextFactory.CreateDbContextAsync();
+        var serviceId = CurrentServiceId;
+
+        var tagString = tag.GetTag();
+
+        // Get all tag entries for this tag
+        var tags = await context.Tags
+            .Where(t => t.ServiceId == serviceId && t.Tag == tagString)
+            .OrderBy(t => t.SortableUniqueId)
+            .ToListAsync();
+
+        var tagStreams = new List<TagStream>();
+        foreach (var dbTag in tags)
         {
-            await using var context = await _contextFactory.CreateDbContextAsync();
-            var serviceId = CurrentServiceId;
+            tagStreams.Add(new TagStream(dbTag.Tag, dbTag.EventId, dbTag.SortableUniqueId));
+        }
 
-            var tagString = tag.GetTag();
+        return tagStreams;
+    }
 
-            // Get all tag entries for this tag
-            var tags = await context.Tags
-                .Where(t => t.ServiceId == serviceId && t.Tag == tagString)
-                .OrderBy(t => t.SortableUniqueId)
-                .ToListAsync();
+    public async Task<TagState> GetLatestTagAsync(ITag tag)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync();
+        var serviceId = CurrentServiceId;
 
-            var tagStreams = new List<TagStream>();
-            foreach (var dbTag in tags)
+        var tagString = tag.GetTag();
+        var tagGroup = tag.GetTagGroup();
+        var tagContent = tagString.Substring(tagGroup.Length + 1);
+
+        // Get the latest tag entry
+        var dbTag = await context
+            .Tags
+            .Where(t => t.ServiceId == serviceId && t.Tag == tagString)
+            .OrderByDescending(t => t.SortableUniqueId)
+            .FirstOrDefaultAsync();
+
+        // No row: an empty tag state. Otherwise a simple tag state with just the latest sortable unique ID; the
+        // actual state would be computed by projectors.
+        return new TagState(
+            new EmptyTagStatePayload(),
+            0,
+            dbTag?.SortableUniqueId ?? string.Empty,
+            tagGroup,
+            tagContent,
+            string.Empty,
+            string.Empty);
+    }
+
+    public async Task<bool> TagExistsAsync(ITag tag)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync();
+        var serviceId = CurrentServiceId;
+
+        var tagString = tag.GetTag();
+        return await context.Tags.AnyAsync(t => t.ServiceId == serviceId && t.Tag == tagString);
+    }
+
+    public async Task<long> GetEventCountAsync(SortableUniqueId? since = null)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync();
+        var serviceId = CurrentServiceId;
+
+        var query = context.Events.AsQueryable().Where(e => e.ServiceId == serviceId);
+        if (since != null)
+        {
+            query = query.Where(e => string.Compare(e.SortableUniqueId, since.Value) > 0);
+        }
+
+        return await query.LongCountAsync();
+    }
+
+    public async Task<string> GetLatestSortableUniqueIdAsync()
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync();
+        var serviceId = CurrentServiceId;
+
+        var latest = await context.Events
+            .Where(e => e.ServiceId == serviceId)
+            .OrderByDescending(e => e.SortableUniqueId)
+            .Select(e => e.SortableUniqueId)
+            .FirstOrDefaultAsync();
+
+        return latest ?? string.Empty;
+    }
+
+    public async Task<IEnumerable<TagInfo>> GetAllTagsAsync(string? tagGroup = null)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync();
+        var serviceId = CurrentServiceId;
+
+        var query = context.Tags.AsQueryable().Where(t => t.ServiceId == serviceId);
+        if (!string.IsNullOrEmpty(tagGroup))
+        {
+            query = query.Where(t => t.TagGroup == tagGroup);
+        }
+
+        // Group by tag and get aggregated info
+        var tagInfos = await query
+            .GroupBy(t => new { t.Tag, t.TagGroup })
+            .Select(g => new
             {
-                tagStreams.Add(new TagStream(dbTag.Tag, dbTag.EventId, dbTag.SortableUniqueId));
-            }
+                g.Key.Tag,
+                g.Key.TagGroup,
+                EventCount = g.Count(),
+                FirstSortableUniqueId = g.Min(t => t.SortableUniqueId),
+                LastSortableUniqueId = g.Max(t => t.SortableUniqueId),
+                FirstEventAt = g.Min(t => t.CreatedAt),
+                LastEventAt = g.Max(t => t.CreatedAt)
+            })
+            .OrderBy(t => t.TagGroup)
+            .ThenBy(t => t.Tag)
+            .ToListAsync();
 
-            return ResultBox.FromValue<IEnumerable<TagStream>>(tagStreams);
-        }
-        catch (Exception ex)
-        {
-            return ResultBox.Error<IEnumerable<TagStream>>(ex);
-        }
+        return tagInfos.Select(t => new TagInfo(
+            t.Tag,
+            t.TagGroup,
+            t.EventCount,
+            t.FirstSortableUniqueId,
+            t.LastSortableUniqueId,
+            t.FirstEventAt,
+            t.LastEventAt));
     }
 
-    public async Task<ResultBox<TagState>> GetLatestTagAsync(ITag tag)
-    {
-        try
-        {
-            await using var context = await _contextFactory.CreateDbContextAsync();
-            var serviceId = CurrentServiceId;
-
-            var tagString = tag.GetTag();
-            var tagGroup = tag.GetTagGroup();
-            var tagContent = tagString.Substring(tagGroup.Length + 1);
-
-            // Get the latest tag entry
-            var dbTag = await context
-                .Tags
-                .Where(t => t.ServiceId == serviceId && t.Tag == tagString)
-                .OrderByDescending(t => t.SortableUniqueId)
-                .FirstOrDefaultAsync();
-
-            if (dbTag == null)
-            {
-                // Return empty tag state
-                return ResultBox.FromValue(
-                    new TagState(
-                        new EmptyTagStatePayload(),
-                        0,
-                        string.Empty,
-                        tagGroup,
-                        tagContent,
-                        string.Empty,
-                        string.Empty));
-            }
-
-            // Return a simple tag state with just the latest sortable unique ID
-            // The actual state would be computed by projectors
-            return ResultBox.FromValue(
-                new TagState(
-                    new EmptyTagStatePayload(),
-                    0,
-                    dbTag.SortableUniqueId,
-                    tagGroup,
-                    tagContent,
-                    string.Empty,
-                    string.Empty));
-        }
-        catch (Exception ex)
-        {
-            return ResultBox.Error<TagState>(ex);
-        }
-    }
-
-    public async Task<ResultBox<bool>> TagExistsAsync(ITag tag)
-    {
-        try
-        {
-            await using var context = await _contextFactory.CreateDbContextAsync();
-            var serviceId = CurrentServiceId;
-
-            var tagString = tag.GetTag();
-            var exists = await context.Tags.AnyAsync(t => t.ServiceId == serviceId && t.Tag == tagString);
-
-            return ResultBox.FromValue(exists);
-        }
-        catch (Exception ex)
-        {
-            return ResultBox.Error<bool>(ex);
-        }
-    }
-
-    public async Task<ResultBox<long>> GetEventCountAsync(SortableUniqueId? since = null)
-    {
-        try
-        {
-            await using var context = await _contextFactory.CreateDbContextAsync();
-            var serviceId = CurrentServiceId;
-
-            var query = context.Events.AsQueryable().Where(e => e.ServiceId == serviceId);
-            if (since != null)
-            {
-                query = query.Where(e => string.Compare(e.SortableUniqueId, since.Value) > 0);
-            }
-
-            var count = await query.LongCountAsync();
-            return ResultBox.FromValue(count);
-        }
-        catch (Exception ex)
-        {
-            return ResultBox.Error<long>(ex);
-        }
-    }
-
-    public async Task<ResultBox<string>> GetLatestSortableUniqueIdAsync()
-    {
-        try
-        {
-            await using var context = await _contextFactory.CreateDbContextAsync();
-            var serviceId = CurrentServiceId;
-
-            var latest = await context.Events
-                .Where(e => e.ServiceId == serviceId)
-                .OrderByDescending(e => e.SortableUniqueId)
-                .Select(e => e.SortableUniqueId)
-                .FirstOrDefaultAsync();
-
-            return ResultBox.FromValue(latest ?? string.Empty);
-        }
-        catch (Exception ex)
-        {
-            return ResultBox.Error<string>(ex);
-        }
-    }
-
-    public async Task<ResultBox<IEnumerable<TagInfo>>> GetAllTagsAsync(string? tagGroup = null)
-    {
-        try
-        {
-            await using var context = await _contextFactory.CreateDbContextAsync();
-            var serviceId = CurrentServiceId;
-
-            var query = context.Tags.AsQueryable().Where(t => t.ServiceId == serviceId);
-            if (!string.IsNullOrEmpty(tagGroup))
-            {
-                query = query.Where(t => t.TagGroup == tagGroup);
-            }
-
-            // Group by tag and get aggregated info
-            var tagInfos = await query
-                .GroupBy(t => new { t.Tag, t.TagGroup })
-                .Select(g => new
-                {
-                    g.Key.Tag,
-                    g.Key.TagGroup,
-                    EventCount = g.Count(),
-                    FirstSortableUniqueId = g.Min(t => t.SortableUniqueId),
-                    LastSortableUniqueId = g.Max(t => t.SortableUniqueId),
-                    FirstEventAt = g.Min(t => t.CreatedAt),
-                    LastEventAt = g.Max(t => t.CreatedAt)
-                })
-                .OrderBy(t => t.TagGroup)
-                .ThenBy(t => t.Tag)
-                .ToListAsync();
-
-            var result = tagInfos.Select(t => new TagInfo(
-                t.Tag,
-                t.TagGroup,
-                t.EventCount,
-                t.FirstSortableUniqueId,
-                t.LastSortableUniqueId,
-                t.FirstEventAt,
-                t.LastEventAt));
-
-            return ResultBox.FromValue(result.AsEnumerable());
-        }
-        catch (Exception ex)
-        {
-            return ResultBox.Error<IEnumerable<TagInfo>>(ex);
-        }
-    }
-
-    public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null)
+    public Task<IEnumerable<SerializableEvent>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null)
         => ReadAllSerializableEventsAsync(since, maxCount: null);
 
-    public async Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(
+    public async Task<IEnumerable<SerializableEvent>> ReadAllSerializableEventsAsync(
         SortableUniqueId? since,
         int? maxCount)
     {
-        try
-        {
-            await using var context = await _contextFactory.CreateDbContextAsync();
-            var serviceId = CurrentServiceId;
-
-            var query = context.Events.AsQueryable().Where(e => e.ServiceId == serviceId);
-
-            if (since != null)
-            {
-                query = query.Where(e => string.Compare(e.SortableUniqueId, since.Value) > 0);
-            }
-
-            var orderedQuery = query.OrderBy(e => e.SortableUniqueId);
-            var limitedQuery = maxCount.HasValue
-                ? orderedQuery.Take(maxCount.Value)
-                : orderedQuery;
-
-            var dbEvents = await limitedQuery.ToListAsync();
-
-            var events = dbEvents.Select(dbEvent => new SerializableEvent(
-                Encoding.UTF8.GetBytes(dbEvent.Payload),
-                dbEvent.SortableUniqueId,
-                dbEvent.Id,
-                new EventMetadata(dbEvent.CausationId ?? "", dbEvent.CorrelationId ?? "", dbEvent.ExecutedUser ?? ""),
-                JsonSerializer.Deserialize<List<string>>(dbEvent.Tags) ?? new List<string>(),
-                dbEvent.EventType));
-
-            return ResultBox.FromValue<IEnumerable<SerializableEvent>>(events);
-        }
-        catch (Exception ex)
-        {
-            return ResultBox.Error<IEnumerable<SerializableEvent>>(ex);
-        }
+        await using var context = await _contextFactory.CreateDbContextAsync();
+        var dbEvents = await QueryAllEvents(context, since, maxCount).ToListAsync();
+        return dbEvents.Select(ToSerializableEvent);
     }
 
-    public async Task<ResultBox<SerializableEvent>> ReadSerializableEventAsync(Guid eventId)
+    /// <summary>Returns the event, or <c>null</c> when no event with <paramref name="eventId" /> exists.</summary>
+    public async Task<SerializableEvent?> ReadSerializableEventAsync(Guid eventId)
     {
-        try
+        await using var context = await _contextFactory.CreateDbContextAsync();
+        var dbEvent = await FindEventAsync(context, eventId);
+        return dbEvent is null ? null : ToSerializableEvent(dbEvent);
+    }
+
+    private IQueryable<DbEvent> QueryAllEvents(SekibanDcbDbContext context, SortableUniqueId? since, int? maxCount)
+    {
+        var serviceId = CurrentServiceId;
+        var query = context.Events.AsQueryable().Where(e => e.ServiceId == serviceId);
+
+        if (since != null)
         {
-            await using var context = await _contextFactory.CreateDbContextAsync();
-            var serviceId = CurrentServiceId;
-
-            var dbEvent = await context.Events.FirstOrDefaultAsync(e =>
-                e.ServiceId == serviceId &&
-                e.Id == eventId);
-
-            if (dbEvent == null)
-            {
-                return ResultBox.Error<SerializableEvent>(new Exception($"Event with ID {eventId} not found"));
-            }
-
-            return ResultBox.FromValue(new SerializableEvent(
-                Encoding.UTF8.GetBytes(dbEvent.Payload),
-                dbEvent.SortableUniqueId,
-                dbEvent.Id,
-                new EventMetadata(dbEvent.CausationId ?? "", dbEvent.CorrelationId ?? "", dbEvent.ExecutedUser ?? ""),
-                JsonSerializer.Deserialize<List<string>>(dbEvent.Tags) ?? new List<string>(),
-                dbEvent.EventType));
+            query = query.Where(e => string.Compare(e.SortableUniqueId, since.Value) > 0);
         }
-        catch (Exception ex)
+
+        var orderedQuery = query.OrderBy(e => e.SortableUniqueId);
+        return maxCount.HasValue
+            ? orderedQuery.Take(maxCount.Value)
+            : orderedQuery;
+    }
+
+    private IQueryable<DbEvent> QueryEventsByTag(SekibanDcbDbContext context, ITag tag, SortableUniqueId? since)
+    {
+        var serviceId = CurrentServiceId;
+        var tagString = tag.GetTag();
+
+        // Query via dcb_tags table (indexed) instead of dcb_events.Tags jsonb scan
+        var tagQuery = context.Tags.Where(t =>
+            t.ServiceId == serviceId && t.Tag == tagString);
+
+        if (since != null)
         {
-            return ResultBox.Error<SerializableEvent>(ex);
+            var sinceValue = since.Value;
+            tagQuery = tagQuery.Where(t => string.Compare(t.SortableUniqueId, sinceValue) > 0);
         }
+
+        return tagQuery
+            .OrderBy(t => t.SortableUniqueId)
+            .Join(
+                context.Events,
+                t => new { t.ServiceId, EventId = t.EventId },
+                e => new { e.ServiceId, EventId = e.Id },
+                (t, e) => e);
+    }
+
+    private Task<DbEvent?> FindEventAsync(SekibanDcbDbContext context, Guid eventId)
+    {
+        var serviceId = CurrentServiceId;
+        return context.Events.FirstOrDefaultAsync(e =>
+            e.ServiceId == serviceId &&
+            e.Id == eventId);
+    }
+
+    private List<Event> ToEvents(List<DbEvent> dbEvents)
+    {
+        var events = new List<Event>(dbEvents.Count);
+        foreach (var dbEvent in dbEvents)
+        {
+            events.Add(dbEvent.ToEvent(DeserializeEventPayload(dbEvent.EventType, dbEvent.Payload)));
+        }
+
+        return events;
     }
 
     public async IAsyncEnumerable<SerializableEvent> StreamAllSerializableEventsAsync(
@@ -609,213 +449,157 @@ public class PostgresEventStore : IHotEventStore, ISerializableEventStreamReader
 
         await foreach (var dbEvent in limitedQuery.AsAsyncEnumerable().WithCancellation(ct))
         {
-            yield return new SerializableEvent(
-                Encoding.UTF8.GetBytes(dbEvent.Payload),
-                dbEvent.SortableUniqueId,
-                dbEvent.Id,
-                new EventMetadata(dbEvent.CausationId ?? "", dbEvent.CorrelationId ?? "", dbEvent.ExecutedUser ?? ""),
-                JsonSerializer.Deserialize<List<string>>(dbEvent.Tags) ?? new List<string>(),
-                dbEvent.EventType);
+            yield return ToSerializableEvent(dbEvent);
         }
     }
 
-    public async Task<ResultBox<IEnumerable<SerializableEvent>>> ReadSerializableEventsByTagAsync(ITag tag, SortableUniqueId? since = null)
+    public async Task<IEnumerable<SerializableEvent>> ReadSerializableEventsByTagAsync(ITag tag, SortableUniqueId? since = null)
     {
-        try
-        {
-            await using var context = await _contextFactory.CreateDbContextAsync();
-            var serviceId = CurrentServiceId;
-
-            var tagString = tag.GetTag();
-
-            // Query via dcb_tags table (indexed) instead of dcb_events.Tags jsonb scan
-            var tagQuery = context.Tags.Where(t =>
-                t.ServiceId == serviceId && t.Tag == tagString);
-
-            if (since != null)
-            {
-                var sinceValue = since.Value;
-                tagQuery = tagQuery.Where(t => string.Compare(t.SortableUniqueId, sinceValue) > 0);
-            }
-
-            var dbEvents = await tagQuery
-                .OrderBy(t => t.SortableUniqueId)
-                .Join(
-                    context.Events,
-                    t => new { t.ServiceId, EventId = t.EventId },
-                    e => new { e.ServiceId, EventId = e.Id },
-                    (t, e) => e)
-                .ToListAsync();
-
-            var events = dbEvents.Select(dbEvent => new SerializableEvent(
-                Encoding.UTF8.GetBytes(dbEvent.Payload),
-                dbEvent.SortableUniqueId,
-                dbEvent.Id,
-                new EventMetadata(dbEvent.CausationId ?? "", dbEvent.CorrelationId ?? "", dbEvent.ExecutedUser ?? ""),
-                JsonSerializer.Deserialize<List<string>>(dbEvent.Tags) ?? new List<string>(),
-                dbEvent.EventType));
-
-            return ResultBox.FromValue<IEnumerable<SerializableEvent>>(events);
-        }
-        catch (Exception ex)
-        {
-            return ResultBox.Error<IEnumerable<SerializableEvent>>(ex);
-        }
+        await using var context = await _contextFactory.CreateDbContextAsync();
+        var dbEvents = await QueryEventsByTag(context, tag, since).ToListAsync();
+        return dbEvents.Select(ToSerializableEvent);
     }
 
     /// <summary>
     ///     Streams a single tag without materializing the tagged history. The context remains alive until the callback
     ///     finishes, and both bounds are retained in the database query.
     /// </summary>
-    public async Task<ResultBox<SerializableEventStreamReadResult>> StreamSerializableEventsByTagAsync(
+    public async Task<SerializableEventStreamReadResult> StreamSerializableEventsByTagAsync(
         ITag tag,
         SortableUniqueId? since,
         SortableUniqueId? until,
         Func<SerializableEvent, ValueTask> onEvent,
         CancellationToken cancellationToken = default)
     {
-        try
+        cancellationToken.ThrowIfCancellationRequested();
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var serviceId = CurrentServiceId;
+        var tagString = tag.GetTag();
+
+        var tagQuery = context.Tags
+            .AsNoTracking()
+            .Where(t => t.ServiceId == serviceId && t.Tag == tagString);
+
+        if (since != null)
         {
+            var sinceValue = since.Value;
+            tagQuery = tagQuery.Where(t => string.Compare(t.SortableUniqueId, sinceValue) > 0);
+        }
+
+        if (until != null)
+        {
+            var untilValue = until.Value;
+            tagQuery = tagQuery.Where(t => string.Compare(t.SortableUniqueId, untilValue) <= 0);
+        }
+
+        var query = tagQuery
+            .Join(
+                context.Events.AsNoTracking(),
+                t => new { t.ServiceId, EventId = t.EventId },
+                e => new { e.ServiceId, EventId = e.Id },
+                (t, e) => new { Tag = t, Event = e })
+            .OrderBy(row => row.Tag.SortableUniqueId)
+            .Select(row => row.Event);
+
+        var count = 0;
+        string? lastSortableUniqueId = null;
+        await using var enumerator = query.AsAsyncEnumerable().GetAsyncEnumerator(cancellationToken);
+        while (true)
+        {
+            if (BeforeTaggedStreamReaderReadHook is not null)
+            {
+                await BeforeTaggedStreamReaderReadHook();
+            }
+
+            if (!await enumerator.MoveNextAsync())
+            {
+                break;
+            }
+
+            if (AfterTaggedStreamReaderReadHook is not null)
+            {
+                await AfterTaggedStreamReaderReadHook();
+            }
+
             cancellationToken.ThrowIfCancellationRequested();
-            await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-            var serviceId = CurrentServiceId;
-            var tagString = tag.GetTag();
-
-            var tagQuery = context.Tags
-                .AsNoTracking()
-                .Where(t => t.ServiceId == serviceId && t.Tag == tagString);
-
-            if (since != null)
-            {
-                var sinceValue = since.Value;
-                tagQuery = tagQuery.Where(t => string.Compare(t.SortableUniqueId, sinceValue) > 0);
-            }
-
-            if (until != null)
-            {
-                var untilValue = until.Value;
-                tagQuery = tagQuery.Where(t => string.Compare(t.SortableUniqueId, untilValue) <= 0);
-            }
-
-            var query = tagQuery
-                .Join(
-                    context.Events.AsNoTracking(),
-                    t => new { t.ServiceId, EventId = t.EventId },
-                    e => new { e.ServiceId, EventId = e.Id },
-                    (t, e) => new { Tag = t, Event = e })
-                .OrderBy(row => row.Tag.SortableUniqueId)
-                .Select(row => row.Event);
-
-            var count = 0;
-            string? lastSortableUniqueId = null;
-            await using var enumerator = query.AsAsyncEnumerable().GetAsyncEnumerator(cancellationToken);
-            while (true)
-            {
-                if (BeforeTaggedStreamReaderReadHook is not null)
-                {
-                    await BeforeTaggedStreamReaderReadHook();
-                }
-
-                if (!await enumerator.MoveNextAsync())
-                {
-                    break;
-                }
-
-                if (AfterTaggedStreamReaderReadHook is not null)
-                {
-                    await AfterTaggedStreamReaderReadHook();
-                }
-
-                cancellationToken.ThrowIfCancellationRequested();
-                var dbEvent = enumerator.Current;
-                await onEvent(new SerializableEvent(
-                    Encoding.UTF8.GetBytes(dbEvent.Payload),
-                    dbEvent.SortableUniqueId,
-                    dbEvent.Id,
-                    new EventMetadata(dbEvent.CausationId ?? "", dbEvent.CorrelationId ?? "", dbEvent.ExecutedUser ?? ""),
-                    JsonSerializer.Deserialize<List<string>>(dbEvent.Tags) ?? new List<string>(),
-                    dbEvent.EventType));
-                cancellationToken.ThrowIfCancellationRequested();
-                count++;
-                lastSortableUniqueId = dbEvent.SortableUniqueId;
-            }
-
-            return ResultBox.FromValue(new SerializableEventStreamReadResult(count, lastSortableUniqueId));
+            var dbEvent = enumerator.Current;
+            await onEvent(ToSerializableEvent(dbEvent));
+            cancellationToken.ThrowIfCancellationRequested();
+            count++;
+            lastSortableUniqueId = dbEvent.SortableUniqueId;
         }
-        catch (OperationCanceledException)
-        {
-            throw;
-        }
-        catch (Exception ex)
-        {
-            return ResultBox.Error<SerializableEventStreamReadResult>(ex);
-        }
+
+        return new SerializableEventStreamReadResult(count, lastSortableUniqueId);
     }
 
-    public async Task<ResultBox<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>>
+    public async Task<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>
         WriteSerializableEventsAsync(IEnumerable<SerializableEvent> events)
     {
+        CanonicalHeadSeamOutcome write;
         try
         {
-            var write = await WriteSerializableBatchThroughCanonicalHeadSeamAsync(
+            write = await WriteSerializableBatchThroughCanonicalHeadSeamAsync(
                 events.ToList(),
                 specification: null,
                 writer: TagHeadWriter.SerializedBatch,
                 useExecutionStrategy: true,
                 CancellationToken.None);
-            return !write.IsSuccess
-                ? ResultBox.Error<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>(
-                    write.GetException())
-                : ResultBox.FromValue((write.GetValue().Events, write.GetValue().TagWrites));
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "WriteSerializableEventsAsync failed");
-            return ResultBox.Error<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>(ex);
+            throw;
         }
+
+        var result = write.GetValueOrThrow();
+        return (result.Events, result.TagWrites);
     }
 
     /// <inheritdoc />
-    public async Task<ResultBox<bool>> EnsureExpectedTagPositionEnforcementEnabledAsync(
+    public async Task<bool> EnsureExpectedTagPositionEnforcementEnabledAsync(
         CancellationToken cancellationToken = default)
     {
-        try
+        // Deliberately no fallback DDL or schema creation: an unprovisioned runtime must fail closed (normally 42P01).
+        var serviceId = CurrentServiceId;
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var enabled = await context.TagHeadEnablementEpochs.AsNoTracking()
+            .AnyAsync(epoch => epoch.ServiceId == serviceId, cancellationToken);
+        if (!enabled)
         {
-            var serviceId = CurrentServiceId;
-            await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-            var enabled = await context.TagHeadEnablementEpochs.AsNoTracking()
-                .AnyAsync(epoch => epoch.ServiceId == serviceId, cancellationToken);
-            return enabled
-                ? ResultBox.FromValue(true)
-                : ResultBox.Error<bool>(new TagHeadEnforcementNotEnabledException(serviceId));
+            throw new TagHeadEnforcementNotEnabledException(serviceId);
         }
-        catch (Exception ex)
-        {
-            // Deliberately no fallback DDL or schema creation: an unprovisioned runtime must fail closed (normally 42P01).
-            return ResultBox.Error<bool>(ex);
-        }
+
+        return true;
     }
 
     /// <inheritdoc />
-    public async Task<ResultBox<ExpectedTagPositionWriteResult>> WriteSerializableEventsWithExpectedTagPositionsAsync(
+    public async Task<ExpectedTagPositionWriteResult> WriteSerializableEventsWithExpectedTagPositionsAsync(
         IReadOnlyList<SerializableEvent> events,
         ExpectedTagPositionSpecification specification,
         CancellationToken cancellationToken = default)
     {
+        // Logged here: request validation and seam exceptions. A not-enabled service and a seam-decided conflict are
+        // the caller's typed outcomes and are thrown without an error log.
+        CanonicalHeadSeamOutcome write;
         try
         {
             ArgumentNullException.ThrowIfNull(specification);
             specification.ValidateEntryShapes(CurrentServiceId);
-            if (specification.RequiresEnforcement)
-            {
-                var enabled = await EnsureExpectedTagPositionEnforcementEnabledAsync(cancellationToken);
-                if (!enabled.IsSuccess)
-                {
-                    return ResultBox.Error<ExpectedTagPositionWriteResult>(enabled.GetException());
-                }
-            }
+        }
+        catch (Exception ex)
+        {
+            LogExpectedPositionWriteFailure(ex);
+            throw;
+        }
 
-            return await WriteSerializableBatchThroughCanonicalHeadSeamAsync(
+        if (specification.RequiresEnforcement)
+        {
+            await EnsureExpectedTagPositionEnforcementEnabledAsync(cancellationToken);
+        }
+
+        try
+        {
+            write = await WriteSerializableBatchThroughCanonicalHeadSeamAsync(
                 events,
                 specification,
                 TagHeadWriter.ExpectedPositionBatch,
@@ -824,17 +608,22 @@ public class PostgresEventStore : IHotEventStore, ISerializableEventStreamReader
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "WriteSerializableEventsWithExpectedTagPositionsAsync failed");
-            return ResultBox.Error<ExpectedTagPositionWriteResult>(ex);
+            LogExpectedPositionWriteFailure(ex);
+            throw;
         }
+
+        return write.GetValueOrThrow();
     }
+
+    private void LogExpectedPositionWriteFailure(Exception ex) =>
+        _logger.LogError(ex, "WriteSerializableEventsWithExpectedTagPositionsAsync failed");
 
     /// <summary>
     ///     The one authoritative PostgreSQL tagged-write seam. Typed, serialized, conditional-claim, and expected-position
     ///     writers all call this method. The transaction deliberately owns lazy creation, canonical locking,
     ///     reconciliation, command rows, tag-index rows, and per-tag head advancement together.
     /// </summary>
-    private async Task<ResultBox<ExpectedTagPositionWriteResult>> WriteSerializableBatchThroughCanonicalHeadSeamAsync(
+    private async Task<CanonicalHeadSeamOutcome> WriteSerializableBatchThroughCanonicalHeadSeamAsync(
         IReadOnlyList<SerializableEvent> events,
         ExpectedTagPositionSpecification? specification,
         TagHeadWriter writer,
@@ -865,7 +654,7 @@ public class PostgresEventStore : IHotEventStore, ISerializableEventStreamReader
             () => PersistThroughCanonicalHeadSeamAsync(context, events, specification, writer, cancellationToken));
     }
 
-    private async Task<ResultBox<ExpectedTagPositionWriteResult>> PersistThroughCanonicalHeadSeamAsync(
+    private async Task<CanonicalHeadSeamOutcome> PersistThroughCanonicalHeadSeamAsync(
         SekibanDcbDbContext context,
         IReadOnlyList<SerializableEvent> events,
         ExpectedTagPositionSpecification? specification,
@@ -891,7 +680,7 @@ public class PostgresEventStore : IHotEventStore, ISerializableEventStreamReader
                 .ToArray();
             if (unknown.Length > 0)
             {
-                return ResultBox.Error<ExpectedTagPositionWriteResult>(
+                return CanonicalHeadSeamOutcome.Failed(
                     new TagHeadExpectationValidationException(
                         $"Expected tag-head entries are not present in this batch: {string.Join(", ", unknown)}."));
             }
@@ -1090,7 +879,7 @@ public class PostgresEventStore : IHotEventStore, ISerializableEventStreamReader
                     {
                         // Ordinary stale/mismatch: no repair evidence exists, so all lazy rows and all mutation roll back.
                         await transaction.RollbackAsync(cancellationToken);
-                        return ResultBox.Error<ExpectedTagPositionWriteResult>(conflict);
+                        return CanonicalHeadSeamOutcome.Failed(conflict);
                     }
 
                     // Repair-only conflict: preserve ONLY repaired heads and their idempotent audit rows. In particular a
@@ -1121,7 +910,7 @@ public class PostgresEventStore : IHotEventStore, ISerializableEventStreamReader
                     }
                     await transaction.CommitAsync(cancellationToken);
                     LogCommittedRepairs(repairs, writer);
-                    return ResultBox.Error<ExpectedTagPositionWriteResult>(conflict);
+                    return CanonicalHeadSeamOutcome.Failed(conflict);
                 }
 
                 // The second half of the position rule depends on the locked/reconciled prior heads. It remains before
@@ -1187,7 +976,7 @@ public class PostgresEventStore : IHotEventStore, ISerializableEventStreamReader
 
             await transaction.CommitAsync(cancellationToken);
             LogCommittedRepairs(repairs, writer);
-            return ResultBox.FromValue(new ExpectedTagPositionWriteResult(events, tagWriteResults));
+            return CanonicalHeadSeamOutcome.Written(new ExpectedTagPositionWriteResult(events, tagWriteResults));
         }
         catch
         {
@@ -1464,23 +1253,22 @@ public class PostgresEventStore : IHotEventStore, ISerializableEventStreamReader
     // Tags table only tracks tag-to-event relationships
     // Tag state should be computed by projectors when needed
 
-    private ResultBox<IEventPayload> DeserializeEventPayload(string eventType, string json)
-    {
-        try
-        {
-            var payload = _eventTypes.DeserializeEventPayload(eventType, json);
-            if (payload == null)
-            {
-                return ResultBox.Error<IEventPayload>(
-                    new Exception(
-                        $"Failed to deserialize event payload of type {eventType}. Make sure the event type is registered."));
-            }
+    private IEventPayload DeserializeEventPayload(string eventType, string json) =>
+        _eventTypes.DeserializeEventPayload(eventType, json)
+        ?? throw new Exception(
+            $"Failed to deserialize event payload of type {eventType}. Make sure the event type is registered.");
 
-            return ResultBox.FromValue(payload);
-        }
-        catch (Exception ex)
-        {
-            return ResultBox.Error<IEventPayload>(ex);
-        }
+    /// <summary>
+    ///     What the canonical head seam produced: the written batch, or the typed failure it decided (an expected-head
+    ///     conflict or a malformed expectation). The failure is returned rather than thrown inside the seam so the
+    ///     transaction / execution-strategy handling around it stays exactly as for a successful return; the public
+    ///     writers throw it.
+    /// </summary>
+    private readonly record struct CanonicalHeadSeamOutcome(ExpectedTagPositionWriteResult? Value, Exception? Failure)
+    {
+        public static CanonicalHeadSeamOutcome Written(ExpectedTagPositionWriteResult value) => new(value, null);
+        public static CanonicalHeadSeamOutcome Failed(Exception failure) => new(null, failure);
+
+        public ExpectedTagPositionWriteResult GetValueOrThrow() => Failure is null ? Value! : throw Failure;
     }
 }

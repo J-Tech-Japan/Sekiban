@@ -666,25 +666,20 @@ apiRoute
         {
             try
             {
-                var result = await eventStore.ReadAllSerializableEventsAsync();
-                if (result.IsSuccess)
-                {
-                    var events = result.GetValue().ToList();
-                    Console.WriteLine($"[Debug] ReadAllSerializableEventsAsync returned {events.Count} events");
-                    return Results.Ok(
-                        new
+                var events = (await eventStore.ReadAllSerializableEventsAsync()).ToList();
+                Console.WriteLine($"[Debug] ReadAllSerializableEventsAsync returned {events.Count} events");
+                return Results.Ok(
+                    new
+                    {
+                        totalEvents = events.Count,
+                        events = events.Select(e => new
                         {
-                            totalEvents = events.Count,
-                            events = events.Select(e => new
-                            {
-                                id = e.Id,
-                                type = e.EventPayloadName,
-                                sortableId = e.SortableUniqueIdValue,
-                                tags = e.Tags
-                            })
-                        });
-                }
-                return Results.BadRequest(new { error = result.GetException()?.Message });
+                            id = e.Id,
+                            type = e.EventPayloadName,
+                            sortableId = e.SortableUniqueIdValue,
+                            tags = e.Tags
+                        })
+                    });
             }
             catch (Exception ex)
             {

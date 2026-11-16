@@ -5,6 +5,7 @@ using Sekiban.Dcb.Testing;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
 using CoreInMemoryEventStore = Sekiban.Dcb.Testing.InMemoryEventStore;
+using Sekiban.Dcb.TestSupport;
 namespace Sekiban.Dcb.Tests;
 
 /// <summary>
@@ -52,11 +53,11 @@ public class WeatherForecastCommandTests
 
         // Verify the forecast was created
         var forecastTag = new WeatherForecastTag(forecastId);
-        var tagExists = await _eventStore.TagExistsAsync(forecastTag);
+        var tagExists = await _eventStore.TagExistsAsync(forecastTag).AsResultBoxAsync();
         Assert.True(tagExists.GetValue());
 
         // Verify the event
-        var events = await _eventStore.ReadEventsByTagAsync(forecastTag, _domainTypes.EventTypes);
+        var events = await _eventStore.ReadEventsByTagAsync(forecastTag, _domainTypes.EventTypes).AsResultBoxAsync();
         var eventsList = events.GetValue().ToList();
         Assert.Single(eventsList);
         var payload = eventsList[0].Payload as WeatherForecastCreated;
@@ -101,7 +102,7 @@ public class WeatherForecastCommandTests
 
         // Verify the event was written
         var forecastTag = new WeatherForecastTag(forecastId);
-        var events = await _eventStore.ReadEventsByTagAsync(forecastTag, _domainTypes.EventTypes);
+        var events = await _eventStore.ReadEventsByTagAsync(forecastTag, _domainTypes.EventTypes).AsResultBoxAsync();
         var eventsList = events.GetValue().ToList();
         Assert.Equal(2, eventsList.Count); // Create + Change events
 
@@ -188,7 +189,7 @@ public class WeatherForecastCommandTests
 
         // Verify only one event exists (the create event)
         var forecastTag = new WeatherForecastTag(forecastId);
-        var events = await _eventStore.ReadEventsByTagAsync(forecastTag, _domainTypes.EventTypes);
+        var events = await _eventStore.ReadEventsByTagAsync(forecastTag, _domainTypes.EventTypes).AsResultBoxAsync();
         var eventsList = events.GetValue().ToList();
         Assert.Single(eventsList);
     }
@@ -343,7 +344,7 @@ public class WeatherForecastCommandTests
         Assert.Equal("Heavy snow", payload.Summary); // Updated summary
 
         // Verify all events
-        var events = await _eventStore.ReadEventsByTagAsync(forecastTag, _domainTypes.EventTypes);
+        var events = await _eventStore.ReadEventsByTagAsync(forecastTag, _domainTypes.EventTypes).AsResultBoxAsync();
         var eventsList = events.GetValue().ToList();
         Assert.Equal(3, eventsList.Count); // Create + Update + ChangeLocation
     }

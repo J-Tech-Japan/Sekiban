@@ -21,6 +21,7 @@ using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
 using Sekiban.Dcb.Testing;
 using Xunit;
+using Sekiban.Dcb.TestSupport;
 
 namespace Sekiban.Dcb.Tests.Cosmos;
 
@@ -323,7 +324,7 @@ public sealed class CosmosEventDocumentSizeGateTests
         var counting = new CountingEventTypes(domain.EventTypes);
         var typed = NewStore(counting, new InMemoryCosmosClient(), "typed");
 
-        var typedResult = await typed.Store.WriteEventsAsync([@event]);
+        var typedResult = await typed.Store.WriteEventsAsync([@event]).AsResultBoxAsync();
 
         Assert.True(typedResult.IsSuccess);
         Assert.Equal(1, counting.SerializeCalls);
@@ -331,14 +332,14 @@ public sealed class CosmosEventDocumentSizeGateTests
 
         var serialized = @event.ToSerializableEvent(domain.EventTypes);
         var serializedLineage = NewStore(domain.EventTypes, new InMemoryCosmosClient(), "serialized");
-        var serializedResult = await serializedLineage.Store.WriteSerializableEventsAsync([serialized]);
+        var serializedResult = await serializedLineage.Store.WriteSerializableEventsAsync([serialized]).AsResultBoxAsync();
         Assert.True(serializedResult.IsSuccess);
         var serializedDocument = serializedLineage.Client
             .Container(serializedLineage.Options.EventsContainerName).Items.Single();
 
         var conditionalLineage = NewStore(domain.EventTypes, new InMemoryCosmosClient(), "conditional");
         var conditionalResult = await conditionalLineage.Store.AppendIfUniqueAsync(
-            new ConditionalAppendRequest("shape-operation", serialized));
+            new ConditionalAppendRequest("shape-operation", serialized)).AsResultBoxAsync();
         Assert.True(conditionalResult.IsSuccess);
         var conditionalDocument = conditionalLineage.Client
             .Container(conditionalLineage.Options.EventsContainerName).Items.Single();
@@ -363,7 +364,7 @@ public sealed class CosmosEventDocumentSizeGateTests
         var client = new InMemoryCosmosClient();
         var lineage = NewStore(counting, client, "serialize-failure");
 
-        var result = await lineage.Store.WriteEventsAsync([NewEvent(domain, "failure")]);
+        var result = await lineage.Store.WriteEventsAsync([NewEvent(domain, "failure")]).AsResultBoxAsync();
 
         Assert.False(result.IsSuccess);
         Assert.Equal(1, counting.SerializeCalls);
@@ -908,26 +909,26 @@ public sealed class CosmosEventDocumentSizeGateTests
     {
         public int SerializedWriteCalls { get; private set; }
 
-        public Task<ResultBox<IEnumerable<TagStream>>> ReadTagsAsync(ITag tag) => inner.ReadTagsAsync(tag);
-        public Task<ResultBox<TagState>> GetLatestTagAsync(ITag tag) => inner.GetLatestTagAsync(tag);
-        public Task<ResultBox<bool>> TagExistsAsync(ITag tag) => inner.TagExistsAsync(tag);
-        public Task<ResultBox<long>> GetEventCountAsync(SortableUniqueId? since = null) => inner.GetEventCountAsync(since);
-        public Task<ResultBox<IEnumerable<TagInfo>>> GetAllTagsAsync(string? tagGroup = null) => inner.GetAllTagsAsync(tagGroup);
-        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null) =>
+        public Task<IEnumerable<TagStream>> ReadTagsAsync(ITag tag) => inner.ReadTagsAsync(tag);
+        public Task<TagState> GetLatestTagAsync(ITag tag) => inner.GetLatestTagAsync(tag);
+        public Task<bool> TagExistsAsync(ITag tag) => inner.TagExistsAsync(tag);
+        public Task<long> GetEventCountAsync(SortableUniqueId? since = null) => inner.GetEventCountAsync(since);
+        public Task<IEnumerable<TagInfo>> GetAllTagsAsync(string? tagGroup = null) => inner.GetAllTagsAsync(tagGroup);
+        public Task<IEnumerable<SerializableEvent>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null) =>
             inner.ReadAllSerializableEventsAsync(since);
-        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(SortableUniqueId? since, int? maxCount) =>
+        public Task<IEnumerable<SerializableEvent>> ReadAllSerializableEventsAsync(SortableUniqueId? since, int? maxCount) =>
             inner.ReadAllSerializableEventsAsync(since, maxCount);
-        public Task<ResultBox<SerializableEvent>> ReadSerializableEventAsync(Guid eventId) => inner.ReadSerializableEventAsync(eventId);
-        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadSerializableEventsByTagAsync(ITag tag, SortableUniqueId? since = null) =>
+        public Task<SerializableEvent?> ReadSerializableEventAsync(Guid eventId) => inner.ReadSerializableEventAsync(eventId);
+        public Task<IEnumerable<SerializableEvent>> ReadSerializableEventsByTagAsync(ITag tag, SortableUniqueId? since = null) =>
             inner.ReadSerializableEventsByTagAsync(tag, since);
-        public Task<ResultBox<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>>
+        public Task<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>
             WriteSerializableEventsAsync(IEnumerable<SerializableEvent> events)
         {
             SerializedWriteCalls++;
             return inner.WriteSerializableEventsAsync(events);
         }
 
-        public Task<ResultBox<string>> GetLatestSortableUniqueIdAsync() => inner.GetLatestSortableUniqueIdAsync();
+        public Task<string> GetLatestSortableUniqueIdAsync() => inner.GetLatestSortableUniqueIdAsync();
     }
 
     private sealed class RecordingEventPublisher : IEventPublisher
@@ -959,49 +960,49 @@ public sealed class CosmosEventDocumentSizeGateTests
                 WriteConditionKind.SingleEventUniqueKey,
                 WriteConditionKind.ExpectedTagPosition);
 
-        public Task<ResultBox<IEnumerable<TagStream>>> ReadTagsAsync(ITag tag) =>
-            Task.FromResult(ResultBox.FromValue<IEnumerable<TagStream>>([]));
+        public Task<IEnumerable<TagStream>> ReadTagsAsync(ITag tag) =>
+            Task.FromResult<IEnumerable<TagStream>>([]);
 
-        public Task<ResultBox<TagState>> GetLatestTagAsync(ITag tag) =>
-            Task.FromResult(ResultBox.Error<TagState>(new NotSupportedException()));
+        public Task<TagState> GetLatestTagAsync(ITag tag) =>
+            Task.FromException<TagState>(new NotSupportedException());
 
-        public Task<ResultBox<bool>> TagExistsAsync(ITag tag) =>
-            Task.FromResult(ResultBox.FromValue(false));
+        public Task<bool> TagExistsAsync(ITag tag) =>
+            Task.FromResult(false);
 
-        public Task<ResultBox<long>> GetEventCountAsync(SortableUniqueId? since = null) =>
-            Task.FromResult(ResultBox.FromValue(0L));
+        public Task<long> GetEventCountAsync(SortableUniqueId? since = null) =>
+            Task.FromResult(0L);
 
-        public Task<ResultBox<IEnumerable<TagInfo>>> GetAllTagsAsync(string? tagGroup = null) =>
-            Task.FromResult(ResultBox.FromValue<IEnumerable<TagInfo>>([]));
+        public Task<IEnumerable<TagInfo>> GetAllTagsAsync(string? tagGroup = null) =>
+            Task.FromResult<IEnumerable<TagInfo>>([]);
 
-        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(
+        public Task<IEnumerable<SerializableEvent>> ReadAllSerializableEventsAsync(
             SortableUniqueId? since = null) =>
-            Task.FromResult(ResultBox.FromValue<IEnumerable<SerializableEvent>>([]));
+            Task.FromResult<IEnumerable<SerializableEvent>>([]);
 
-        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(
+        public Task<IEnumerable<SerializableEvent>> ReadAllSerializableEventsAsync(
             SortableUniqueId? since,
             int? maxCount) =>
-            Task.FromResult(ResultBox.FromValue<IEnumerable<SerializableEvent>>([]));
+            Task.FromResult<IEnumerable<SerializableEvent>>([]);
 
-        public Task<ResultBox<SerializableEvent>> ReadSerializableEventAsync(Guid eventId) =>
-            Task.FromResult(ResultBox.Error<SerializableEvent>(new NotSupportedException()));
+        public Task<SerializableEvent?> ReadSerializableEventAsync(Guid eventId) =>
+            Task.FromException<SerializableEvent?>(new NotSupportedException());
 
-        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadSerializableEventsByTagAsync(
+        public Task<IEnumerable<SerializableEvent>> ReadSerializableEventsByTagAsync(
             ITag tag,
             SortableUniqueId? since = null) =>
-            Task.FromResult(ResultBox.FromValue<IEnumerable<SerializableEvent>>([]));
+            Task.FromResult<IEnumerable<SerializableEvent>>([]);
 
-        public Task<ResultBox<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>>
+        public Task<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>
             WriteSerializableEventsAsync(IEnumerable<SerializableEvent> events)
         {
             WriteCalls++;
             throw new InvalidOperationException("Cosmos size gate must run before the provider write.");
         }
 
-        public Task<ResultBox<string>> GetLatestSortableUniqueIdAsync() =>
-            Task.FromResult(ResultBox.FromValue(string.Empty));
+        public Task<string> GetLatestSortableUniqueIdAsync() =>
+            Task.FromResult(string.Empty);
 
-        public Task<ResultBox<ConditionalAppendReceipt>> AppendIfUniqueAsync(
+        public Task<ConditionalAppendReceipt> AppendIfUniqueAsync(
             ConditionalAppendRequest request,
             CancellationToken cancellationToken = default)
         {
@@ -1009,11 +1010,11 @@ public sealed class CosmosEventDocumentSizeGateTests
             throw new InvalidOperationException("Cosmos size gate must run before conditional append.");
         }
 
-        public Task<ResultBox<bool>> EnsureExpectedTagPositionEnforcementEnabledAsync(
+        public Task<bool> EnsureExpectedTagPositionEnforcementEnabledAsync(
             CancellationToken cancellationToken = default) =>
-            Task.FromResult(ResultBox.FromValue(true));
+            Task.FromResult(true);
 
-        public Task<ResultBox<ExpectedTagPositionWriteResult>> WriteSerializableEventsWithExpectedTagPositionsAsync(
+        public Task<ExpectedTagPositionWriteResult> WriteSerializableEventsWithExpectedTagPositionsAsync(
             IReadOnlyList<SerializableEvent> events,
             ExpectedTagPositionSpecification specification,
             CancellationToken cancellationToken = default)

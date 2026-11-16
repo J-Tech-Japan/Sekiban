@@ -201,21 +201,21 @@ public sealed partial class MultiProjectionGrainCatchUpProductionPathTests
             return batch;
         }
 
-        public override async Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(
+        public override async Task<IEnumerable<SerializableEvent>> ReadAllSerializableEventsAsync(
             SortableUniqueId? since, int? maxCount) =>
-            ResultBox.FromValue<IEnumerable<SerializableEvent>>(await ReadAsync(since, maxCount));
+            await ReadAsync(since, maxCount);
     }
 
     private sealed class ParkedStreamingRebuildStore(IReadOnlyList<SerializableEvent> events)
         : ParkedRebuildStore(events), IStreamingSerializableEventStore
     {
-        public async Task<ResultBox<SerializableEventStreamReadResult>> StreamAllSerializableEventsAsync(
+        public async Task<SerializableEventStreamReadResult> StreamAllSerializableEventsAsync(
             SortableUniqueId? since, int? maxCount, Func<SerializableEvent, ValueTask> onEvent,
             CancellationToken cancellationToken = default)
         {
             var batch = await ReadAsync(since, maxCount);
             foreach (var ev in batch) await onEvent(ev);
-            return ResultBox.FromValue(new SerializableEventStreamReadResult(batch.Length, batch.LastOrDefault()?.SortableUniqueIdValue));
+            return new SerializableEventStreamReadResult(batch.Length, batch.LastOrDefault()?.SortableUniqueIdValue);
         }
     }
 
@@ -292,7 +292,7 @@ public sealed partial class MultiProjectionGrainCatchUpProductionPathTests
             Assert.Equal(events[0].SortableUniqueIdValue, store.PersistentState.State.RebuildOffendingPosition);
             var replacement = GetPrivateField<IProjectionActorHost>(grain, "_host");
             Assert.NotSame(host, replacement);
-            Assert.Empty((await checkpoints.ListAllAsync()).GetValue());
+            Assert.Empty((await checkpoints.ListAllAsync()));
             Assert.Equal(0, checkpoints.SnapshotSaveCalls);
             Assert.Empty(log.Reasons);
             var warning = Assert.Single(log.Rebuilds);
@@ -338,7 +338,7 @@ public sealed partial class MultiProjectionGrainCatchUpProductionPathTests
         Assert.Equal(1, store.PersistentState.FailedFaultWrites);
         Assert.Null(store.PersistentState.State.FaultMessage);
         Assert.Contains("SEK-G20", GetPrivateField<ProjectionFaultDescriptor>(grain, "_projectionFault").Message);
-        Assert.Empty((await checkpoints.ListAllAsync()).GetValue());
+        Assert.Empty((await checkpoints.ListAllAsync()));
 
         // The injected failure is one-shot; deactivation must retry the in-memory descriptor.
         await grain.OnDeactivateAsync(default, CancellationToken.None);
@@ -349,7 +349,7 @@ public sealed partial class MultiProjectionGrainCatchUpProductionPathTests
         Assert.False(committed.RebuildRequired);
         Assert.Equal(1, store.PersistentState.FailedFaultWrites);
         Assert.Equal(2, store.PersistentState.WriteCalls);
-        Assert.Empty((await checkpoints.ListAllAsync()).GetValue());
+        Assert.Empty((await checkpoints.ListAllAsync()));
         Assert.Single(log.Rebuilds);
 
         var nextHost = factory.Create(name, options);
@@ -366,7 +366,7 @@ public sealed partial class MultiProjectionGrainCatchUpProductionPathTests
         var answer = await next.GetStateAsync();
         Assert.False(answer.IsSuccess);
         Assert.Contains("SEK-G20", answer.GetException().Message);
-        Assert.Empty((await checkpoints.ListAllAsync()).GetValue());
+        Assert.Empty((await checkpoints.ListAllAsync()));
     }
 
     private static ServiceProvider CreateNativeRebuildServices() => new ServiceCollection()
@@ -504,14 +504,14 @@ public sealed partial class MultiProjectionGrainCatchUpProductionPathTests
         Assert.Equal(0, host.SnapshotWriteCalls);
     }
 
+    // A provider read failure is an exception in the 11 storage contract; the grain records it as a failed read and the
+    // batch keeps the already-applied chunk (there is no separate "thrown" vs "returned failure" path any more).
     [Theory]
-    [InlineData(false, false)]
-    [InlineData(true, false)]
-    [InlineData(false, true)]
-    [InlineData(true, true)]
-    public async Task Failed_streaming_read_records_applied_chunk_ids_and_counts_once_before_retry(bool throws, bool restartInvocation)
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Failed_streaming_read_records_applied_chunk_ids_and_counts_once_before_retry(bool restartInvocation)
     {
-        var store = new ChunkFailureEventStore(throws);
+        var store = new ChunkFailureEventStore();
         var host = new ProductionCatchUpProjectionHost
         {
             AllowApply = true, FailInitialStateRead = false, SafeVersion = 4096,
@@ -524,10 +524,7 @@ public sealed partial class MultiProjectionGrainCatchUpProductionPathTests
         var progress = GetPrivateField<object>(grain, "_catchUpProgress");
         progress.GetType().GetProperty("IsActive")!.SetValue(progress, true);
         progress.GetType().GetProperty("StartTime")!.SetValue(progress, DateTime.UtcNow);
-        if (throws)
-            await Assert.ThrowsAsync<IOException>(() => InvokePrivateTaskAsync(grain, "ProcessSingleCatchUpBatch", []));
-        else
-            await InvokePrivateTaskAsync(grain, "ProcessSingleCatchUpBatch", []);
+        await InvokePrivateTaskAsync(grain, "ProcessSingleCatchUpBatch", []);
         Assert.Null(GetCatchUpCurrentPosition(grain));
         Assert.Equal(4096, GetPrivateField<HashSet<Guid>>(grain, "_processedEventIds").Count);
         Assert.Equal(4096L, GetPrivateField<long>(grain, "_eventsProcessed"));
@@ -660,10 +657,10 @@ public sealed partial class MultiProjectionGrainCatchUpProductionPathTests
         typeof(Grain).GetField("<Runtime>k__BackingField", BindingFlags.Instance | BindingFlags.NonPublic)!
             .SetValue(grain, DispatchProxy.Create<IGrainRuntime, DeactivationOnlyRuntime>());
 
-    private sealed class ChunkFailureEventStore(bool throws) : ProductionCatchUpEventStore([4096]), IStreamingSerializableEventStore
+    private sealed class ChunkFailureEventStore() : ProductionCatchUpEventStore([4096]), IStreamingSerializableEventStore
     {
         private int _attempt;
-        public async Task<ResultBox<SerializableEventStreamReadResult>> StreamAllSerializableEventsAsync(
+        public async Task<SerializableEventStreamReadResult> StreamAllSerializableEventsAsync(
             SortableUniqueId? since, int? maxCount, Func<SerializableEvent, ValueTask> onEvent,
             CancellationToken cancellationToken = default)
         {
@@ -672,10 +669,9 @@ public sealed partial class MultiProjectionGrainCatchUpProductionPathTests
             foreach (var ev in events) await onEvent(ev);
             if (_attempt == 1)
             {
-                if (throws) throw new IOException("read failed after applied chunk");
-                return ResultBox.Error<SerializableEventStreamReadResult>(new IOException("read failed after applied chunk"));
+                throw new IOException("read failed after applied chunk");
             }
-            return ResultBox.FromValue(new SerializableEventStreamReadResult(events.Length, events.LastOrDefault()?.SortableUniqueIdValue));
+            return new SerializableEventStreamReadResult(events.Length, events.LastOrDefault()?.SortableUniqueIdValue);
         }
     }
 }

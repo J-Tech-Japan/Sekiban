@@ -7,6 +7,7 @@ using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Testing;
 using Sekiban.Dcb.TestSupport.ExecutedUser;
 using Xunit;
+using Sekiban.Dcb.TestSupport;
 namespace Sekiban.Dcb.WithoutResult.Tests;
 
 /// <summary>
@@ -70,7 +71,7 @@ public class ExecutedUserProviderTests : ExecutedUserProviderScenarioTestsBase
         _executor.ExecuteAsync(new NoEventTestCommand(), HandleNoEventAsync);
 
     protected override async Task<IReadOnlyList<Event>> ReadAllEventsAsync() =>
-        (await _store.ReadAllEventsAsync()).GetValue().ToList();
+        (await _store.ReadAllEventsAsync().AsResultBoxAsync()).GetValue().ToList();
 
     protected override async Task ExecuteSingleEventViaDiAsync(IExecutedUserProvider provider, string name = "x")
     {

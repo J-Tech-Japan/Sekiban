@@ -227,33 +227,33 @@ public class SortableUniqueIdGeneratorTests
         private int _headReads;
         public int HeadReads => Volatile.Read(ref _headReads);
 
-        public Task<ResultBox<string>> GetLatestSortableUniqueIdAsync()
+        public Task<string> GetLatestSortableUniqueIdAsync()
         {
             var read = Interlocked.Increment(ref _headReads);
-            return Task.FromResult(failFirst && read == 1
-                ? ResultBox.Error<string>(new InvalidOperationException("head unavailable"))
-                : ResultBox.FromValue(head));
+            return failFirst && read == 1
+                ? Task.FromException<string>(new InvalidOperationException("head unavailable"))
+                : Task.FromResult(head);
         }
 
-        public Task<ResultBox<IEnumerable<TagStream>>> ReadTagsAsync(ITag tag) => Throw<IEnumerable<TagStream>>();
-        public Task<ResultBox<TagState>> GetLatestTagAsync(ITag tag) => Throw<TagState>();
-        public Task<ResultBox<bool>> TagExistsAsync(ITag tag) => Throw<bool>();
-        public Task<ResultBox<long>> GetEventCountAsync(SortableUniqueId? since = null) => Throw<long>();
-        public Task<ResultBox<IEnumerable<TagInfo>>> GetAllTagsAsync(string? tagGroup = null) => Throw<IEnumerable<TagInfo>>();
-        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null) =>
+        public Task<IEnumerable<TagStream>> ReadTagsAsync(ITag tag) => Throw<IEnumerable<TagStream>>();
+        public Task<TagState> GetLatestTagAsync(ITag tag) => Throw<TagState>();
+        public Task<bool> TagExistsAsync(ITag tag) => Throw<bool>();
+        public Task<long> GetEventCountAsync(SortableUniqueId? since = null) => Throw<long>();
+        public Task<IEnumerable<TagInfo>> GetAllTagsAsync(string? tagGroup = null) => Throw<IEnumerable<TagInfo>>();
+        public Task<IEnumerable<SerializableEvent>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null) =>
             Throw<IEnumerable<SerializableEvent>>();
-        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(
+        public Task<IEnumerable<SerializableEvent>> ReadAllSerializableEventsAsync(
             SortableUniqueId? since,
             int? maxCount) => Throw<IEnumerable<SerializableEvent>>();
-        public Task<ResultBox<SerializableEvent>> ReadSerializableEventAsync(Guid eventId) => Throw<SerializableEvent>();
-        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadSerializableEventsByTagAsync(
+        public Task<SerializableEvent?> ReadSerializableEventAsync(Guid eventId) => Throw<SerializableEvent?>();
+        public Task<IEnumerable<SerializableEvent>> ReadSerializableEventsByTagAsync(
             ITag tag,
             SortableUniqueId? since = null) => Throw<IEnumerable<SerializableEvent>>();
-        public Task<ResultBox<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>>
+        public Task<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>
             WriteSerializableEventsAsync(IEnumerable<SerializableEvent> events) =>
             Throw<(IReadOnlyList<SerializableEvent>, IReadOnlyList<TagWriteResult>)>();
 
-        private static Task<ResultBox<T>> Throw<T>() where T : notnull =>
+        private static Task<T> Throw<T>() =>
             throw new InvalidOperationException("Unexpected event-store operation.");
     }
 }

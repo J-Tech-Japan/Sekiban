@@ -8,6 +8,7 @@ using Sekiban.Dcb.Testing;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
 using CoreInMemoryEventStore = Sekiban.Dcb.Testing.InMemoryEventStore;
+using Sekiban.Dcb.TestSupport;
 namespace Sekiban.Dcb.Tests;
 
 public class GeneralSekibanExecutorTest
@@ -53,13 +54,13 @@ public class GeneralSekibanExecutorTest
 
         // Verify event was written
         var testTag = new TestTag();
-        var eventsResult = await _eventStore.ReadEventsByTagAsync(testTag, _domainTypes.EventTypes);
+        var eventsResult = await _eventStore.ReadEventsByTagAsync(testTag, _domainTypes.EventTypes).AsResultBoxAsync();
         Assert.True(eventsResult.IsSuccess);
         var events = eventsResult.GetValue().ToList();
         Assert.Single(events);
 
         // Verify tag was written
-        var tagExistsResult = await _eventStore.TagExistsAsync(testTag);
+        var tagExistsResult = await _eventStore.TagExistsAsync(testTag).AsResultBoxAsync();
         Assert.True(tagExistsResult.IsSuccess);
         Assert.True(tagExistsResult.GetValue());
     }
@@ -158,10 +159,10 @@ public class GeneralSekibanExecutorTest
         var tag1 = new TestTag();
         var tag2 = new TestTag2();
 
-        var tag1Exists = await _eventStore.TagExistsAsync(tag1);
+        var tag1Exists = await _eventStore.TagExistsAsync(tag1).AsResultBoxAsync();
         Assert.True(tag1Exists.GetValue());
 
-        var tag2Exists = await _eventStore.TagExistsAsync(tag2);
+        var tag2Exists = await _eventStore.TagExistsAsync(tag2).AsResultBoxAsync();
         Assert.True(tag2Exists.GetValue());
     }
 

@@ -10,6 +10,7 @@ using Sekiban.Dcb.CosmosDb.Tags;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.ServiceId;
 using Dcb.Domain;
+using Sekiban.Dcb.TestSupport;
 
 namespace Sekiban.Dcb.Tests.Cosmos;
 
@@ -75,7 +76,7 @@ public class CosmosSweepE2ETests
             for (var i = 0; i < count; i++)
             {
                 var serializable = NewEvent($"Student:{ServiceId}:{i}");
-                await Store.WriteSerializableEventsAsync(new[] { serializable });
+                await Store.WriteSerializableEventsAsync(new[] { serializable }).AsResultBoxAsync();
                 written.Add(serializable);
             }
 
@@ -175,7 +176,7 @@ public class CosmosSweepE2ETests
 
         // And a tag-scoped read — the thing the whole chain exists for — now sees the event.
         var tag = $"Student:{RuntimeServiceId}:0";
-        var byTag = await lineage.Store.ReadSerializableEventsByTagAsync(new SweepTag(tag));
+        var byTag = await lineage.Store.ReadSerializableEventsByTagAsync(new SweepTag(tag)).AsResultBoxAsync();
         Assert.Single(byTag.GetValue());
     }
 

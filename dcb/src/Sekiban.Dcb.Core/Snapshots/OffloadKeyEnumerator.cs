@@ -6,6 +6,7 @@ using System.Text.Unicode;
 using Sekiban.Dcb.MultiProjections;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Storage.Checkpoints;
+using Sekiban.Dcb.Common;
 
 namespace Sekiban.Dcb.Snapshots;
 
@@ -28,7 +29,7 @@ public static class OffloadKeyEnumerator
         [EnumeratorCancellation] CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested();
-        var listed = await store.ListAllAsync(ct).ConfigureAwait(false);
+        var listed = await store.ListAllAsync(ct).ToResultBoxAsync().ConfigureAwait(false);
         ct.ThrowIfCancellationRequested();
         if (!listed.IsSuccess) throw listed.GetException();
         var entries = listed.GetValue();
@@ -61,7 +62,7 @@ public static class OffloadKeyEnumerator
             string? failure = null;
             try
             {
-                var result = await store.GetLatestForVersionAsync(entry.ProjectorName, entry.ProjectorVersion, ct).ConfigureAwait(false);
+                var result = await store.GetLatestForVersionAsync(entry.ProjectorName, entry.ProjectorVersion, ct).ToOptionalResultBoxAsync().ConfigureAwait(false);
                 ct.ThrowIfCancellationRequested();
                 if (!result.IsSuccess) throw result.GetException();
                 var optional = result.GetValue();
@@ -84,7 +85,7 @@ public static class OffloadKeyEnumerator
             Stream? stream = null;
             try
             {
-                var result = await store.OpenStateDataReadStreamAsync(record, ct).ConfigureAwait(false);
+                var result = await store.OpenStateDataReadStreamAsync(record, ct).ToResultBoxAsync().ConfigureAwait(false);
                 if (result.IsSuccess) stream = result.GetValue();
                 ct.ThrowIfCancellationRequested();
                 if (!result.IsSuccess) throw result.GetException();

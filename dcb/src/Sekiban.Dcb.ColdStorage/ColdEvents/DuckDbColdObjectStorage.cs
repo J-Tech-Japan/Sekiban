@@ -1,5 +1,4 @@
 using DuckDB.NET.Data;
-using ResultBoxes;
 
 namespace Sekiban.Dcb.ColdEvents;
 
@@ -27,8 +26,8 @@ public sealed class DuckDbColdObjectStorage : IColdObjectStorage
         command.ExecuteNonQuery();
     }
 
-    public Task<ResultBox<ColdStorageObject>> GetAsync(string path, CancellationToken ct)
-        => ExecuteAsync(async connection =>
+    public Task<ColdStorageObject?> GetAsync(string path, CancellationToken ct)
+        => ExecuteAsync<ColdStorageObject?>(async connection =>
         {
             await using var command = connection.CreateCommand();
             command.CommandText = "SELECT data, etag FROM cold_objects WHERE path = ?";
@@ -36,7 +35,7 @@ public sealed class DuckDbColdObjectStorage : IColdObjectStorage
             await using var reader = await command.ExecuteReaderAsync(ct);
             if (!await reader.ReadAsync(ct))
             {
-                return ResultBox.Error<ColdStorageObject>(new KeyNotFoundException($"Cold object not found: {path}"));
+                return null;
             }
 
             var raw = reader.GetValue(0);
@@ -48,10 +47,10 @@ public sealed class DuckDbColdObjectStorage : IColdObjectStorage
                     $"Unsupported DuckDB BLOB value type: {raw.GetType().FullName}")
             };
             var etag = reader.GetString(1);
-            return ResultBox.FromValue(new ColdStorageObject(data, etag));
+            return new ColdStorageObject(data, etag);
         });
 
-    public Task<ResultBox<bool>> PutAsync(string path, byte[] data, string? expectedETag, CancellationToken ct)
+    public Task<bool> PutAsync(string path, byte[] data, string? expectedETag, CancellationToken ct)
         => ExecuteAsync(async connection =>
         {
             var normalizedPath = ColdStoragePath.Normalize(path);
@@ -72,13 +71,13 @@ public sealed class DuckDbColdObjectStorage : IColdObjectStorage
                 if (currentEtag is null)
                 {
                     tx.Rollback();
-                    return ResultBox.Error<bool>(new InvalidOperationException($"Conditional write failed: {path} does not exist"));
+                    throw new InvalidOperationException($"Conditional write failed: {path} does not exist");
                 }
 
                 if (!string.Equals(currentEtag, expectedETag, StringComparison.Ordinal))
                 {
                     tx.Rollback();
-                    return ResultBox.Error<bool>(new InvalidOperationException($"ETag mismatch at {path}: expected={expectedETag}, actual={currentEtag}"));
+                    throw new InvalidOperationException($"ETag mismatch at {path}: expected={expectedETag}, actual={currentEtag}");
                 }
             }
 
@@ -98,10 +97,10 @@ public sealed class DuckDbColdObjectStorage : IColdObjectStorage
             upsert.Parameters.Add(new DuckDBParameter { Value = DateTime.UtcNow });
             await upsert.ExecuteNonQueryAsync(ct);
             tx.Commit();
-            return ResultBox.FromValue(true);
+            return true;
         });
 
-    public async Task<ResultBox<bool>> PutAsync(string path, Stream data, string? expectedETag, CancellationToken ct)
+    public async Task<bool> PutAsync(string path, Stream data, string? expectedETag, CancellationToken ct)
     {
         using var ms = new MemoryStream();
         if (data.CanSeek)
@@ -113,8 +112,8 @@ public sealed class DuckDbColdObjectStorage : IColdObjectStorage
         return await PutAsync(path, ms.ToArray(), expectedETag, ct);
     }
 
-    public Task<ResultBox<IReadOnlyList<string>>> ListAsync(string prefix, CancellationToken ct)
-        => ExecuteAsync(async connection =>
+    public Task<IReadOnlyList<string>> ListAsync(string prefix, CancellationToken ct)
+        => ExecuteAsync<IReadOnlyList<string>>(async connection =>
         {
             await using var command = connection.CreateCommand();
             command.CommandText = "SELECT path FROM cold_objects WHERE path LIKE ? ORDER BY path";
@@ -127,10 +126,10 @@ public sealed class DuckDbColdObjectStorage : IColdObjectStorage
                 list.Add(reader.GetString(0));
             }
 
-            return ResultBox.FromValue<IReadOnlyList<string>>(list);
+            return list;
         });
 
-    public Task<ResultBox<bool>> DeleteAsync(string path, CancellationToken ct)
+    public Task<bool> DeleteAsync(string path, CancellationToken ct)
         => ExecuteAsync(async connection =>
         {
             var normalizedPath = ColdStoragePath.Normalize(path);
@@ -144,22 +143,14 @@ public sealed class DuckDbColdObjectStorage : IColdObjectStorage
             verify.Parameters.Add(new DuckDBParameter { Value = normalizedPath });
             var remaining = await verify.ExecuteScalarAsync(ct);
             var count = remaining is null or DBNull ? 0L : Convert.ToInt64(remaining);
-            return ResultBox.FromValue(count == 0);
+            return count == 0;
         });
 
-    private async Task<ResultBox<T>> ExecuteAsync<T>(Func<DuckDBConnection, Task<ResultBox<T>>> action)
-        where T : notnull
+    private async Task<T> ExecuteAsync<T>(Func<DuckDBConnection, Task<T>> action)
     {
-        try
-        {
-            await using var connection = new DuckDBConnection(_connectionString);
-            await connection.OpenAsync();
-            return await action(connection);
-        }
-        catch (Exception ex)
-        {
-            return ResultBox.Error<T>(ex);
-        }
+        await using var connection = new DuckDBConnection(_connectionString);
+        await connection.OpenAsync();
+        return await action(connection);
     }
 
     private static async Task<byte[]> ReadAllBytesAsync(Stream stream, CancellationToken ct)

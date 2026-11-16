@@ -1,7 +1,6 @@
 using Azure;
 using Azure.Storage.Blobs;
 using Azure.Storage.Blobs.Models;
-using ResultBoxes;
 
 namespace Sekiban.Dcb.ColdEvents;
 
@@ -27,32 +26,31 @@ public sealed class AzureBlobDatabaseColdObjectStorage : IColdObjectStorage
         _storageKind = storageKind;
     }
 
-    public async Task<ResultBox<ColdStorageObject>> GetAsync(string path, CancellationToken ct)
-        => await ExecuteAsync(path, ct, (inner, innerPath, innerCt) => inner.GetAsync(innerPath, innerCt));
+    public Task<ColdStorageObject?> GetAsync(string path, CancellationToken ct)
+        => ExecuteAsync(path, ct, (inner, innerPath, innerCt) => inner.GetAsync(innerPath, innerCt));
 
-    public async Task<ResultBox<bool>> PutAsync(string path, byte[] data, string? expectedETag, CancellationToken ct)
-        => await ExecuteAndPersistAsync(
+    public Task<bool> PutAsync(string path, byte[] data, string? expectedETag, CancellationToken ct)
+        => ExecuteAndPersistAsync(
             path,
             ct,
             (inner, innerPath, innerCt) => inner.PutAsync(innerPath, data, expectedETag, innerCt));
 
-    public async Task<ResultBox<bool>> PutAsync(string path, Stream data, string? expectedETag, CancellationToken ct)
-        => await ExecuteAndPersistAsync(
+    public Task<bool> PutAsync(string path, Stream data, string? expectedETag, CancellationToken ct)
+        => ExecuteAndPersistAsync(
             path,
             ct,
             (inner, innerPath, innerCt) => inner.PutAsync(innerPath, data, expectedETag, innerCt));
 
-    public async Task<ResultBox<IReadOnlyList<string>>> ListAsync(string prefix, CancellationToken ct)
-        => await ExecuteAsync(prefix, ct, (inner, innerPrefix, innerCt) => inner.ListAsync(innerPrefix, innerCt));
+    public Task<IReadOnlyList<string>> ListAsync(string prefix, CancellationToken ct)
+        => ExecuteAsync(prefix, ct, (inner, innerPrefix, innerCt) => inner.ListAsync(innerPrefix, innerCt));
 
-    public async Task<ResultBox<bool>> DeleteAsync(string path, CancellationToken ct)
-        => await ExecuteAndPersistAsync(path, ct, (inner, innerPath, innerCt) => inner.DeleteAsync(innerPath, innerCt));
+    public Task<bool> DeleteAsync(string path, CancellationToken ct)
+        => ExecuteAndPersistAsync(path, ct, (inner, innerPath, innerCt) => inner.DeleteAsync(innerPath, innerCt));
 
-    private async Task<ResultBox<T>> ExecuteAsync<T>(
+    private async Task<T> ExecuteAsync<T>(
         string input,
         CancellationToken ct,
-        Func<IColdObjectStorage, string, CancellationToken, Task<ResultBox<T>>> action)
-        where T : notnull
+        Func<IColdObjectStorage, string, CancellationToken, Task<T>> action)
     {
         await _mutex.WaitAsync(ct);
         try
@@ -62,20 +60,16 @@ public sealed class AzureBlobDatabaseColdObjectStorage : IColdObjectStorage
             var inner = _createInnerStorage(state.LocalPath);
             return await action(inner, input, ct);
         }
-        catch (Exception ex)
-        {
-            return ResultBox.Error<T>(ex);
-        }
         finally
         {
             _mutex.Release();
         }
     }
 
-    private async Task<ResultBox<bool>> ExecuteAndPersistAsync(
+    private async Task<bool> ExecuteAndPersistAsync(
         string input,
         CancellationToken ct,
-        Func<IColdObjectStorage, string, CancellationToken, Task<ResultBox<bool>>> action)
+        Func<IColdObjectStorage, string, CancellationToken, Task<bool>> action)
     {
         await _mutex.WaitAsync(ct);
         try
@@ -83,23 +77,18 @@ public sealed class AzureBlobDatabaseColdObjectStorage : IColdObjectStorage
             var state = await DownloadDbAsync(ct);
             await using var cleanup = state;
             var inner = _createInnerStorage(state.LocalPath);
-            var result = await action(inner, input, ct);
-            if (!result.IsSuccess || !result.GetValue())
+            if (!await action(inner, input, ct))
             {
-                return result;
+                return false;
             }
 
             await UploadDbAsync(state, ct);
-            return result;
+            return true;
         }
         catch (RequestFailedException ex) when (ex.Status == 412)
         {
-            return ResultBox.Error<bool>(new InvalidOperationException(
-                $"Concurrent update detected while writing {_storageKind} cold storage blob", ex));
-        }
-        catch (Exception ex)
-        {
-            return ResultBox.Error<bool>(ex);
+            throw new InvalidOperationException(
+                $"Concurrent update detected while writing {_storageKind} cold storage blob", ex);
         }
         finally
         {

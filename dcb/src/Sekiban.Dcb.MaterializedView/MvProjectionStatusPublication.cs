@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Text;
 using Microsoft.Extensions.Logging;
+using ResultBoxes;
 using Sekiban.Dcb.ServiceId;
 using Sekiban.Dcb.Storage;
 
@@ -257,7 +258,7 @@ public sealed class MvProjectionStatusPublisher
         using var writeCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         var timeout = PositiveOrDefault(_options.HeartbeatWriteTimeout, TimeSpan.FromSeconds(5));
         writeCts.CancelAfter(timeout);
-        var result = await _statusStore!.UpsertAsync(heartbeat, expected, writeCts.Token)
+        var result = await ResultBox.WrapTry(() => _statusStore!.UpsertAsync(heartbeat, expected, writeCts.Token))
             .WaitAsync(timeout, cancellationToken)
             .ConfigureAwait(false);
         if (!result.IsSuccess)

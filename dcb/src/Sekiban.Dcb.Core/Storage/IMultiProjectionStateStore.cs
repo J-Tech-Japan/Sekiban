@@ -1,4 +1,3 @@
-using ResultBoxes;
 using Sekiban.Dcb.MultiProjections;
 
 namespace Sekiban.Dcb.Storage;
@@ -8,29 +7,31 @@ namespace Sekiban.Dcb.Storage;
 /// </summary>
 public interface IMultiProjectionStateStore
 {
-    Task<ResultBox<OptionalValue<MultiProjectionStateRecord>>> GetLatestForVersionAsync(
+    /// <summary>Returns the stored record for the projector version, or <c>null</c> when none is stored.</summary>
+    Task<MultiProjectionStateRecord?> GetLatestForVersionAsync(
         string projectorName,
         string projectorVersion,
         CancellationToken cancellationToken = default);
 
-    Task<ResultBox<OptionalValue<MultiProjectionStateRecord>>> GetLatestAnyVersionAsync(
+    /// <summary>Returns the latest stored record of any version, or <c>null</c> when none is stored.</summary>
+    Task<MultiProjectionStateRecord?> GetLatestAnyVersionAsync(
         string projectorName,
         CancellationToken cancellationToken = default);
 
-    Task<ResultBox<bool>> UpsertAsync(
+    Task<bool> UpsertAsync(
         MultiProjectionStateRecord record,
         int offloadThresholdBytes = 1_000_000,
         CancellationToken cancellationToken = default);
 
-    Task<ResultBox<IReadOnlyList<ProjectorStateInfo>>> ListAllAsync(
+    Task<IReadOnlyList<ProjectorStateInfo>> ListAllAsync(
         CancellationToken cancellationToken = default);
 
-    Task<ResultBox<bool>> DeleteAsync(
+    Task<bool> DeleteAsync(
         string projectorName,
         string projectorVersion,
         CancellationToken cancellationToken = default);
 
-    Task<ResultBox<int>> DeleteAllAsync(
+    Task<int> DeleteAllAsync(
         string? projectorName = null,
         CancellationToken cancellationToken = default);
 
@@ -39,29 +40,29 @@ public interface IMultiProjectionStateStore
     ///     Implementations are expected to resolve payload location from metadata (inline storage or offload key)
     ///     and return a readable stream.
     /// </summary>
-    Task<ResultBox<Stream>> OpenStateDataReadStreamAsync(
+    Task<Stream> OpenStateDataReadStreamAsync(
         MultiProjectionStateRecord record,
         CancellationToken cancellationToken = default)
     {
-        return Task.FromResult(ResultBox.Error<Stream>(
+        return Task.FromException<Stream>(
             new NotSupportedException(
                 $"OpenStateDataReadStreamAsync is not implemented by {GetType().Name}. "
-                + "The store must provide a payload stream implementation for metadata-only records.")));
+                + "The store must provide a payload stream implementation for metadata-only records."));
     }
 
     /// <summary>
     ///     Upserts a projection state from a stream.
     ///     The default implementation is not supported and must be overridden by concrete stores.
     /// </summary>
-    Task<ResultBox<bool>> UpsertFromStreamAsync(
+    Task<bool> UpsertFromStreamAsync(
         MultiProjectionStateWriteRequest request,
         Stream stream,
         int offloadThresholdBytes,
         CancellationToken cancellationToken = default)
     {
-        return Task.FromResult(ResultBox.Error<bool>(
+        return Task.FromException<bool>(
             new NotSupportedException(
                 $"UpsertFromStreamAsync is not implemented by {GetType().Name}. "
-                + "Implement this method in the store to persist snapshot payload streams.")));
+                + "Implement this method in the store to persist snapshot payload streams."));
     }
 }

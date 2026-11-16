@@ -19,6 +19,7 @@ using Sekiban.Dcb.Storage.Checkpoints;
 using Sekiban.Dcb.Tags;
 using Sekiban.Dcb.Testing;
 using Xunit;
+using Sekiban.Dcb.TestSupport;
 namespace Sekiban.Dcb.Orleans.Tests;
 
 /// <summary>
@@ -106,7 +107,7 @@ public class TombstoneFailClosedTests : IAsyncLifetime
         Assert.False(state.IsSuccess);
         AssertTombstoneFailClosed(state.GetException());
 
-        var record = (await Env.GatingStore.GetLatestForVersionAsync(CountProjector.MultiProjectorName, "1.0.0")).GetValue();
+        var record = (await Env.GatingStore.GetLatestForVersionAsync(CountProjector.MultiProjectorName, "1.0.0").AsOptionalResultBoxAsync()).GetValue();
         Assert.True(record.HasValue);
         Assert.Equal(30, record.GetValue().EventsProcessed);
     }
@@ -199,7 +200,7 @@ public class TombstoneFailClosedTests : IAsyncLifetime
         var baseline = Enumerable.Range(0, persistedEvents)
             .Select(i => ToSerializable(CreateEvent(new Counted($"e{i}"), t0.AddSeconds(-60 + i))))
             .ToArray();
-        await Env.EventStore.WriteSerializableEventsAsync(baseline);
+        await Env.EventStore.WriteSerializableEventsAsync(baseline).AsResultBoxAsync();
         await grain.RefreshAsync();
         Assert.True((await grain.PersistStateAsync()).IsSuccess);
         Assert.Equal(persistedEvents, ((CountProjector)(await grain.GetStateAsync()).GetValue().Payload).Count);
@@ -215,7 +216,7 @@ public class TombstoneFailClosedTests : IAsyncLifetime
         var tail = Enumerable.Range(persistedEvents, tailEvents)
             .Select(i => ToSerializable(CreateEvent(new Counted($"e{i}"), t0.AddSeconds(-60 + i))))
             .ToArray();
-        await Env.EventStore.WriteSerializableEventsAsync(tail);
+        await Env.EventStore.WriteSerializableEventsAsync(tail).AsResultBoxAsync();
 
         await grain.RequestDeactivationAsync();
         await Task.Delay(1000);
@@ -275,7 +276,7 @@ public class TombstoneFailClosedTests : IAsyncLifetime
     }
 
     private static async Task<CheckpointSlot> ReadSlotAsync() =>
-        (await Env.GatingStore.ReadCheckpointSlotAsync(CountProjector.MultiProjectorName, "1.0.0")).GetValue();
+        (await Env.GatingStore.ReadCheckpointSlotAsync(CountProjector.MultiProjectorName, "1.0.0").AsResultBoxAsync()).GetValue();
 
     private static Event CreateEvent(IEventPayload payload, DateTime timestamp) => new(
         payload, SortableUniqueId.Generate(timestamp, Guid.NewGuid()), payload.GetType().Name,

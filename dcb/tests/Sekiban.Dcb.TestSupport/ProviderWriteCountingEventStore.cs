@@ -36,28 +36,28 @@ public sealed class ProviderWriteCountingEventStore : IEventStore, IWriteConditi
             : WriteConditionCapabilityDescriptor.None(_fallbackProviderName);
     }
 
-    public Task<ResultBox<IEnumerable<TagStream>>> ReadTagsAsync(ITag tag) => _inner.ReadTagsAsync(tag);
-    public Task<ResultBox<TagState>> GetLatestTagAsync(ITag tag) => _inner.GetLatestTagAsync(tag);
-    public Task<ResultBox<bool>> TagExistsAsync(ITag tag) => _inner.TagExistsAsync(tag);
-    public Task<ResultBox<long>> GetEventCountAsync(SortableUniqueId? since = null) => _inner.GetEventCountAsync(since);
-    public Task<ResultBox<IEnumerable<TagInfo>>> GetAllTagsAsync(string? tagGroup = null) => _inner.GetAllTagsAsync(tagGroup);
-    public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null) =>
+    public Task<IEnumerable<TagStream>> ReadTagsAsync(ITag tag) => _inner.ReadTagsAsync(tag);
+    public Task<TagState> GetLatestTagAsync(ITag tag) => _inner.GetLatestTagAsync(tag);
+    public Task<bool> TagExistsAsync(ITag tag) => _inner.TagExistsAsync(tag);
+    public Task<long> GetEventCountAsync(SortableUniqueId? since = null) => _inner.GetEventCountAsync(since);
+    public Task<IEnumerable<TagInfo>> GetAllTagsAsync(string? tagGroup = null) => _inner.GetAllTagsAsync(tagGroup);
+    public Task<IEnumerable<SerializableEvent>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null) =>
         _inner.ReadAllSerializableEventsAsync(since);
-    public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(
+    public Task<IEnumerable<SerializableEvent>> ReadAllSerializableEventsAsync(
         SortableUniqueId? since,
         int? maxCount) => _inner.ReadAllSerializableEventsAsync(since, maxCount);
-    public Task<ResultBox<SerializableEvent>> ReadSerializableEventAsync(Guid eventId) =>
+    public Task<SerializableEvent?> ReadSerializableEventAsync(Guid eventId) =>
         _inner.ReadSerializableEventAsync(eventId);
-    public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadSerializableEventsByTagAsync(
+    public Task<IEnumerable<SerializableEvent>> ReadSerializableEventsByTagAsync(
         ITag tag,
         SortableUniqueId? since = null) => _inner.ReadSerializableEventsByTagAsync(tag, since);
 
-    public Task<ResultBox<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>>
+    public Task<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>
         WriteSerializableEventsAsync(IEnumerable<SerializableEvent> events)
     {
         Interlocked.Increment(ref _providerWriteCalls);
         return _inner.WriteSerializableEventsAsync(events);
     }
 
-    public Task<ResultBox<string>> GetLatestSortableUniqueIdAsync() => _inner.GetLatestSortableUniqueIdAsync();
+    public Task<string> GetLatestSortableUniqueIdAsync() => _inner.GetLatestSortableUniqueIdAsync();
 }

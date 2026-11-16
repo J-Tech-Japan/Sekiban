@@ -189,13 +189,7 @@ public class InMemoryObjectAccessor : IActorObjectAccessor, IServiceProvider, IE
             // into ResultBox.Error<T>, so the original exception reaches that boundary and the query fails instead of
             // returning empty. GetAwaiter().GetResult() is used over Wait() so the fold's own exception surfaces, not
             // the AggregateException Wait() would wrap it in.
-            var read = _eventStore.ReadAllSerializableEventsAsync().GetAwaiter().GetResult();
-            if (!read.IsSuccess)
-            {
-                throw read.GetException();
-            }
-
-            var events = read.GetValue().ToList();
+            var events = _eventStore.ReadAllSerializableEventsAsync().GetAwaiter().GetResult().ToList();
             if (events.Count > 0)
             {
                 actor.AddSerializableEventsAsync(events, finishedCatchUp: true).GetAwaiter().GetResult();

@@ -1,5 +1,4 @@
 using Microsoft.Azure.Cosmos;
-using ResultBoxes;
 using Sekiban.Dcb.Capabilities;
 using Sekiban.Dcb.Common;
 using Sekiban.Dcb.CosmosDb.Models;
@@ -38,7 +37,7 @@ public partial class CosmosDbEventStore
     ///     escape. This deliberately does not share the legacy list implementation, which materializes the complete
     ///     identifier history before issuing its reads.
     /// </summary>
-    public async Task<ResultBox<SerializableEventStreamReadResult>> StreamSerializableEventsByTagAsync(
+    public async Task<SerializableEventStreamReadResult> StreamSerializableEventsByTagAsync(
         ITag tag,
         SortableUniqueId? since,
         SortableUniqueId? until,
@@ -181,17 +180,12 @@ public partial class CosmosDbEventStore
                 lastSortableUniqueId = serializableEvent.SortableUniqueIdValue;
             }
 
-            return ResultBox.FromValue(new SerializableEventStreamReadResult(emitted, lastSortableUniqueId));
+            return new SerializableEventStreamReadResult(emitted, lastSortableUniqueId);
         }
-        catch (OperationCanceledException)
+        catch
         {
             await ObserveOutstandingReadsAsync().ConfigureAwait(false);
             throw;
-        }
-        catch (Exception ex)
-        {
-            await ObserveOutstandingReadsAsync().ConfigureAwait(false);
-            return ResultBox.Error<SerializableEventStreamReadResult>(ex);
         }
         finally
         {

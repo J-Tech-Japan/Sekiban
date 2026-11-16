@@ -11,6 +11,7 @@ using Sekiban.Dcb.CosmosDb.Tags;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.ServiceId;
 using System.Reflection;
+using Sekiban.Dcb.TestSupport;
 
 namespace Sekiban.Dcb.Tests.Cosmos;
 
@@ -143,7 +144,7 @@ public class CosmosLegacyTagMigrationTests
     {
         var written = NewEvent(Tag);
         lineage.Store.TagWriteFaultInjector = new NeverWriteTags();
-        await lineage.Store.WriteSerializableEventsAsync(new[] { written });
+        await lineage.Store.WriteSerializableEventsAsync(new[] { written }).AsResultBoxAsync();
         lineage.Store.TagWriteFaultInjector = null;
 
         for (var i = 0; i < legacyRows; i++)
@@ -372,7 +373,7 @@ public class CosmosLegacyTagMigrationTests
 
         // A normal write lands the canonical row; legacy rows for the same key sit alongside it.
         var written = NewEvent(Tag);
-        await lineage.Store.WriteSerializableEventsAsync(new[] { written });
+        await lineage.Store.WriteSerializableEventsAsync(new[] { written }).AsResultBoxAsync();
         lineage.Tags.Seed(LegacyRow(ServiceId, Tag, written));
         lineage.Tags.Seed(LegacyRow(ServiceId, Tag, written));
 
@@ -507,7 +508,7 @@ public class CosmosLegacyTagMigrationTests
         // A normal write lands the canonical row; a legacy row sits alongside it, so the plan sees a survivor
         // and conditions the transaction on its exact version.
         var written = NewEvent(Tag);
-        await lineage.Store.WriteSerializableEventsAsync(new[] { written });
+        await lineage.Store.WriteSerializableEventsAsync(new[] { written }).AsResultBoxAsync();
         lineage.Tags.Seed(LegacyRow(ServiceId, Tag, written));
 
         var migration = await lineage.MigrationAsync();
@@ -553,7 +554,7 @@ public class CosmosLegacyTagMigrationTests
         var lineage = NewLineage();
 
         var written = NewEvent(Tag);
-        await lineage.Store.WriteSerializableEventsAsync(new[] { written });
+        await lineage.Store.WriteSerializableEventsAsync(new[] { written }).AsResultBoxAsync();
         lineage.Tags.Seed(LegacyRow(ServiceId, Tag, written));
         lineage.Tags.Seed(LegacyRow(ServiceId, Tag, written));
 
@@ -723,7 +724,7 @@ public class CosmosLegacyTagMigrationTests
         // way, because splitting it would put the gap back.
         var written = NewEvent(Tag);
         lineage.Store.TagWriteFaultInjector = new NeverWriteTags();
-        await lineage.Store.WriteSerializableEventsAsync(new[] { written });
+        await lineage.Store.WriteSerializableEventsAsync(new[] { written }).AsResultBoxAsync();
         lineage.Store.TagWriteFaultInjector = null;
 
         for (var i = 0; i < 100; i++)
@@ -754,7 +755,7 @@ public class CosmosLegacyTagMigrationTests
         // 99 victims + 1 survivor = exactly 100 operations. The boundary must work, not merely not crash.
         var written = NewEvent(Tag);
         lineage.Store.TagWriteFaultInjector = new NeverWriteTags();
-        await lineage.Store.WriteSerializableEventsAsync(new[] { written });
+        await lineage.Store.WriteSerializableEventsAsync(new[] { written }).AsResultBoxAsync();
         lineage.Store.TagWriteFaultInjector = null;
 
         for (var i = 0; i < 99; i++)
@@ -781,7 +782,7 @@ public class CosmosLegacyTagMigrationTests
 
         // The canonical row is there — and it disagrees with its event. Legacy duplicates sit alongside it.
         var written = NewEvent(Tag);
-        await lineage.Store.WriteSerializableEventsAsync(new[] { written });
+        await lineage.Store.WriteSerializableEventsAsync(new[] { written }).AsResultBoxAsync();
         lineage.Tags.MutateInPlace(
             $"{ServiceId}|{Tag}",
             written.Id.ToString(),

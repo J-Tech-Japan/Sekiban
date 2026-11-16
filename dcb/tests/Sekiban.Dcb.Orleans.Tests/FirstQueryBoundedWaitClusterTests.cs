@@ -19,6 +19,7 @@ using Sekiban.Dcb.Storage.Checkpoints;
 using Sekiban.Dcb.Tags;
 using Sekiban.Dcb.Testing;
 using Xunit;
+using Sekiban.Dcb.TestSupport;
 namespace Sekiban.Dcb.Orleans.Tests;
 
 /// <summary>
@@ -63,7 +64,7 @@ public class FirstQueryBoundedWaitClusterTests : IAsyncLifetime
     {
         var t0 = timestamp ?? DateTime.UtcNow;
         await Env.EventStore.WriteSerializableEventsAsync(Enumerable.Range(0, 3)
-            .Select(i => ToSerializable(CreateEvent(new Counted($"e{i}"), t0.AddSeconds(-60 + i)))).ToArray());
+            .Select(i => ToSerializable(CreateEvent(new Counted($"e{i}"), t0.AddSeconds(-60 + i)))).ToArray()).AsResultBoxAsync();
         return _client.GetGrain<IMultiProjectionGrain>(CountProjector.MultiProjectorName);
     }
 
@@ -272,7 +273,7 @@ public class FirstQueryBoundedWaitClusterTests : IAsyncLifetime
             });
         var grain = await FreshAsync(t0);
         await Env.EventStore.WriteSerializableEventsAsync([
-            ToSerializable(CreateEvent(new Counted("poison"), t0.AddSeconds(-50)))]);
+            ToSerializable(CreateEvent(new Counted("poison"), t0.AddSeconds(-50)))]).AsResultBoxAsync();
         await PollUntilAsync(async () =>
         {
             var result = await grain.GetStateAsync();
@@ -307,7 +308,7 @@ public class FirstQueryBoundedWaitClusterTests : IAsyncLifetime
             await grain.RequestDeactivationAsync();
             await Task.Delay(1000);
             await Env.EventStore.WriteSerializableEventsAsync([
-                ToSerializable(CreateEvent(new Counted("tail"), t0.AddSeconds(-40)))]);
+                ToSerializable(CreateEvent(new Counted("tail"), t0.AddSeconds(-40)))]).AsResultBoxAsync();
         }
         Env.WaitMs = 100;
         Env.GatingStore.FailRestore = restoreFailure;
@@ -370,7 +371,7 @@ public class FirstQueryBoundedWaitClusterTests : IAsyncLifetime
         await grain.RequestDeactivationAsync();
         await Task.Delay(1000);
         await Env.EventStore.WriteSerializableEventsAsync([
-            ToSerializable(CreateEvent(new Counted("tail"), t0.AddSeconds(-40)))]);
+            ToSerializable(CreateEvent(new Counted("tail"), t0.AddSeconds(-40)))]).AsResultBoxAsync();
 
         Env.WaitMs = 100;
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -503,8 +504,8 @@ public class FirstQueryBoundedWaitClusterTests : IAsyncLifetime
     internal sealed class RestoreFailingStore(IGenerationAwareCheckpointStore inner) : DelegatingCheckpointStore(inner), IMultiProjectionStateStore
     {
         public bool FailRestore { get; set; }
-        public new Task<ResultBox<Stream>> OpenStateDataReadStreamAsync(MultiProjectionStateRecord record, CancellationToken ct = default) =>
-            FailRestore ? Task.FromResult(ResultBox.Error<Stream>(new InvalidOperationException("snapshot restore unavailable")))
+        public new Task<Stream> OpenStateDataReadStreamAsync(MultiProjectionStateRecord record, CancellationToken ct = default) =>
+            FailRestore ? Task.FromException<Stream>(new InvalidOperationException("snapshot restore unavailable"))
                 : base.OpenStateDataReadStreamAsync(record, ct);
     }
 

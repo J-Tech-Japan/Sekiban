@@ -1,4 +1,3 @@
-using ResultBoxes;
 using Sekiban.Dcb.MultiProjections;
 namespace Sekiban.Dcb.Storage.Checkpoints;
 
@@ -27,7 +26,7 @@ public interface IGenerationAwareCheckpointStore : ICheckpointStoreCapabilityPro
     ///     tombstone forces a rebuild rather than binding a stale payload. Returns <see cref="CheckpointSlot.Absent" />
     ///     when no row exists.
     /// </summary>
-    Task<ResultBox<CheckpointSlot>> ReadCheckpointSlotAsync(
+    Task<CheckpointSlot> ReadCheckpointSlotAsync(
         string projectorName,
         string projectorVersion,
         CancellationToken cancellationToken = default);

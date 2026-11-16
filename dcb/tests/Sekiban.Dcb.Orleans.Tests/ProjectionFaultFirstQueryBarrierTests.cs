@@ -15,6 +15,7 @@ using Sekiban.Dcb.Tags;
 using Sekiban.Dcb.Testing;
 using Xunit;
 using DomainTypes = Sekiban.Dcb.Orleans.Tests.ProjectionFaultOrleansTests;
+using Sekiban.Dcb.TestSupport;
 namespace Sekiban.Dcb.Orleans.Tests;
 
 /// <summary>
@@ -73,7 +74,7 @@ public class ProjectionFaultFirstQueryBarrierTests : IAsyncLifetime
     public async Task HeadReadFailure_FailsTheFirstQueryClosed_WithTheOriginalException()
     {
         // Durable (healthy) events exist, but the authoritative head read is failing.
-        await Store.WriteSerializableEventsAsync(new List<SerializableEvent> { DomainTypes.Event(poison: false, tick: 9_000) });
+        await Store.WriteSerializableEventsAsync(new List<SerializableEvent> { DomainTypes.Event(poison: false, tick: 9_000) }).AsResultBoxAsync();
         Store.FailHeadReads = true;
 
         var grain = Client.GetGrain<IMultiProjectionGrain>(DomainTypes.FaultTestProjector.MultiProjectorName);
@@ -93,7 +94,7 @@ public class ProjectionFaultFirstQueryBarrierTests : IAsyncLifetime
     public async Task ColdFirstQuery_ReachesFixedHeadWithoutWaitingForSafeWindow(FirstQuerySurface surface)
     {
         var safeEvent = DomainTypes.Event(poison: false, tick: 1_000);
-        await Store.WriteSerializableEventsAsync(new List<SerializableEvent> { safeEvent });
+        await Store.WriteSerializableEventsAsync(new List<SerializableEvent> { safeEvent }).AsResultBoxAsync();
 
         var grain = Client.GetGrain<IMultiProjectionGrain>(DomainTypes.FaultTestProjector.MultiProjectorName);
         var baseline = await grain.GetStateAsync();
@@ -105,7 +106,7 @@ public class ProjectionFaultFirstQueryBarrierTests : IAsyncLifetime
         await grain.RequestDeactivationAsync();
 
         var inWindowEvent = DomainTypes.Event(poison: false, tick: DateTime.UtcNow.Ticks);
-        await Store.WriteSerializableEventsAsync(new List<SerializableEvent> { inWindowEvent });
+        await Store.WriteSerializableEventsAsync(new List<SerializableEvent> { inWindowEvent }).AsResultBoxAsync();
         var cold = Client.GetGrain<IMultiProjectionGrain>(DomainTypes.FaultTestProjector.MultiProjectorName);
 
         var firstQuery = surface switch
@@ -159,7 +160,7 @@ public class ProjectionFaultFirstQueryBarrierTests : IAsyncLifetime
         await Store.WriteSerializableEventsAsync(new List<SerializableEvent>
         {
             DomainTypes.Event(poison: false, tick: 10_000), DomainTypes.Event(poison: false, tick: 10_001)
-        });
+        }).AsResultBoxAsync();
         Store.FailReads = true;
 
         var grain = Client.GetGrain<IMultiProjectionGrain>(DomainTypes.FaultTestProjector.MultiProjectorName);
@@ -202,7 +203,7 @@ public class ProjectionFaultFirstQueryBarrierTests : IAsyncLifetime
         {
             DomainTypes.Event(poison: false, tick: 10_100),
             DomainTypes.Event(poison: false, tick: 10_101)
-        });
+        }).AsResultBoxAsync();
         Store.ShortReads = true;
 
         var grain = Client.GetGrain<IMultiProjectionGrain>(DomainTypes.FaultTestProjector.MultiProjectorName);
@@ -234,14 +235,14 @@ public class ProjectionFaultFirstQueryBarrierTests : IAsyncLifetime
     public async Task InWindowPoisonAfterSafeBaseline_FaultsAllSurfaces_AndFreshActivationRestoresTheFault()
     {
         var safeEvent = DomainTypes.Event(poison: false, tick: 2_000);
-        await Store.WriteSerializableEventsAsync(new List<SerializableEvent> { safeEvent });
+        await Store.WriteSerializableEventsAsync(new List<SerializableEvent> { safeEvent }).AsResultBoxAsync();
         var seed = Client.GetGrain<IMultiProjectionGrain>(DomainTypes.FaultTestProjector.MultiProjectorName);
         Assert.True((await seed.GetStateAsync()).IsSuccess);
         Assert.True((await seed.PersistStateAsync()).IsSuccess);
         await seed.RequestDeactivationAsync();
 
         var poison = DomainTypes.Event(poison: true, tick: DateTime.UtcNow.Ticks);
-        await Store.WriteSerializableEventsAsync(new List<SerializableEvent> { poison });
+        await Store.WriteSerializableEventsAsync(new List<SerializableEvent> { poison }).AsResultBoxAsync();
         var cold = Client.GetGrain<IMultiProjectionGrain>(DomainTypes.FaultTestProjector.MultiProjectorName);
 
         Assert.False((await cold.GetStateAsync()).IsSuccess);
@@ -263,7 +264,7 @@ public class ProjectionFaultFirstQueryBarrierTests : IAsyncLifetime
     {
         var poison = DomainTypes.Event(poison: true, tick: DateTime.UtcNow.AddMilliseconds(-2).Ticks);
         var later = DomainTypes.Event(poison: false, tick: DateTime.UtcNow.Ticks);
-        await Store.WriteSerializableEventsAsync(new List<SerializableEvent> { poison, later });
+        await Store.WriteSerializableEventsAsync(new List<SerializableEvent> { poison, later }).AsResultBoxAsync();
 
         // Park the activation's background catch-up behind a provider failure, then deliver only the later event through
         // the production stream entry point. The host is safe-empty but its unsafe max equals the durable store head.
@@ -318,7 +319,7 @@ public class ProjectionFaultFirstQueryBarrierTests : IAsyncLifetime
         // Durable POISON sits in the store. The first queries fail closed on a transient read failure; when the store
         // recovers, a later query re-runs the barrier, catches up, re-folds the poison and fails with the FAULT — the
         // projection is never bricked and never answers empty.
-        await Store.WriteSerializableEventsAsync(new List<SerializableEvent> { DomainTypes.Event(poison: true, tick: 12_000) });
+        await Store.WriteSerializableEventsAsync(new List<SerializableEvent> { DomainTypes.Event(poison: true, tick: 12_000) }).AsResultBoxAsync();
         Store.FailReads = true;
 
         var grain = Client.GetGrain<IMultiProjectionGrain>(DomainTypes.FaultTestProjector.MultiProjectorName);
@@ -339,7 +340,7 @@ public class ProjectionFaultFirstQueryBarrierTests : IAsyncLifetime
     [Fact]
     public async Task ConcurrentFirstCallers_AllObserveFailure_NoneBypassesIntoEmptySuccess()
     {
-        await Store.WriteSerializableEventsAsync(new List<SerializableEvent> { DomainTypes.Event(poison: false, tick: 11_000) });
+        await Store.WriteSerializableEventsAsync(new List<SerializableEvent> { DomainTypes.Event(poison: false, tick: 11_000) }).AsResultBoxAsync();
         Store.FailReads = true;
 
         var grain = Client.GetGrain<IMultiProjectionGrain>(DomainTypes.FaultTestProjector.MultiProjectorName);
@@ -363,7 +364,7 @@ public class ProjectionFaultFirstQueryBarrierTests : IAsyncLifetime
         await seed.RequestDeactivationAsync();
 
         var durable = DomainTypes.Event(poison: false, tick: 20_000);
-        await Store.WriteSerializableEventsAsync(new[] { durable });
+        await Store.WriteSerializableEventsAsync(new[] { durable }).AsResultBoxAsync();
 
         var backgroundBefore = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var releaseBackgroundBefore = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -565,38 +566,37 @@ public class ProjectionFaultFirstQueryBarrierTests : IAsyncLifetime
             _inner.Clear();
         }
 
-        public Task<ResultBox<string>> GetLatestSortableUniqueIdAsync() =>
+        public Task<string> GetLatestSortableUniqueIdAsync() =>
             FailHeadReads
-                ? Task.FromResult(ResultBox.Error<string>(HeadError))
+                ? Task.FromException<string>(HeadError)
                 : _inner.GetLatestSortableUniqueIdAsync();
 
-        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null) =>
+        public Task<IEnumerable<SerializableEvent>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null) =>
             ReadAllSerializableEventsAsync(since, null);
 
-        public async Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(
+        public async Task<IEnumerable<SerializableEvent>> ReadAllSerializableEventsAsync(
             SortableUniqueId? since,
             int? maxCount)
         {
             if (FailReads)
             {
-                return ResultBox.Error<IEnumerable<SerializableEvent>>(ReadError);
+                throw ReadError;
             }
 
             var result = await _inner.ReadAllSerializableEventsAsync(since, maxCount);
-            if (!ShortReads || !result.IsSuccess)
+            if (!ShortReads)
             {
                 return result;
             }
 
             // A stable, error-free lag: the first call exposes one row, then the provider keeps returning an empty
             // short read even though the independently-read fixed head is later.
-            return ResultBox.FromValue(
-                since is null
-                    ? result.GetValue().Take(1)
-                    : Enumerable.Empty<SerializableEvent>());
+            return since is null
+                    ? result.Take(1)
+                    : Enumerable.Empty<SerializableEvent>();
         }
 
-        public async Task<ResultBox<SerializableEventStreamReadResult>> StreamAllSerializableEventsAsync(
+        public async Task<SerializableEventStreamReadResult> StreamAllSerializableEventsAsync(
             SortableUniqueId? since,
             int? maxCount,
             Func<SerializableEvent, ValueTask> onEvent,
@@ -605,16 +605,10 @@ public class ProjectionFaultFirstQueryBarrierTests : IAsyncLifetime
             if (FailReads)
             {
                 _failedStreamReadObserved.TrySetResult();
-                return ResultBox.Error<SerializableEventStreamReadResult>(ReadError);
+                throw ReadError;
             }
 
-            var result = await ReadAllSerializableEventsAsync(since, maxCount);
-            if (!result.IsSuccess)
-            {
-                return ResultBox.Error<SerializableEventStreamReadResult>(result.GetException());
-            }
-
-            var events = result.GetValue().ToList();
+            var events = (await ReadAllSerializableEventsAsync(since, maxCount)).ToList();
             foreach (var ev in events)
             {
                 cancellationToken.ThrowIfCancellationRequested();
@@ -622,24 +616,23 @@ public class ProjectionFaultFirstQueryBarrierTests : IAsyncLifetime
             }
 
             Interlocked.Increment(ref _successfulStreamReadCount);
-            return ResultBox.FromValue(
-                new SerializableEventStreamReadResult(
+            return new SerializableEventStreamReadResult(
                     events.Count,
-                    events.Count == 0 ? since?.Value : events[^1].SortableUniqueIdValue));
+                    events.Count == 0 ? since?.Value : events[^1].SortableUniqueIdValue);
         }
 
-        public Task<ResultBox<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>>
+        public Task<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>
             WriteSerializableEventsAsync(IEnumerable<SerializableEvent> events) =>
             _inner.WriteSerializableEventsAsync(events);
 
-        public Task<ResultBox<IEnumerable<TagStream>>> ReadTagsAsync(ITag tag) => _inner.ReadTagsAsync(tag);
-        public Task<ResultBox<TagState>> GetLatestTagAsync(ITag tag) => _inner.GetLatestTagAsync(tag);
-        public Task<ResultBox<bool>> TagExistsAsync(ITag tag) => _inner.TagExistsAsync(tag);
-        public Task<ResultBox<long>> GetEventCountAsync(SortableUniqueId? since = null) => _inner.GetEventCountAsync(since);
-        public Task<ResultBox<IEnumerable<TagInfo>>> GetAllTagsAsync(string? tagGroup = null) => _inner.GetAllTagsAsync(tagGroup);
-        public Task<ResultBox<SerializableEvent>> ReadSerializableEventAsync(Guid eventId) =>
+        public Task<IEnumerable<TagStream>> ReadTagsAsync(ITag tag) => _inner.ReadTagsAsync(tag);
+        public Task<TagState> GetLatestTagAsync(ITag tag) => _inner.GetLatestTagAsync(tag);
+        public Task<bool> TagExistsAsync(ITag tag) => _inner.TagExistsAsync(tag);
+        public Task<long> GetEventCountAsync(SortableUniqueId? since = null) => _inner.GetEventCountAsync(since);
+        public Task<IEnumerable<TagInfo>> GetAllTagsAsync(string? tagGroup = null) => _inner.GetAllTagsAsync(tagGroup);
+        public Task<SerializableEvent?> ReadSerializableEventAsync(Guid eventId) =>
             _inner.ReadSerializableEventAsync(eventId);
-        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadSerializableEventsByTagAsync(
+        public Task<IEnumerable<SerializableEvent>> ReadSerializableEventsByTagAsync(
             ITag tag,
             SortableUniqueId? since = null) => _inner.ReadSerializableEventsByTagAsync(tag, since);
     }

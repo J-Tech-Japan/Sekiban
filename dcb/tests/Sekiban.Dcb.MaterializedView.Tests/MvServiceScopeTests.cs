@@ -3,6 +3,7 @@ using Dcb.Domain.WithoutResult.Order;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.InMemory;
 using Xunit;
+using Sekiban.Dcb.TestSupport;
 
 namespace Sekiban.Dcb.MaterializedView.Tests;
 
@@ -31,12 +32,12 @@ public sealed class MvServiceScopeTests
                 [])
             .ToSerializableEvent(domainTypes.EventTypes);
 
-        var writeResult = await orders.WriteSerializableEventsAsync([serializableEvent]);
+        var writeResult = await orders.WriteSerializableEventsAsync([serializableEvent]).AsResultBoxAsync();
 
         Assert.True(writeResult.IsSuccess);
-        Assert.Single((await orders.ReadAllSerializableEventsAsync()).GetValue());
-        Assert.Single((await ordersAgain.ReadAllSerializableEventsAsync()).GetValue());
-        Assert.Empty((await billing.ReadAllSerializableEventsAsync()).GetValue());
+        Assert.Single((await orders.ReadAllSerializableEventsAsync().AsResultBoxAsync()).GetValue());
+        Assert.Single((await ordersAgain.ReadAllSerializableEventsAsync().AsResultBoxAsync()).GetValue());
+        Assert.Empty((await billing.ReadAllSerializableEventsAsync().AsResultBoxAsync()).GetValue());
     }
 
 }

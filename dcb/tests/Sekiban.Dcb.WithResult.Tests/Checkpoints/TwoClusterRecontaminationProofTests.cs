@@ -4,6 +4,7 @@ using Sekiban.Dcb.ServiceId;
 using Sekiban.Dcb.Storage.Checkpoints;
 using Sekiban.Dcb.Testing;
 using Xunit;
+using Sekiban.Dcb.TestSupport;
 namespace Sekiban.Dcb.Tests.Checkpoints;
 
 /// <summary>
@@ -31,7 +32,7 @@ public class TwoClusterRecontaminationProofTests
 
     private static Stream Payload(string s) => new MemoryStream(Encoding.UTF8.GetBytes(s));
     private static async Task<CheckpointSlot> Read(IGenerationAwareCheckpointStore s) =>
-        (await s.ReadCheckpointSlotAsync(Projector, Version)).GetValue();
+        (await s.ReadCheckpointSlotAsync(Projector, Version).AsResultBoxAsync()).GetValue();
 
     [Fact]
     public async Task RetrogradeRebuild_StalePeerCasRejected_NoRecontamination_OneRebuiltWinner_Converges()

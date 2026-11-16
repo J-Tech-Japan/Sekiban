@@ -67,7 +67,7 @@ public static class ConditionalAppendScenarios
         Assert.Equal(deterministicId, receipt.WinnerEventId);
         Assert.Equal(winner.SortableUniqueIdValue, receipt.WinnerSortableUniqueId);
         var fingerprint = OperationFingerprint.ComputeCanonical(
-            serviceId, key, domain.EventTypes, winner.EventPayloadName, winner.Payload, winner.Tags).GetValue();
+            serviceId, key, domain.EventTypes, winner.EventPayloadName, winner.Payload, winner.Tags);
         Assert.Equal(fingerprint, receipt.OperationFingerprint);
     }
 
@@ -78,8 +78,8 @@ public static class ConditionalAppendScenarios
         string key,
         Func<Task<int>> durableCount)
     {
-        var first = (await store.AppendIfUniqueAsync(new ConditionalAppendRequest(key, Marker(domain, "v")))).GetValue();
-        var second = (await store.AppendIfUniqueAsync(new ConditionalAppendRequest(key, Marker(domain, "v")))).GetValue();
+        var first = (await store.AppendIfUniqueAsync(new ConditionalAppendRequest(key, Marker(domain, "v"))).AsResultBoxAsync()).GetValue();
+        var second = (await store.AppendIfUniqueAsync(new ConditionalAppendRequest(key, Marker(domain, "v"))).AsResultBoxAsync()).GetValue();
 
         Assert.Equal(ConditionalAppendStatus.Appended, first.Status);
         Assert.Equal(ConditionalAppendStatus.AlreadyCommittedSameOperation, second.Status);
@@ -96,8 +96,8 @@ public static class ConditionalAppendScenarios
         string key,
         Func<Task<int>> durableCount)
     {
-        Assert.True((await store.AppendIfUniqueAsync(new ConditionalAppendRequest(key, Marker(domain, "first")))).IsSuccess);
-        var conflict = await store.AppendIfUniqueAsync(new ConditionalAppendRequest(key, Marker(domain, "DIFFERENT")));
+        Assert.True((await store.AppendIfUniqueAsync(new ConditionalAppendRequest(key, Marker(domain, "first"))).AsResultBoxAsync()).IsSuccess);
+        var conflict = await store.AppendIfUniqueAsync(new ConditionalAppendRequest(key, Marker(domain, "DIFFERENT"))).AsResultBoxAsync();
 
         Assert.False(conflict.IsSuccess);
         var ex = Assert.IsType<KeyReuseConflictException>(conflict.GetException());
@@ -115,7 +115,7 @@ public static class ConditionalAppendScenarios
     {
         var attempts = await Task.WhenAll(
             Enumerable.Range(0, writers).Select(_ =>
-                store.AppendIfUniqueAsync(new ConditionalAppendRequest(key, Marker(domain, "payload")))));
+                store.AppendIfUniqueAsync(new ConditionalAppendRequest(key, Marker(domain, "payload"))).AsResultBoxAsync()));
 
         var receipts = attempts.Where(r => r.IsSuccess).Select(r => r.GetValue()).ToList();
         Assert.Equal(writers, receipts.Count); // no writer errored

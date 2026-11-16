@@ -9,6 +9,7 @@ using Sekiban.Dcb.MaterializedView;
 using Sekiban.Dcb.MaterializedView.Postgres;
 using Sekiban.Dcb.MaterializedView.Sqlite;
 using Xunit;
+using Sekiban.Dcb.TestSupport;
 
 namespace Sekiban.Dcb.MaterializedView.MultiProvider.Tests;
 
@@ -314,7 +315,7 @@ public sealed class SqliteMvVerifiedBatchSafetyTests(SqliteMvFixture fixture)
         Skip.IfNot(fixture.IsAvailable, fixture.AvailabilityMessage ?? "SQLite fixture is unavailable.");
         var (projector, host, _, executor, audit) = await PrepareAsync(VerifiedBatchQuerySurface.Rows, readBeforeWrite: true);
         var events = CreateEvents();
-        var write = await fixture.EventStore.WriteSerializableEventsAsync(events).ConfigureAwait(false);
+        var write = await fixture.EventStore.WriteSerializableEventsAsync(events).AsResultBoxAsync().ConfigureAwait(false);
         Assert.True(write.IsSuccess, write.IsSuccess ? string.Empty : write.GetException().Message);
         audit.Reset();
 

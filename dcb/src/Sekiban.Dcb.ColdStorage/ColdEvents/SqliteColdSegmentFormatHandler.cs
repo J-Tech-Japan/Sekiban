@@ -3,7 +3,6 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Microsoft.Data.Sqlite;
-using ResultBoxes;
 using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Events;
 
@@ -22,7 +21,7 @@ public sealed class SqliteColdSegmentFormatHandler : IColdSegmentFormatHandler
     public Task<IColdSegmentFileBuilder> CreateBuilderAsync(SerializableEvent firstEvent, CancellationToken ct)
         => SqliteColdSegmentFileBuilder.CreateAsync(this, firstEvent, ct);
 
-    public async Task<ResultBox<ColdSegmentStreamResult>> StreamSegmentAsync(
+    public async Task<ColdSegmentStreamResult> StreamSegmentAsync(
         Stream data,
         SortableUniqueId? since,
         int? maxCount,
@@ -79,8 +78,7 @@ public sealed class SqliteColdSegmentFormatHandler : IColdSegmentFormatHandler
                 var evt = JsonSerializer.Deserialize<SerializableEvent>(eventJson, JsonOptions);
                 if (evt is null)
                 {
-                    return ResultBox.Error<ColdSegmentStreamResult>(
-                        new InvalidDataException("Cold SQLite segment row deserialized to null."));
+                    throw new InvalidDataException("Cold SQLite segment row deserialized to null.");
                 }
 
                 await onEvent(evt);
@@ -89,12 +87,7 @@ public sealed class SqliteColdSegmentFormatHandler : IColdSegmentFormatHandler
             }
 
             var reachedEndOfSegment = !maxCount.HasValue || eventsRead < maxCount.Value;
-            return ResultBox.FromValue(
-                new ColdSegmentStreamResult(eventsRead, lastSortableUniqueId, reachedEndOfSegment));
-        }
-        catch (Exception ex)
-        {
-            return ResultBox.Error<ColdSegmentStreamResult>(ex);
+            return new ColdSegmentStreamResult(eventsRead, lastSortableUniqueId, reachedEndOfSegment);
         }
         finally
         {

@@ -16,6 +16,7 @@ using Sekiban.Dcb.MaterializedView.Sqlite;
 using Sekiban.Dcb.ServiceId;
 using Sekiban.Dcb.Storage;
 using Xunit;
+using Sekiban.Dcb.TestSupport;
 
 namespace Sekiban.Dcb.MaterializedView.Tests;
 
@@ -34,17 +35,17 @@ public sealed class MvColdFactoryCatchUpTests
             nameof(Payload), Guid.NewGuid(), new EventMetadata("test", "test", "test"), []).ToSerializableEvent(types)).ToArray();
         var hotOnlyFactory = new InMemoryEventStoreFactory(types);
         var hybridInner = new InMemoryEventStoreFactory(types);
-        Assert.True((await hotOnlyFactory.CreateForService(Service).WriteSerializableEventsAsync(events)).IsSuccess);
+        await hotOnlyFactory.CreateForService(Service).WriteSerializableEventsAsync(events);
         // Deliberately omit the cold prefix from this backend: a bare factory cannot pass the comparison.
-        Assert.True((await hybridInner.CreateForService(Service).WriteSerializableEventsAsync(events.Skip(20))).IsSuccess);
+        await hybridInner.CreateForService(Service).WriteSerializableEventsAsync(events.Skip(20));
         var storage = new InMemoryColdObjectStorage();
         var data = JsonlSegmentWriter.Write(events.Take(20).ToArray());
         const string path = "segments/cold-view/history.jsonl";
-        await storage.PutAsync(path, data, null, default);
+        await storage.PutAsync(path, data, null, default).AsResultBoxAsync();
         var manifest = new ColdManifest(Service, "v1", events[19].SortableUniqueIdValue,
             [new(path, events[0].SortableUniqueIdValue, events[19].SortableUniqueIdValue, 20, data.Length, "test", DateTimeOffset.UnixEpoch)], DateTimeOffset.UnixEpoch);
         await storage.PutAsync(ColdStoragePaths.ManifestPath(Service), JsonSerializer.SerializeToUtf8Bytes(manifest,
-            new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase }), null, default);
+            new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase }), null, default).AsResultBoxAsync();
         var services = new ServiceCollection();
         services.AddSingleton<IEventStore>(hybridInner.CreateForService(Service));
         services.AddSingleton<IEventStoreFactory>(hybridInner);

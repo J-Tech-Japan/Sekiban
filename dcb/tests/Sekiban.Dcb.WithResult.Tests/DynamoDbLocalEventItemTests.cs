@@ -18,6 +18,7 @@ using Sekiban.Dcb.SizeGates;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Testing;
 using CoreInMemoryEventStore = Sekiban.Dcb.Testing.InMemoryEventStore;
+using Sekiban.Dcb.TestSupport;
 
 namespace Sekiban.Dcb.Tests;
 
@@ -70,7 +71,7 @@ public sealed class DynamoDbLocalEventItemTests
             Assert.Equal(
                 DynamoDbEventItemSizeMeasurement.MaximumItemBytes,
                 Measure(measurement, exact));
-            var baseWrite = await store.WriteSerializableEventsAsync([baseEvent]);
+            var baseWrite = await store.WriteSerializableEventsAsync([baseEvent]).AsResultBoxAsync();
             Assert.True(baseWrite.IsSuccess);
 
             var item = await client.GetItemAsync(new GetItemRequest

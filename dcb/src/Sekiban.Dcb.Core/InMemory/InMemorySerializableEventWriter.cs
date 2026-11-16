@@ -1,4 +1,3 @@
-using ResultBoxes;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.Tags;
 namespace Sekiban.Dcb.InMemory;
@@ -16,7 +15,7 @@ public static class InMemorySerializableEventWriter
     /// </summary>
     /// <param name="events">The serializable events to write</param>
     /// <param name="addableStore">Adapter providing add and count operations on the underlying store</param>
-    public static ResultBox<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)> Write(
+    public static (IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites) Write(
         IEnumerable<SerializableEvent> events,
         IAddableEventStore addableStore)
     {
@@ -35,8 +34,7 @@ public static class InMemorySerializableEventWriter
             tagWrites.Add(new TagWriteResult(tagString, tagEventCount, DateTimeOffset.UtcNow));
         }
 
-        return ResultBox.FromValue<(IReadOnlyList<SerializableEvent>, IReadOnlyList<TagWriteResult>)>(
-            (list.AsReadOnly(), tagWrites));
+        return (list.AsReadOnly(), tagWrites);
     }
 
     /// <summary>

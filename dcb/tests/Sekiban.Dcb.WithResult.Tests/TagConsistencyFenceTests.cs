@@ -514,46 +514,47 @@ public sealed class TagConsistencyFenceTests
         public WriteConditionCapabilityDescriptor DescribeWriteConditions() => Supported
             ? WriteConditionCapabilityDescriptor.Supporting("Recording", WriteConditionKind.ExpectedTagPosition, WriteConditionKind.SingleEventUniqueKey)
             : WriteConditionCapabilityDescriptor.None("Recording");
-        public Task<ResultBox<bool>> EnsureExpectedTagPositionEnforcementEnabledAsync(CancellationToken ct = default)
+        public Task<bool> EnsureExpectedTagPositionEnforcementEnabledAsync(CancellationToken ct = default)
         {
             EpochChecks++;
-            return Task.FromResult(Enabled || ReturnFalse ? ResultBox.FromValue(Enabled) : ResultBox.Error<bool>(new TagHeadEnforcementNotEnabledException(Service)));
+            return Enabled || ReturnFalse
+                ? Task.FromResult(Enabled)
+                : Task.FromException<bool>(new TagHeadEnforcementNotEnabledException(Service));
         }
-        public async Task<ResultBox<ExpectedTagPositionWriteResult>> WriteSerializableEventsWithExpectedTagPositionsAsync(
+        public async Task<ExpectedTagPositionWriteResult> WriteSerializableEventsWithExpectedTagPositionsAsync(
             IReadOnlyList<SerializableEvent> events, ExpectedTagPositionSpecification specification, CancellationToken ct = default)
         {
             Specification = specification;
             WrittenCount = events.Count;
             if (Failure is not null)
             {
-                if (Throws) throw Failure;
-                return ResultBox.Error<ExpectedTagPositionWriteResult>(Failure);
+                throw Failure;
             }
-            var result = (await _inner.WriteSerializableEventsAsync(events)).GetValue();
-            return ResultBox.FromValue(new ExpectedTagPositionWriteResult(result.Events, result.TagWrites));
+            var result = await _inner.WriteSerializableEventsAsync(events);
+            return new ExpectedTagPositionWriteResult(result.Events, result.TagWrites);
         }
-        public Task<ResultBox<ConditionalAppendReceipt>> AppendIfUniqueAsync(ConditionalAppendRequest request, CancellationToken ct = default)
+        public Task<ConditionalAppendReceipt> AppendIfUniqueAsync(ConditionalAppendRequest request, CancellationToken ct = default)
         { ConditionalWrites++; return _inner.AppendIfUniqueAsync(request, ct); }
-        public Task<ResultBox<IEnumerable<TagStream>>> ReadTagsAsync(ITag tag) => _inner.ReadTagsAsync(tag);
-        public Task<ResultBox<TagState>> GetLatestTagAsync(ITag tag) => _inner.GetLatestTagAsync(tag);
-        public Task<ResultBox<bool>> TagExistsAsync(ITag tag) => _inner.TagExistsAsync(tag);
-        public Task<ResultBox<long>> GetEventCountAsync(SortableUniqueId? since = null) => _inner.GetEventCountAsync(since);
-        public Task<ResultBox<IEnumerable<TagInfo>>> GetAllTagsAsync(string? group = null) => _inner.GetAllTagsAsync(group);
-        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null) => _inner.ReadAllSerializableEventsAsync(since);
-        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(SortableUniqueId? since, int? count) => _inner.ReadAllSerializableEventsAsync(since, count);
-        public Task<ResultBox<SerializableEvent>> ReadSerializableEventAsync(Guid id) => _inner.ReadSerializableEventAsync(id);
-        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadSerializableEventsByTagAsync(ITag tag, SortableUniqueId? since = null) => _inner.ReadSerializableEventsByTagAsync(tag, since);
-        public Task<ResultBox<string>> GetLatestSortableUniqueIdAsync() => _inner.GetLatestSortableUniqueIdAsync();
-        public Task<ResultBox<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>> WriteSerializableEventsAsync(IEnumerable<SerializableEvent> events)
+        public Task<IEnumerable<TagStream>> ReadTagsAsync(ITag tag) => _inner.ReadTagsAsync(tag);
+        public Task<TagState> GetLatestTagAsync(ITag tag) => _inner.GetLatestTagAsync(tag);
+        public Task<bool> TagExistsAsync(ITag tag) => _inner.TagExistsAsync(tag);
+        public Task<long> GetEventCountAsync(SortableUniqueId? since = null) => _inner.GetEventCountAsync(since);
+        public Task<IEnumerable<TagInfo>> GetAllTagsAsync(string? group = null) => _inner.GetAllTagsAsync(group);
+        public Task<IEnumerable<SerializableEvent>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null) => _inner.ReadAllSerializableEventsAsync(since);
+        public Task<IEnumerable<SerializableEvent>> ReadAllSerializableEventsAsync(SortableUniqueId? since, int? count) => _inner.ReadAllSerializableEventsAsync(since, count);
+        public Task<SerializableEvent?> ReadSerializableEventAsync(Guid id) => _inner.ReadSerializableEventAsync(id);
+        public Task<IEnumerable<SerializableEvent>> ReadSerializableEventsByTagAsync(ITag tag, SortableUniqueId? since = null) => _inner.ReadSerializableEventsByTagAsync(tag, since);
+        public Task<string> GetLatestSortableUniqueIdAsync() => _inner.GetLatestSortableUniqueIdAsync();
+        public Task<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)> WriteSerializableEventsAsync(IEnumerable<SerializableEvent> events)
         { LegacyWrites++; return _inner.WriteSerializableEventsAsync(events); }
     }
 
     private sealed class UnusedColdStorage : IColdObjectStorage
     {
-        public Task<ResultBox<ColdStorageObject>> GetAsync(string path, CancellationToken ct) => throw new NotSupportedException();
-        public Task<ResultBox<bool>> PutAsync(string path, Stream data, string? etag, CancellationToken ct) => throw new NotSupportedException();
-        public Task<ResultBox<bool>> PutAsync(string path, byte[] data, string? etag, CancellationToken ct) => throw new NotSupportedException();
-        public Task<ResultBox<IReadOnlyList<string>>> ListAsync(string prefix, CancellationToken ct) => throw new NotSupportedException();
-        public Task<ResultBox<bool>> DeleteAsync(string path, CancellationToken ct) => throw new NotSupportedException();
+        public Task<ColdStorageObject?> GetAsync(string path, CancellationToken ct) => throw new NotSupportedException();
+        public Task<bool> PutAsync(string path, Stream data, string? etag, CancellationToken ct) => throw new NotSupportedException();
+        public Task<bool> PutAsync(string path, byte[] data, string? etag, CancellationToken ct) => throw new NotSupportedException();
+        public Task<IReadOnlyList<string>> ListAsync(string prefix, CancellationToken ct) => throw new NotSupportedException();
+        public Task<bool> DeleteAsync(string path, CancellationToken ct) => throw new NotSupportedException();
     }
 }

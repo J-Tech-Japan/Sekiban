@@ -8,6 +8,7 @@ using Sekiban.Dcb.MultiProjections;
 using Sekiban.Dcb.ServiceId;
 using Sekiban.Dcb.Storage.Checkpoints;
 using Xunit;
+using Sekiban.Dcb.TestSupport;
 namespace Sekiban.Dcb.Tests.Checkpoints;
 
 /// <summary>
@@ -39,7 +40,7 @@ public class DynamoDbCheckpointGenerationCasTests
 
     private static Stream Payload(string s) => new MemoryStream(Encoding.UTF8.GetBytes(s));
     private static async Task<CheckpointSlot> ReadAsync(IGenerationAwareCheckpointStore s) =>
-        (await s.ReadCheckpointSlotAsync(Projector, Version)).GetValue();
+        (await s.ReadCheckpointSlotAsync(Projector, Version).AsResultBoxAsync()).GetValue();
 
     private static IAmazonDynamoDB NewClient() => DispatchProxy.Create<IAmazonDynamoDB, FakeDynamoDb>();
 
@@ -189,7 +190,7 @@ public class DynamoDbCheckpointGenerationCasTests
     public async Task PreG20Item_MissingControlAttributes_ReadsAsGeneration0_Active()
     {
         var store = NewStore(NewClient());
-        Assert.True((await store.UpsertFromStreamAsync(Req(7), Payload("legacy"), 1_000_000)).GetValue());
+        Assert.True((await store.UpsertFromStreamAsync(Req(7), Payload("legacy"), 1_000_000).AsResultBoxAsync()).GetValue());
         var slot = await ReadAsync(store);
         Assert.True(slot.IsActive);
         Assert.Equal(0, slot.Generation);

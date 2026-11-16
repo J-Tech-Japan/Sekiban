@@ -8,6 +8,7 @@ using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
 using System.Reflection;
 using CoreInMemoryEventStore = Sekiban.Dcb.Testing.InMemoryEventStore;
+using Sekiban.Dcb.TestSupport;
 namespace Sekiban.Dcb.Tests;
 
 public class TagReservationStaleCacheAfterConfirmTests
@@ -52,7 +53,7 @@ public class TagReservationStaleCacheAfterConfirmTests
             await f.WriteAsync("loser");
             Assert.True(await f.Actor.ConfirmReservationAsync(result.GetValue()));
         }
-        var committed = (await f.Inner.ReadEventsByTagAsync(f.Tag)).GetValue().Count() - (seedExisting ? 1 : 0);
+        var committed = (await f.Inner.ReadEventsByTagAsync(f.Tag).AsResultBoxAsync()).GetValue().Count() - (seedExisting ? 1 : 0);
         Assert.Equal(1, committed);
         Conflict(result);
     }
@@ -299,7 +300,7 @@ public class TagReservationStaleCacheAfterConfirmTests
         public async Task<string> WriteAsync(string name)
         {
             var ev = EventTestHelper.CreateEvent(new StudentCreated(Guid.NewGuid(), name), Tag);
-            Assert.True((await Inner.WriteEventAsync(ev, _types.EventTypes)).IsSuccess);
+            Assert.True((await Inner.WriteEventAsync(ev, _types.EventTypes).AsResultBoxAsync()).IsSuccess);
             return ev.SortableUniqueIdValue;
         }
     }
@@ -323,16 +324,16 @@ public class TagReservationStaleCacheAfterConfirmTests
             Assert.Null(Interlocked.Exchange(ref _nextRead, gate));
             return gate;
         }
-        public async Task<ResultBox<TagState>> GetLatestTagAsync(ITag tag)
+        public async Task<TagState> GetLatestTagAsync(ITag tag)
         {
             Interlocked.Increment(ref _calls);
             var snapshot = inner.GetLatestTagAsync(tag);
             // A returned incomplete actor task without a gate proves it reached a semaphore wait, not store I/O.
-            Assert.True(snapshot.IsCompletedSuccessfully);
-            var result = await snapshot;
-            // Model a successful empty snapshot; the real InMemory store uses an error for an absent tag.
+            Assert.True(snapshot.IsCompleted);
+            var result = await snapshot.AsResultBoxAsync();
+            // Model a successful empty snapshot for an absent tag.
             // Injected failures below remain errors and exercise the no-completion contract.
-            if (!result.IsSuccess && !(await inner.TagExistsAsync(tag)).GetValue())
+            if (!result.IsSuccess && !await inner.TagExistsAsync(tag))
             {
                 result = ResultBox.FromValue(TagState.GetEmpty(new TagStateId(tag, "TestProjector")));
             }
@@ -342,24 +343,25 @@ public class TagReservationStaleCacheAfterConfirmTests
                 gate.Captured.TrySetResult();
                 await gate.Release.Task.WaitAsync(Timeout);
             }
-            return AfterRead == null ? result : AfterRead(result);
+            var outcome = AfterRead == null ? result : AfterRead(result);
+            return outcome.IsSuccess ? outcome.GetValue() : throw outcome.GetException();
         }
-        public Task<ResultBox<IEnumerable<TagStream>>> ReadTagsAsync(ITag tag) => inner.ReadTagsAsync(tag);
-        public Task<ResultBox<bool>> TagExistsAsync(ITag tag) => inner.TagExistsAsync(tag);
-        public Task<ResultBox<long>> GetEventCountAsync(SortableUniqueId? since = null) => inner.GetEventCountAsync(since);
-        public Task<ResultBox<IEnumerable<TagInfo>>> GetAllTagsAsync(string? tagGroup = null) => inner.GetAllTagsAsync(tagGroup);
-        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null) =>
+        public Task<IEnumerable<TagStream>> ReadTagsAsync(ITag tag) => inner.ReadTagsAsync(tag);
+        public Task<bool> TagExistsAsync(ITag tag) => inner.TagExistsAsync(tag);
+        public Task<long> GetEventCountAsync(SortableUniqueId? since = null) => inner.GetEventCountAsync(since);
+        public Task<IEnumerable<TagInfo>> GetAllTagsAsync(string? tagGroup = null) => inner.GetAllTagsAsync(tagGroup);
+        public Task<IEnumerable<SerializableEvent>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null) =>
             inner.ReadAllSerializableEventsAsync(since);
-        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(SortableUniqueId? since, int? maxCount) =>
+        public Task<IEnumerable<SerializableEvent>> ReadAllSerializableEventsAsync(SortableUniqueId? since, int? maxCount) =>
             inner.ReadAllSerializableEventsAsync(since, maxCount);
-        public Task<ResultBox<SerializableEvent>> ReadSerializableEventAsync(Guid eventId) =>
+        public Task<SerializableEvent?> ReadSerializableEventAsync(Guid eventId) =>
             inner.ReadSerializableEventAsync(eventId);
-        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadSerializableEventsByTagAsync(
+        public Task<IEnumerable<SerializableEvent>> ReadSerializableEventsByTagAsync(
             ITag tag,
             SortableUniqueId? since = null) => inner.ReadSerializableEventsByTagAsync(tag, since);
-        public Task<ResultBox<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>>
+        public Task<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>
             WriteSerializableEventsAsync(IEnumerable<SerializableEvent> events) =>
             inner.WriteSerializableEventsAsync(events);
-        public Task<ResultBox<string>> GetLatestSortableUniqueIdAsync() => inner.GetLatestSortableUniqueIdAsync();
+        public Task<string> GetLatestSortableUniqueIdAsync() => inner.GetLatestSortableUniqueIdAsync();
     }
 }

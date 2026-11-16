@@ -48,7 +48,7 @@ public class ConditionalAppendBoundedVerificationTests
             (_, _) => Task.FromResult<SerializableEvent?>(winner),
             ensureCommittedAsync: null,
             cancellationToken: CancellationToken.None,
-            verificationBudget: TimeSpan.FromSeconds(5));
+            verificationBudget: TimeSpan.FromSeconds(5)).AsResultBoxAsync();
 
         Assert.True(result.IsSuccess, result.IsSuccess ? "" : result.GetException().ToString());
         Assert.Equal(ConditionalAppendStatus.AlreadyCommittedSameOperation, result.GetValue().Status);
@@ -71,7 +71,7 @@ public class ConditionalAppendBoundedVerificationTests
             async (_, ct) => { await Task.Delay(Timeout.Infinite, ct); return null; },
             ensureCommittedAsync: null,
             cancellationToken: caller.Token,
-            verificationBudget: budget);
+            verificationBudget: budget).AsResultBoxAsync();
         sw.Stop();
 
         Assert.False(result.IsSuccess);

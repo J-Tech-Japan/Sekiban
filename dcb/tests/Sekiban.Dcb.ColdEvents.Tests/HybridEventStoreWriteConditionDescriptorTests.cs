@@ -10,6 +10,7 @@ using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
 using Sekiban.Dcb.Testing;
 using Xunit;
+using Sekiban.Dcb.TestSupport;
 namespace Sekiban.Dcb.ColdEvents.Tests;
 
 /// <summary>
@@ -67,7 +68,7 @@ public class HybridEventStoreWriteConditionDescriptorTests
             new SerializableEvent(new byte[] { 1 }, SortableUniqueId.GenerateNew(), Guid.CreateVersion7(),
                 new EventMetadata("c", "c", "u"), new List<string>(), "Evt"));
 
-        var result = await hybrid.AppendIfUniqueAsync(request);
+        var result = await hybrid.AppendIfUniqueAsync(request).AsResultBoxAsync();
 
         Assert.True(result.IsSuccess);
         Assert.True(hot.ForwardReceived); // the append was forwarded to the hot store, not handled by the wrapper
@@ -87,7 +88,7 @@ public class HybridEventStoreWriteConditionDescriptorTests
             new TestTag(),
             null,
             null,
-            _ => ValueTask.CompletedTask);
+            _ => ValueTask.CompletedTask).AsResultBoxAsync();
 
         Assert.False(result.IsSuccess);
         Assert.Equal(0, hot.ListReadCalls);
@@ -107,7 +108,7 @@ public class HybridEventStoreWriteConditionDescriptorTests
             new TestTag(),
             null,
             null,
-            _ => ValueTask.CompletedTask);
+            _ => ValueTask.CompletedTask).AsResultBoxAsync();
 
         Assert.True(result.IsSuccess, result.IsSuccess ? string.Empty : result.GetException().ToString());
         Assert.Equal(1, hot.StreamCalls);
@@ -121,18 +122,17 @@ public class HybridEventStoreWriteConditionDescriptorTests
         public WriteConditionCapabilityDescriptor DescribeWriteConditions() =>
             WriteConditionCapabilityDescriptor.Supporting("ConditionalStore", WriteConditionKind.SingleEventUniqueKey);
 
-        public Task<ResultBox<ConditionalAppendReceipt>> AppendIfUniqueAsync(
+        public Task<ConditionalAppendReceipt> AppendIfUniqueAsync(
             ConditionalAppendRequest request,
             CancellationToken cancellationToken = default)
         {
             ForwardReceived = true;
             return Task.FromResult(
-                ResultBox.FromValue(
                     new ConditionalAppendReceipt(
                         ConditionalAppendStatus.Appended,
                         request.Event.Id,
                         request.Event.SortableUniqueIdValue,
-                        "fingerprint")));
+                        "fingerprint"));
         }
     }
 
@@ -146,21 +146,21 @@ public class HybridEventStoreWriteConditionDescriptorTests
     /// <summary>An event store that does not implement the capability descriptor at all.</summary>
     private class SilentStore : IEventStore
     {
-        public Task<ResultBox<IEnumerable<TagStream>>> ReadTagsAsync(ITag tag) => throw new NotSupportedException();
-        public Task<ResultBox<TagState>> GetLatestTagAsync(ITag tag) => throw new NotSupportedException();
-        public Task<ResultBox<bool>> TagExistsAsync(ITag tag) => throw new NotSupportedException();
-        public Task<ResultBox<long>> GetEventCountAsync(SortableUniqueId? since = null) => throw new NotSupportedException();
-        public Task<ResultBox<IEnumerable<TagInfo>>> GetAllTagsAsync(string? tagGroup = null) => throw new NotSupportedException();
-        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null) =>
+        public Task<IEnumerable<TagStream>> ReadTagsAsync(ITag tag) => throw new NotSupportedException();
+        public Task<TagState> GetLatestTagAsync(ITag tag) => throw new NotSupportedException();
+        public Task<bool> TagExistsAsync(ITag tag) => throw new NotSupportedException();
+        public Task<long> GetEventCountAsync(SortableUniqueId? since = null) => throw new NotSupportedException();
+        public Task<IEnumerable<TagInfo>> GetAllTagsAsync(string? tagGroup = null) => throw new NotSupportedException();
+        public Task<IEnumerable<SerializableEvent>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null) =>
             throw new NotSupportedException();
-        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(SortableUniqueId? since, int? maxCount) =>
+        public Task<IEnumerable<SerializableEvent>> ReadAllSerializableEventsAsync(SortableUniqueId? since, int? maxCount) =>
             throw new NotSupportedException();
-        public Task<ResultBox<SerializableEvent>> ReadSerializableEventAsync(Guid eventId) => throw new NotSupportedException();
-        public virtual Task<ResultBox<IEnumerable<SerializableEvent>>> ReadSerializableEventsByTagAsync(ITag tag, SortableUniqueId? since = null) =>
+        public Task<SerializableEvent?> ReadSerializableEventAsync(Guid eventId) => throw new NotSupportedException();
+        public virtual Task<IEnumerable<SerializableEvent>> ReadSerializableEventsByTagAsync(ITag tag, SortableUniqueId? since = null) =>
             throw new NotSupportedException();
-        public Task<ResultBox<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>>
+        public Task<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>
             WriteSerializableEventsAsync(IEnumerable<SerializableEvent> events) => throw new NotSupportedException();
-        public Task<ResultBox<string>> GetLatestSortableUniqueIdAsync() => throw new NotSupportedException();
+        public Task<string> GetLatestSortableUniqueIdAsync() => throw new NotSupportedException();
     }
 
     /// <summary>
@@ -171,7 +171,7 @@ public class HybridEventStoreWriteConditionDescriptorTests
     {
         public int ListReadCalls { get; private set; }
 
-        public override Task<ResultBox<IEnumerable<SerializableEvent>>> ReadSerializableEventsByTagAsync(
+        public override Task<IEnumerable<SerializableEvent>> ReadSerializableEventsByTagAsync(
             ITag tag,
             SortableUniqueId? since = null)
         {
@@ -179,7 +179,7 @@ public class HybridEventStoreWriteConditionDescriptorTests
             throw new InvalidOperationException("The Hybrid must not call a list API to simulate tagged streaming.");
         }
 
-        public Task<ResultBox<SerializableEventStreamReadResult>> StreamSerializableEventsByTagAsync(
+        public Task<SerializableEventStreamReadResult> StreamSerializableEventsByTagAsync(
             ITag tag,
             SortableUniqueId? since,
             SortableUniqueId? until,
@@ -196,7 +196,7 @@ public class HybridEventStoreWriteConditionDescriptorTests
         public TaggedStreamCapabilityDescriptor DescribeTaggedStream() =>
             TaggedStreamCapabilityDescriptor.Native("honest hybrid test");
 
-        public Task<ResultBox<SerializableEventStreamReadResult>> StreamSerializableEventsByTagAsync(
+        public Task<SerializableEventStreamReadResult> StreamSerializableEventsByTagAsync(
             ITag tag,
             SortableUniqueId? since,
             SortableUniqueId? until,
@@ -204,7 +204,7 @@ public class HybridEventStoreWriteConditionDescriptorTests
             CancellationToken cancellationToken = default)
         {
             StreamCalls++;
-            return Task.FromResult(ResultBox.FromValue(new SerializableEventStreamReadResult(0, null)));
+            return Task.FromResult(new SerializableEventStreamReadResult(0, null));
         }
     }
 

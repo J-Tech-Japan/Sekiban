@@ -77,7 +77,7 @@ public class ConditionalAppendShapeBoundaryTests
         var json = domain.EventTypes.SerializeEventPayload(new ListEvent(new List<string> { "a", "b" }));
         var r = OperationFingerprint.ComputeCanonical(
             "s", "k", domain.EventTypes, nameof(ListEvent), Encoding.UTF8.GetBytes(json), Array.Empty<string>());
-        Assert.True(r.IsSuccess);
+        Assert.NotEmpty(r);
     }
 
     // ---- Real conditional-executor invocation with an alternating options-level primitive converter ----
@@ -130,7 +130,7 @@ public class ConditionalAppendShapeBoundaryTests
 
         Assert.Equal(0, store.AppendAttempts);
         Assert.Equal(0, store.WriteCalls);
-        Assert.Empty((await store.ReadAllSerializableEventsAsync()).GetValue());
+        Assert.Empty((await store.ReadAllSerializableEventsAsync().AsResultBoxAsync()).GetValue());
     }
 
     private static DcbDomainTypes DomainWith(params Action<SimpleEventTypes>[] registrations)
@@ -168,10 +168,8 @@ public class ConditionalAppendShapeBoundaryTests
 
     private static void AssertRejected(DcbDomainTypes domain, string eventName, string payloadJson)
     {
-        var r = OperationFingerprint.ComputeCanonical(
-            "s", "k", domain.EventTypes, eventName, Encoding.UTF8.GetBytes(payloadJson), Array.Empty<string>());
-        Assert.False(r.IsSuccess);
-        Assert.IsType<OperationCanonicalizationException>(r.GetException());
+        Assert.Throws<OperationCanonicalizationException>(() => OperationFingerprint.ComputeCanonical(
+            "s", "k", domain.EventTypes, eventName, Encoding.UTF8.GetBytes(payloadJson), Array.Empty<string>()));
     }
 
     private record ShapeCommand : ICommand;

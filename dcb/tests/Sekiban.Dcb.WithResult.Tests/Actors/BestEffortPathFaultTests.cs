@@ -103,26 +103,26 @@ public class BestEffortPathFaultTests
 
     private sealed class EmptyStore : IEventStore
     {
-        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(
+        public Task<IEnumerable<SerializableEvent>> ReadAllSerializableEventsAsync(
             SortableUniqueId? since = null) =>
-            Task.FromResult(ResultBox.FromValue<IEnumerable<SerializableEvent>>([]));
-        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(
+            Task.FromResult<IEnumerable<SerializableEvent>>([]);
+        public Task<IEnumerable<SerializableEvent>> ReadAllSerializableEventsAsync(
             SortableUniqueId? since,
             int? maxCount) => ReadAllSerializableEventsAsync(since);
-        public Task<ResultBox<IEnumerable<TagStream>>> ReadTagsAsync(ITag tag) => throw new NotSupportedException();
-        public Task<ResultBox<TagState>> GetLatestTagAsync(ITag tag) => throw new NotSupportedException();
-        public Task<ResultBox<bool>> TagExistsAsync(ITag tag) => throw new NotSupportedException();
-        public Task<ResultBox<long>> GetEventCountAsync(SortableUniqueId? since = null) =>
+        public Task<IEnumerable<TagStream>> ReadTagsAsync(ITag tag) => throw new NotSupportedException();
+        public Task<TagState> GetLatestTagAsync(ITag tag) => throw new NotSupportedException();
+        public Task<bool> TagExistsAsync(ITag tag) => throw new NotSupportedException();
+        public Task<long> GetEventCountAsync(SortableUniqueId? since = null) =>
             throw new NotSupportedException();
-        public Task<ResultBox<IEnumerable<TagInfo>>> GetAllTagsAsync(string? tagGroup = null) =>
+        public Task<IEnumerable<TagInfo>> GetAllTagsAsync(string? tagGroup = null) =>
             throw new NotSupportedException();
-        public Task<ResultBox<SerializableEvent>> ReadSerializableEventAsync(Guid eventId) =>
+        public Task<SerializableEvent?> ReadSerializableEventAsync(Guid eventId) =>
             throw new NotSupportedException();
-        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadSerializableEventsByTagAsync(
+        public Task<IEnumerable<SerializableEvent>> ReadSerializableEventsByTagAsync(
             ITag tag,
             SortableUniqueId? since = null) => throw new NotSupportedException();
-        public Task<ResultBox<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>>
+        public Task<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>
             WriteSerializableEventsAsync(IEnumerable<SerializableEvent> events) => throw new NotSupportedException();
-        public Task<ResultBox<string>> GetLatestSortableUniqueIdAsync() => throw new NotSupportedException();
+        public Task<string> GetLatestSortableUniqueIdAsync() => throw new NotSupportedException();
     }
 }

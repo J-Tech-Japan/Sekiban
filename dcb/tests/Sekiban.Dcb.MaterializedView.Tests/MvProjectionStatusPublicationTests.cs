@@ -17,6 +17,7 @@ using Sekiban.Dcb.ServiceId;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Testing;
 using Xunit;
+using Sekiban.Dcb.TestSupport;
 
 namespace Sekiban.Dcb.MaterializedView.Tests;
 
@@ -168,7 +169,7 @@ public class MvProjectionStatusPublicationTests
             ViewVersion,
             snapshot,
             MvProjectionStatusPublisherKind.HostedWorker);
-        Assert.Equal(1, Assert.Single((await store.ListAsync()).GetValue()).Sequence);
+        Assert.Equal(1, Assert.Single((await store.ListAsync().AsResultBoxAsync()).GetValue()).Sequence);
 
         // The second production write has expected=1. Removing the row must leave the store empty after that write.
         store.Clear();
@@ -178,7 +179,7 @@ public class MvProjectionStatusPublicationTests
             ViewVersion,
             snapshot,
             MvProjectionStatusPublisherKind.HostedWorker);
-        Assert.Empty((await store.ListAsync()).GetValue());
+        Assert.Empty((await store.ListAsync().AsResultBoxAsync()).GetValue());
 
         var identity = MvProjectionStatusIdentity.Create(ViewName, ViewVersion);
         var competingCreate = new ProjectionStatusHeartbeat(
@@ -195,7 +196,7 @@ public class MvProjectionStatusPublicationTests
         {
             Phase = ProjectionStatusPhases.Active
         };
-        Assert.True((await store.UpsertAsync(competingCreate, 0)).GetValue().Committed);
+        Assert.True((await store.UpsertAsync(competingCreate, 0).AsResultBoxAsync()).GetValue().Committed);
 
         // The publisher's conditional create loses, observes RowAlreadyExists, and only rebases its fence.
         await publisher.PublishSwitchAsync(
@@ -204,7 +205,7 @@ public class MvProjectionStatusPublicationTests
             ViewVersion,
             snapshot,
             MvProjectionStatusPublisherKind.HostedWorker);
-        var afterConflict = Assert.Single((await store.ListAsync()).GetValue());
+        var afterConflict = Assert.Single((await store.ListAsync().AsResultBoxAsync()).GetValue());
         Assert.Equal("competing-activation", afterConflict.ActivationId);
         Assert.Equal(1, afterConflict.Sequence);
 
@@ -215,7 +216,7 @@ public class MvProjectionStatusPublicationTests
             ViewVersion,
             snapshot,
             MvProjectionStatusPublisherKind.HostedWorker);
-        Assert.Equal(2, Assert.Single((await store.ListAsync()).GetValue()).Sequence);
+        Assert.Equal(2, Assert.Single((await store.ListAsync().AsResultBoxAsync()).GetValue()).Sequence);
     }
 
     [Fact]
@@ -255,7 +256,7 @@ public class MvProjectionStatusPublicationTests
             MvProjectionStatusPublisherKind.HostedWorker);
         await publisher.PublishIfDueAsync(
             ServiceId, ViewName, ViewVersion, progress, MvProjectionStatusPublisherKind.HostedWorker);
-        var afterCadence = Assert.Single((await store.ListAsync()).GetValue());
+        var afterCadence = Assert.Single((await store.ListAsync().AsResultBoxAsync()).GetValue());
         Assert.Equal("forced", afterCadence.SwitchKind);
         Assert.Equal("operator rollback", afterCadence.SwitchReason);
 
@@ -267,7 +268,7 @@ public class MvProjectionStatusPublicationTests
             MvProjectionStatusPublisherKind.HostedWorker);
         await publisher.PublishIfDueAsync(
             ServiceId, ViewName, ViewVersion, progress, MvProjectionStatusPublisherKind.HostedWorker);
-        var afterOrdinary = Assert.Single((await store.ListAsync()).GetValue());
+        var afterOrdinary = Assert.Single((await store.ListAsync().AsResultBoxAsync()).GetValue());
         Assert.Equal("forward", afterOrdinary.SwitchKind);
         Assert.Null(afterOrdinary.SwitchReason);
     }
@@ -456,38 +457,38 @@ public class MvProjectionStatusPublicationTests
         public ObservingStatusStore(IServiceIdProvider serviceIdProvider) => _inner = new(serviceIdProvider);
         public TaskCompletionSource Written { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public int UpsertCalls { get; private set; }
-        public async Task<ResultBox<ProjectionStatusWriteResult>> UpsertAsync(ProjectionStatusHeartbeat heartbeat, long expectedSequence, CancellationToken cancellationToken = default)
+        public async Task<ProjectionStatusWriteResult> UpsertAsync(ProjectionStatusHeartbeat heartbeat, long expectedSequence, CancellationToken cancellationToken = default)
         {
             UpsertCalls++;
             var result = await _inner.UpsertAsync(heartbeat, expectedSequence, cancellationToken);
-            if (result.IsSuccess && result.GetValue().Committed) Written.TrySetResult();
+            if (result.Committed) Written.TrySetResult();
             return result;
         }
-        public Task<ResultBox<IReadOnlyList<ProjectionStatusHeartbeat>>> ListAsync(string? projectorName = null, string? projectorVersion = null, CancellationToken cancellationToken = default) =>
+        public Task<IReadOnlyList<ProjectionStatusHeartbeat>> ListAsync(string? projectorName = null, string? projectorVersion = null, CancellationToken cancellationToken = default) =>
             _inner.ListAsync(projectorName, projectorVersion, cancellationToken);
     }
 
     private sealed class BlockingStatusStore : IProjectionStatusStore
     {
-        private readonly TaskCompletionSource<ResultBox<ProjectionStatusWriteResult>> _never = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        public Task<ResultBox<ProjectionStatusWriteResult>> UpsertAsync(ProjectionStatusHeartbeat heartbeat, long expectedSequence, CancellationToken cancellationToken = default) => _never.Task;
-        public Task<ResultBox<IReadOnlyList<ProjectionStatusHeartbeat>>> ListAsync(string? projectorName = null, string? projectorVersion = null, CancellationToken cancellationToken = default) =>
-            Task.FromResult(ResultBox.FromValue<IReadOnlyList<ProjectionStatusHeartbeat>>([]));
+        private readonly TaskCompletionSource<ProjectionStatusWriteResult> _never = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public Task<ProjectionStatusWriteResult> UpsertAsync(ProjectionStatusHeartbeat heartbeat, long expectedSequence, CancellationToken cancellationToken = default) => _never.Task;
+        public Task<IReadOnlyList<ProjectionStatusHeartbeat>> ListAsync(string? projectorName = null, string? projectorVersion = null, CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<ProjectionStatusHeartbeat>>([]);
     }
 
     private sealed class ThrowingStatusStore(string message) : IProjectionStatusStore
     {
-        public Task<ResultBox<ProjectionStatusWriteResult>> UpsertAsync(
+        public Task<ProjectionStatusWriteResult> UpsertAsync(
             ProjectionStatusHeartbeat heartbeat,
             long expectedSequence,
             CancellationToken cancellationToken = default) =>
-            Task.FromException<ResultBox<ProjectionStatusWriteResult>>(new InvalidOperationException(message));
+            Task.FromException<ProjectionStatusWriteResult>(new InvalidOperationException(message));
 
-        public Task<ResultBox<IReadOnlyList<ProjectionStatusHeartbeat>>> ListAsync(
+        public Task<IReadOnlyList<ProjectionStatusHeartbeat>> ListAsync(
             string? projectorName = null,
             string? projectorVersion = null,
             CancellationToken cancellationToken = default) =>
-            Task.FromResult(ResultBox.FromValue<IReadOnlyList<ProjectionStatusHeartbeat>>([]));
+            Task.FromResult<IReadOnlyList<ProjectionStatusHeartbeat>>([]);
     }
 
     private sealed class TargetProviderIoCounter : IObserver<DiagnosticListener>, IObserver<KeyValuePair<string, object?>>, IDisposable

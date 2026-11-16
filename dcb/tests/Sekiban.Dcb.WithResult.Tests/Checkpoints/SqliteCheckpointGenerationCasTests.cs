@@ -4,6 +4,7 @@ using Sekiban.Dcb.ServiceId;
 using Sekiban.Dcb.Sqlite;
 using Sekiban.Dcb.Storage.Checkpoints;
 using Xunit;
+using Sekiban.Dcb.TestSupport;
 namespace Sekiban.Dcb.Tests.Checkpoints;
 
 /// <summary>
@@ -31,7 +32,7 @@ public class SqliteCheckpointGenerationCasTests : IDisposable
 
     private static Stream Payload(string s) => new MemoryStream(Encoding.UTF8.GetBytes(s));
     private static async Task<CheckpointSlot> ReadAsync(IGenerationAwareCheckpointStore s) =>
-        (await s.ReadCheckpointSlotAsync(Projector, Version)).GetValue();
+        (await s.ReadCheckpointSlotAsync(Projector, Version).AsResultBoxAsync()).GetValue();
 
     [Fact]
     public void Capability_advertised() =>
@@ -202,7 +203,7 @@ public class SqliteCheckpointGenerationCasTests : IDisposable
         // A legacy WRITER (INSERT OR REPLACE) deletes+reinserts the row, resetting the control columns to defaults — the
         // tombstone is erased back to Active(0/0). This is the documented hazard: protection is complete only when every
         // writer is upgraded.
-        Assert.True((await store.UpsertFromStreamAsync(Req(2), Payload("legacy"), 1_000_000)).GetValue());
+        Assert.True((await store.UpsertFromStreamAsync(Req(2), Payload("legacy"), 1_000_000).AsResultBoxAsync()).GetValue());
         var afterLegacy = await ReadAsync(store);
         Assert.True(afterLegacy.IsActive);
         Assert.Equal(0, afterLegacy.Generation);

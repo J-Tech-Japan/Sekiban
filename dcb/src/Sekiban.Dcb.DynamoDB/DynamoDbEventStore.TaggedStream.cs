@@ -1,6 +1,5 @@
 using Amazon.DynamoDBv2;
 using Amazon.DynamoDBv2.Model;
-using ResultBoxes;
 using Sekiban.Dcb.Capabilities;
 using Sekiban.Dcb.Common;
 using Sekiban.Dcb.DynamoDB.Models;
@@ -24,7 +23,7 @@ public partial class DynamoDbEventStore
     ///     time. BatchGetItem has no response order contract, so every chunk is explicitly rejoined to the already
     ///     ordered query references before callbacks run.
     /// </summary>
-    public async Task<ResultBox<SerializableEventStreamReadResult>> StreamSerializableEventsByTagAsync(
+    public async Task<SerializableEventStreamReadResult> StreamSerializableEventsByTagAsync(
         ITag tag,
         SortableUniqueId? since,
         SortableUniqueId? until,
@@ -119,7 +118,7 @@ public partial class DynamoDbEventStore
                 lastEvaluatedKey = page.LastEvaluatedKey;
             } while (lastEvaluatedKey is { Count: > 0 });
 
-            return ResultBox.FromValue(new SerializableEventStreamReadResult(emitted, lastSortableUniqueId));
+            return new SerializableEventStreamReadResult(emitted, lastSortableUniqueId);
         }
         catch (OperationCanceledException)
         {
@@ -132,7 +131,7 @@ public partial class DynamoDbEventStore
                 LogReadFailed(_logger, ex.Message, ex);
             }
 
-            return ResultBox.Error<SerializableEventStreamReadResult>(ex);
+            throw;
         }
         finally
         {

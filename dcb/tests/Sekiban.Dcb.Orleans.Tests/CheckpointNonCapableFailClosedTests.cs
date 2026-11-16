@@ -17,6 +17,7 @@ using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
 using Sekiban.Dcb.Testing;
 using Xunit;
+using Sekiban.Dcb.TestSupport;
 namespace Sekiban.Dcb.Orleans.Tests;
 
 /// <summary>
@@ -56,14 +57,14 @@ public class CheckpointNonCapableFailClosedTests : IAsyncLifetime
         var executor = new OrleansDcbExecutor(_client, Shared.EventStore, Shared.Domain);
 
         var safe = ToSerializable(CreateEvent(new Counted("safe"), DateTime.UtcNow.AddSeconds(-30)));
-        await Shared.EventStore.WriteSerializableEventsAsync(new[] { safe });
+        await Shared.EventStore.WriteSerializableEventsAsync(new[] { safe }).AsResultBoxAsync();
         await grain.RefreshAsync();
         Assert.True((await grain.PersistStateAsync()).IsSuccess);
 
         // Deliver a globally-earlier already-safe event out of order -> RebuildRequired -> retrograde full rebuild. On a
         // NON-capable store this fails closed to the G14 fault path.
         var earlier = ToSerializable(CreateEvent(new Counted("earlier"), DateTime.UtcNow.AddSeconds(-31)));
-        await Shared.EventStore.WriteSerializableEventsAsync(new[] { earlier });
+        await Shared.EventStore.WriteSerializableEventsAsync(new[] { earlier }).AsResultBoxAsync();
         await grain.AddEventsAsync(new[] { earlier });
 
         // All query surfaces fail closed (a persisted fault requiring operator reset); never a silent rebuild that could
@@ -125,14 +126,14 @@ public class CheckpointNonCapableFailClosedTests : IAsyncLifetime
     internal sealed class NonCapableStore : IMultiProjectionStateStore
     {
         private readonly InMemoryMultiProjectionStateStore _inner = new();
-        public Task<ResultBox<OptionalValue<MultiProjectionStateRecord>>> GetLatestForVersionAsync(string p, string v, CancellationToken ct = default) => _inner.GetLatestForVersionAsync(p, v, ct);
-        public Task<ResultBox<OptionalValue<MultiProjectionStateRecord>>> GetLatestAnyVersionAsync(string p, CancellationToken ct = default) => _inner.GetLatestAnyVersionAsync(p, ct);
-        public Task<ResultBox<bool>> UpsertAsync(MultiProjectionStateRecord r, int off = 1_000_000, CancellationToken ct = default) => _inner.UpsertAsync(r, off, ct);
-        public Task<ResultBox<IReadOnlyList<ProjectorStateInfo>>> ListAllAsync(CancellationToken ct = default) => _inner.ListAllAsync(ct);
-        public Task<ResultBox<bool>> DeleteAsync(string p, string v, CancellationToken ct = default) => _inner.DeleteAsync(p, v, ct);
-        public Task<ResultBox<int>> DeleteAllAsync(string? p = null, CancellationToken ct = default) => _inner.DeleteAllAsync(p, ct);
-        public Task<ResultBox<Stream>> OpenStateDataReadStreamAsync(MultiProjectionStateRecord r, CancellationToken ct = default) => _inner.OpenStateDataReadStreamAsync(r, ct);
-        public Task<ResultBox<bool>> UpsertFromStreamAsync(MultiProjectionStateWriteRequest req, Stream s, int off, CancellationToken ct = default) => _inner.UpsertFromStreamAsync(req, s, off, ct);
+        public Task<MultiProjectionStateRecord?> GetLatestForVersionAsync(string p, string v, CancellationToken ct = default) => _inner.GetLatestForVersionAsync(p, v, ct);
+        public Task<MultiProjectionStateRecord?> GetLatestAnyVersionAsync(string p, CancellationToken ct = default) => _inner.GetLatestAnyVersionAsync(p, ct);
+        public Task<bool> UpsertAsync(MultiProjectionStateRecord r, int off = 1_000_000, CancellationToken ct = default) => _inner.UpsertAsync(r, off, ct);
+        public Task<IReadOnlyList<ProjectorStateInfo>> ListAllAsync(CancellationToken ct = default) => _inner.ListAllAsync(ct);
+        public Task<bool> DeleteAsync(string p, string v, CancellationToken ct = default) => _inner.DeleteAsync(p, v, ct);
+        public Task<int> DeleteAllAsync(string? p = null, CancellationToken ct = default) => _inner.DeleteAllAsync(p, ct);
+        public Task<Stream> OpenStateDataReadStreamAsync(MultiProjectionStateRecord r, CancellationToken ct = default) => _inner.OpenStateDataReadStreamAsync(r, ct);
+        public Task<bool> UpsertFromStreamAsync(MultiProjectionStateWriteRequest req, Stream s, int off, CancellationToken ct = default) => _inner.UpsertFromStreamAsync(req, s, off, ct);
     }
 
     internal static class Shared

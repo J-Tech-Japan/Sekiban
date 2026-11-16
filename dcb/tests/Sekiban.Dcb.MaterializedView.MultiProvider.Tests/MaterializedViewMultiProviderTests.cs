@@ -12,6 +12,7 @@ using Sekiban.Dcb.MaterializedView.Sqlite;
 using Sekiban.Dcb.MaterializedView.SqlServer;
 using Sekiban.Dcb.Storage;
 using Xunit;
+using Sekiban.Dcb.TestSupport;
 
 namespace Sekiban.Dcb.MaterializedView.MultiProvider.Tests;
 
@@ -225,7 +226,7 @@ internal static class MultiProviderAssertions
 
         await fixture.ResetAsync().ConfigureAwait(false);
         await fixture.Executor.InitializeAsync(host).ConfigureAwait(false);
-        var writeResult = await fixture.EventStore.WriteSerializableEventsAsync(durableEvents).ConfigureAwait(false);
+        var writeResult = await fixture.EventStore.WriteSerializableEventsAsync(durableEvents).AsResultBoxAsync().ConfigureAwait(false);
         Assert.True(writeResult.IsSuccess, writeResult.IsSuccess ? string.Empty : writeResult.GetException().Message);
 
         var appliedByStore = 0;
@@ -239,7 +240,7 @@ internal static class MultiProviderAssertions
 
         await fixture.ResetAsync().ConfigureAwait(false);
         await fixture.Executor.InitializeAsync(host).ConfigureAwait(false);
-        writeResult = await fixture.EventStore.WriteSerializableEventsAsync(durableEvents).ConfigureAwait(false);
+        writeResult = await fixture.EventStore.WriteSerializableEventsAsync(durableEvents).AsResultBoxAsync().ConfigureAwait(false);
         Assert.True(writeResult.IsSuccess, writeResult.IsSuccess ? string.Empty : writeResult.GetException().Message);
 
         foreach (var serializableEvent in durableEvents.OrderByDescending(
@@ -466,9 +467,9 @@ internal static class MultiProviderAssertions
         var forecastA = Guid.CreateVersion7();
         var forecastB = Guid.CreateVersion7();
         await storeA.WriteSerializableEventsAsync(
-            [CreateForecastEvent(forecastA, "orders-location", DateTimeOffset.UtcNow.AddSeconds(-2), fixture)]).ConfigureAwait(false);
+            [CreateForecastEvent(forecastA, "orders-location", DateTimeOffset.UtcNow.AddSeconds(-2), fixture)]).AsResultBoxAsync().ConfigureAwait(false);
         await storeB.WriteSerializableEventsAsync(
-            [CreateForecastEvent(forecastB, "billing-location", DateTimeOffset.UtcNow.AddSeconds(-1), fixture)]).ConfigureAwait(false);
+            [CreateForecastEvent(forecastB, "billing-location", DateTimeOffset.UtcNow.AddSeconds(-1), fixture)]).AsResultBoxAsync().ConfigureAwait(false);
 
         await serviceAExecutor.InitializeAsync(host).ConfigureAwait(false);
         var serviceAResult = await serviceAExecutor.CatchUpOnceAsync(host).ConfigureAwait(false);

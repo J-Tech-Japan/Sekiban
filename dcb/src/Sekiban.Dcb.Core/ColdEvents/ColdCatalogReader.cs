@@ -1,6 +1,4 @@
-using System.Text.Json;
 using Microsoft.Extensions.Options;
-using ResultBoxes;
 namespace Sekiban.Dcb.ColdEvents;
 
 public sealed class ColdCatalogReader : IColdEventCatalogReader
@@ -22,32 +20,24 @@ public sealed class ColdCatalogReader : IColdEventCatalogReader
             IsEnabled: _options.Enabled,
             Reason: _options.Enabled ? "Cold event store is active" : "Cold event store is disabled"));
 
-    public async Task<ResultBox<ColdDataRangeSummary>> GetDataRangeSummaryAsync(
+    public async Task<ColdDataRangeSummary> GetDataRangeSummaryAsync(
         string serviceId,
         CancellationToken ct)
     {
-        ColdManifest? manifest;
-        try
-        {
-            manifest = await ColdControlFileHelper.LoadManifestAsync(_storage, serviceId, ct);
-        }
-        catch (JsonException ex)
-        {
-            return ResultBox.Error<ColdDataRangeSummary>(ex);
-        }
+        var manifest = await ColdControlFileHelper.LoadManifestAsync(_storage, serviceId, ct);
 
         if (manifest is null)
         {
-            return ResultBox.FromValue(new ColdDataRangeSummary(
+            return new ColdDataRangeSummary(
                 ServiceId: serviceId,
                 OldestSortableUniqueId: null,
                 LatestSortableUniqueId: null,
                 TotalEventCount: 0,
                 SegmentCount: 0,
-                Segments: []));
+                Segments: []);
         }
 
-        return ResultBox.FromValue(BuildSummary(serviceId, manifest));
+        return BuildSummary(serviceId, manifest);
     }
 
     private static ColdDataRangeSummary BuildSummary(string serviceId, ColdManifest manifest)

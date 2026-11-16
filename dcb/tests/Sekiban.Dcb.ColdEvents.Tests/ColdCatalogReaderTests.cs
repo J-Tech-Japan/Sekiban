@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.Extensions.Options;
 using Sekiban.Dcb.ColdEvents;
+using Sekiban.Dcb.TestSupport;
 namespace Sekiban.Dcb.ColdEvents.Tests;
 
 public class ColdCatalogReaderTests
@@ -66,7 +67,7 @@ public class ColdCatalogReaderTests
         var reader = CreateReader();
 
         // When
-        var result = await reader.GetDataRangeSummaryAsync(ServiceId, CancellationToken.None);
+        var result = await reader.GetDataRangeSummaryAsync(ServiceId, CancellationToken.None).AsResultBoxAsync();
 
         // Then
         Assert.True(result.IsSuccess);
@@ -103,7 +104,7 @@ public class ColdCatalogReaderTests
         var reader = CreateReader();
 
         // When
-        var result = await reader.GetDataRangeSummaryAsync(ServiceId, CancellationToken.None);
+        var result = await reader.GetDataRangeSummaryAsync(ServiceId, CancellationToken.None).AsResultBoxAsync();
 
         // Then
         Assert.True(result.IsSuccess);
@@ -161,7 +162,7 @@ public class ColdCatalogReaderTests
         var reader = CreateReader();
 
         // When
-        var result = await reader.GetDataRangeSummaryAsync(ServiceId, CancellationToken.None);
+        var result = await reader.GetDataRangeSummaryAsync(ServiceId, CancellationToken.None).AsResultBoxAsync();
 
         // Then
         Assert.True(result.IsSuccess);
@@ -179,11 +180,11 @@ public class ColdCatalogReaderTests
         // Given: write invalid JSON to the manifest path
         var manifestPath = ColdStoragePaths.ManifestPath(ServiceId);
         var corruptedData = "{ invalid json }"u8.ToArray();
-        await _storage.PutAsync(manifestPath, corruptedData, expectedETag: null, CancellationToken.None);
+        await _storage.PutAsync(manifestPath, corruptedData, expectedETag: null, CancellationToken.None).AsResultBoxAsync();
         var reader = CreateReader();
 
         // When
-        var result = await reader.GetDataRangeSummaryAsync(ServiceId, CancellationToken.None);
+        var result = await reader.GetDataRangeSummaryAsync(ServiceId, CancellationToken.None).AsResultBoxAsync();
 
         // Then
         Assert.False(result.IsSuccess);
@@ -214,7 +215,7 @@ public class ColdCatalogReaderTests
         var reader = CreateReader();
 
         // When
-        var result = await reader.GetDataRangeSummaryAsync(ServiceId, CancellationToken.None);
+        var result = await reader.GetDataRangeSummaryAsync(ServiceId, CancellationToken.None).AsResultBoxAsync();
 
         // Then: ColdSegmentSummary does not contain SizeBytes, Sha256, or CreatedAtUtc
         Assert.True(result.IsSuccess);
@@ -228,6 +229,6 @@ public class ColdCatalogReaderTests
     {
         var manifestPath = ColdStoragePaths.ManifestPath(manifest.ServiceId);
         var data = JsonSerializer.SerializeToUtf8Bytes(manifest, JsonOptions);
-        await _storage.PutAsync(manifestPath, data, expectedETag: null, CancellationToken.None);
+        await _storage.PutAsync(manifestPath, data, expectedETag: null, CancellationToken.None).AsResultBoxAsync();
     }
 }

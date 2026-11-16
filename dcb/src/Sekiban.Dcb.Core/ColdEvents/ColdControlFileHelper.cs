@@ -18,14 +18,12 @@ public static class ColdControlFileHelper
         string serviceId,
         CancellationToken ct)
     {
-        var path = ColdStoragePaths.ManifestPath(serviceId);
-        var getResult = await storage.GetAsync(path, ct);
-        if (!getResult.IsSuccess)
+        var obj = await TryGetAsync(storage, ColdStoragePaths.ManifestPath(serviceId), ct);
+        if (obj is null)
         {
             return null;
         }
 
-        var obj = getResult.GetValue();
         var manifest = JsonSerializer.Deserialize<ColdManifest>(obj.Data, ColdEventJsonOptions.Default);
         if (manifest is null)
         {
@@ -48,20 +46,34 @@ public static class ColdControlFileHelper
         string serviceId,
         CancellationToken ct)
     {
-        var path = ColdStoragePaths.CheckpointPath(serviceId);
-        var getResult = await storage.GetAsync(path, ct);
-        if (!getResult.IsSuccess)
+        var obj = await TryGetAsync(storage, ColdStoragePaths.CheckpointPath(serviceId), ct);
+        if (obj is null)
         {
             return null;
         }
 
-        var obj = getResult.GetValue();
         var checkpoint = JsonSerializer.Deserialize<ColdCheckpoint>(obj.Data, ColdEventJsonOptions.Default);
         if (checkpoint is null)
         {
             return null;
         }
         return new CheckpointWithETag(checkpoint, obj.ETag);
+    }
+
+    /// <summary>
+    ///     A control file that is missing or cannot be read is treated as absent (the behaviour callers rely on).
+    ///     Cancellation still propagates.
+    /// </summary>
+    private static async Task<ColdStorageObject?> TryGetAsync(IColdObjectStorage storage, string path, CancellationToken ct)
+    {
+        try
+        {
+            return await storage.GetAsync(path, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            return null;
+        }
     }
 
     public sealed record ManifestWithETag(ColdManifest Manifest, string ETag);

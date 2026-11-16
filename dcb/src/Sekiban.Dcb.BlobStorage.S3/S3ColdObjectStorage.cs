@@ -2,7 +2,6 @@ using Amazon.S3;
 using Amazon.S3.Model;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
-using ResultBoxes;
 using Sekiban.Dcb.ColdEvents;
 
 namespace Sekiban.Dcb.BlobStorage.S3;
@@ -29,7 +28,7 @@ public sealed class S3ColdObjectStorage : IColdObjectStorage
         _logger = logger ?? NullLogger<S3ColdObjectStorage>.Instance;
     }
 
-    public async Task<ResultBox<ColdStorageObject>> GetAsync(string path, CancellationToken ct)
+    public async Task<ColdStorageObject?> GetAsync(string path, CancellationToken ct)
     {
         try
         {
@@ -45,20 +44,20 @@ public sealed class S3ColdObjectStorage : IColdObjectStorage
             await stream.CopyToAsync(ms, ct).ConfigureAwait(false);
             var data = ms.ToArray();
             var etag = response.ETag ?? string.Empty;
-            return ResultBox.FromValue(new ColdStorageObject(data, etag));
+            return new ColdStorageObject(data, etag);
         }
         catch (AmazonS3Exception ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
         {
-            return ResultBox.Error<ColdStorageObject>(new KeyNotFoundException($"Cold object not found: {path}", ex));
+            return null;
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "S3 GetAsync failed: {Bucket}/{Path}", _bucketName, path);
-            return ResultBox.Error<ColdStorageObject>(ex);
+            throw;
         }
     }
 
-    public async Task<ResultBox<Stream>> OpenReadAsync(string path, CancellationToken ct)
+    public async Task<Stream> OpenReadAsync(string path, CancellationToken ct)
     {
         try
         {
@@ -68,38 +67,39 @@ public sealed class S3ColdObjectStorage : IColdObjectStorage
                 Key = BuildKey(path)
             }, ct).ConfigureAwait(false);
 
-            return ResultBox.FromValue<Stream>(new S3ResponseStream(response));
+            return new S3ResponseStream(response);
         }
         catch (AmazonS3Exception ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
         {
-            return ResultBox.Error<Stream>(new KeyNotFoundException($"Cold object not found: {path}", ex));
+            throw new KeyNotFoundException($"Cold object not found: {path}", ex);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "S3 OpenReadAsync failed: {Bucket}/{Path}", _bucketName, path);
-            return ResultBox.Error<Stream>(ex);
+            throw;
         }
     }
 
-    public async Task<ResultBox<bool>> PutAsync(string path, byte[] data, string? expectedETag, CancellationToken ct)
+    public async Task<bool> PutAsync(string path, byte[] data, string? expectedETag, CancellationToken ct)
     {
         await using var ms = new MemoryStream(data, writable: false);
         return await PutAsync(path, ms, expectedETag, ct);
     }
 
-    public async Task<ResultBox<bool>> PutAsync(string path, Stream data, string? expectedETag, CancellationToken ct)
+    public async Task<bool> PutAsync(string path, Stream data, string? expectedETag, CancellationToken ct)
     {
+        if (expectedETag is not null)
+        {
+            // S3 PutObject does not provide atomic destination If-Match semantics.
+            // Failing with NotSupported avoids false safety from non-atomic check-then-put.
+            throw new NotSupportedException(
+                "S3ColdObjectStorage does not support atomic expectedETag writes. " +
+                "Use AzureBlobColdObjectStorage for optimistic concurrency paths.");
+        }
+
         try
         {
             var key = BuildKey(path);
-            if (expectedETag is not null)
-            {
-                // S3 PutObject does not provide atomic destination If-Match semantics.
-                // Returning NotSupported avoids false safety from non-atomic check-then-put.
-                return ResultBox.Error<bool>(new NotSupportedException(
-                    "S3ColdObjectStorage does not support atomic expectedETag writes. " +
-                    "Use AzureBlobColdObjectStorage for optimistic concurrency paths."));
-            }
 
             if (data.CanSeek)
             {
@@ -120,16 +120,16 @@ public sealed class S3ColdObjectStorage : IColdObjectStorage
             }
 
             await _s3Client.PutObjectAsync(request, ct).ConfigureAwait(false);
-            return ResultBox.FromValue(true);
+            return true;
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "S3 PutAsync failed: {Bucket}/{Path}", _bucketName, path);
-            return ResultBox.Error<bool>(ex);
+            throw;
         }
     }
 
-    public async Task<ResultBox<IReadOnlyList<string>>> ListAsync(string prefix, CancellationToken ct)
+    public async Task<IReadOnlyList<string>> ListAsync(string prefix, CancellationToken ct)
     {
         try
         {
@@ -155,16 +155,16 @@ public sealed class S3ColdObjectStorage : IColdObjectStorage
                 continuationToken = response.IsTruncated == true ? response.NextContinuationToken : null;
             } while (continuationToken is not null);
 
-            return ResultBox.FromValue<IReadOnlyList<string>>(result);
+            return result;
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "S3 ListAsync failed: {Bucket}/{Prefix}", _bucketName, prefix);
-            return ResultBox.Error<IReadOnlyList<string>>(ex);
+            throw;
         }
     }
 
-    public async Task<ResultBox<bool>> DeleteAsync(string path, CancellationToken ct)
+    public async Task<bool> DeleteAsync(string path, CancellationToken ct)
     {
         try
         {
@@ -174,12 +174,12 @@ public sealed class S3ColdObjectStorage : IColdObjectStorage
                 BucketName = _bucketName,
                 Key = key
             }, ct).ConfigureAwait(false);
-            return ResultBox.FromValue(true);
+            return true;
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "S3 DeleteAsync failed: {Bucket}/{Path}", _bucketName, path);
-            return ResultBox.Error<bool>(ex);
+            throw;
         }
     }
 

@@ -398,29 +398,29 @@ public class ProductionGuardTests
     /// <summary>Same idea as SilentEventStore, for the projection state store.</summary>
     private class SilentProjectionStore : IMultiProjectionStateStore
     {
-        public Task<ResultBox<OptionalValue<MultiProjectionStateRecord>>> GetLatestForVersionAsync(
+        public Task<MultiProjectionStateRecord?> GetLatestForVersionAsync(
             string projectorName,
             string projectorVersion,
             CancellationToken cancellationToken = default) => throw new NotSupportedException();
 
-        public Task<ResultBox<OptionalValue<MultiProjectionStateRecord>>> GetLatestAnyVersionAsync(
+        public Task<MultiProjectionStateRecord?> GetLatestAnyVersionAsync(
             string projectorName,
             CancellationToken cancellationToken = default) => throw new NotSupportedException();
 
-        public Task<ResultBox<bool>> UpsertAsync(
+        public Task<bool> UpsertAsync(
             MultiProjectionStateRecord record,
             int offloadThresholdBytes = 1_000_000,
             CancellationToken cancellationToken = default) => throw new NotSupportedException();
 
-        public Task<ResultBox<IReadOnlyList<ProjectorStateInfo>>> ListAllAsync(
+        public Task<IReadOnlyList<ProjectorStateInfo>> ListAllAsync(
             CancellationToken cancellationToken = default) => throw new NotSupportedException();
 
-        public Task<ResultBox<bool>> DeleteAsync(
+        public Task<bool> DeleteAsync(
             string projectorName,
             string projectorVersion,
             CancellationToken cancellationToken = default) => throw new NotSupportedException();
 
-        public Task<ResultBox<int>> DeleteAllAsync(
+        public Task<int> DeleteAllAsync(
             string? projectorName = null,
             CancellationToken cancellationToken = default) => throw new NotSupportedException();
     }
@@ -428,25 +428,25 @@ public class ProductionGuardTests
     /// <summary>None of these members run: the guard describes what it resolved, it does not use it.</summary>
     private class SilentEventStore : IEventStore
     {
-        public Task<ResultBox<IEnumerable<TagStream>>> ReadTagsAsync(ITag tag) => throw new NotSupportedException();
-        public Task<ResultBox<TagState>> GetLatestTagAsync(ITag tag) => throw new NotSupportedException();
-        public Task<ResultBox<bool>> TagExistsAsync(ITag tag) => throw new NotSupportedException();
-        public Task<ResultBox<long>> GetEventCountAsync(SortableUniqueId? since = null) =>
+        public Task<IEnumerable<TagStream>> ReadTagsAsync(ITag tag) => throw new NotSupportedException();
+        public Task<TagState> GetLatestTagAsync(ITag tag) => throw new NotSupportedException();
+        public Task<bool> TagExistsAsync(ITag tag) => throw new NotSupportedException();
+        public Task<long> GetEventCountAsync(SortableUniqueId? since = null) =>
             throw new NotSupportedException();
-        public Task<ResultBox<IEnumerable<TagInfo>>> GetAllTagsAsync(string? tagGroup = null) =>
+        public Task<IEnumerable<TagInfo>> GetAllTagsAsync(string? tagGroup = null) =>
             throw new NotSupportedException();
-        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(
+        public Task<IEnumerable<SerializableEvent>> ReadAllSerializableEventsAsync(
             SortableUniqueId? since = null) => throw new NotSupportedException();
-        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(
+        public Task<IEnumerable<SerializableEvent>> ReadAllSerializableEventsAsync(
             SortableUniqueId? since,
             int? maxCount) => throw new NotSupportedException();
-        public Task<ResultBox<SerializableEvent>> ReadSerializableEventAsync(Guid eventId) =>
+        public Task<SerializableEvent?> ReadSerializableEventAsync(Guid eventId) =>
             throw new NotSupportedException();
-        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadSerializableEventsByTagAsync(
+        public Task<IEnumerable<SerializableEvent>> ReadSerializableEventsByTagAsync(
             ITag tag,
             SortableUniqueId? since = null) => throw new NotSupportedException();
-        public Task<ResultBox<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>>
+        public Task<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>
             WriteSerializableEventsAsync(IEnumerable<SerializableEvent> events) => throw new NotSupportedException();
-        public Task<ResultBox<string>> GetLatestSortableUniqueIdAsync() => throw new NotSupportedException();
+        public Task<string> GetLatestSortableUniqueIdAsync() => throw new NotSupportedException();
     }
 }

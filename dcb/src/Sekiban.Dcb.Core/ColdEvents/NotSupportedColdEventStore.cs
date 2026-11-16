@@ -1,4 +1,3 @@
-using ResultBoxes;
 namespace Sekiban.Dcb.ColdEvents;
 
 public sealed class NotSupportedColdEventStore :
@@ -17,12 +16,12 @@ public sealed class NotSupportedColdEventStore :
     public Task<ColdFeatureStatus> GetStatusAsync(CancellationToken ct)
         => Task.FromResult(NotConfiguredStatus);
 
-    public Task<ResultBox<ColdStoreProgress>> GetProgressAsync(string serviceId, CancellationToken ct)
-        => Task.FromResult(ResultBox.Error<ColdStoreProgress>(NotSupportedException));
+    public Task<ColdStoreProgress> GetProgressAsync(string serviceId, CancellationToken ct)
+        => Task.FromException<ColdStoreProgress>(NotSupportedException);
 
-    public Task<ResultBox<ExportResult>> ExportIncrementalAsync(string serviceId, CancellationToken ct)
-        => Task.FromResult(ResultBox.Error<ExportResult>(NotSupportedException));
+    public Task<ExportResult> ExportIncrementalAsync(string serviceId, CancellationToken ct)
+        => Task.FromException<ExportResult>(NotSupportedException);
 
-    public Task<ResultBox<ColdDataRangeSummary>> GetDataRangeSummaryAsync(string serviceId, CancellationToken ct)
-        => Task.FromResult(ResultBox.Error<ColdDataRangeSummary>(NotSupportedException));
+    public Task<ColdDataRangeSummary> GetDataRangeSummaryAsync(string serviceId, CancellationToken ct)
+        => Task.FromException<ColdDataRangeSummary>(NotSupportedException);
 }

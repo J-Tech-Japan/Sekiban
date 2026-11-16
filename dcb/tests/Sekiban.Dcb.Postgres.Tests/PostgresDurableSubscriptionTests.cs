@@ -12,6 +12,7 @@ using Sekiban.Dcb.ServiceId;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Subscriptions;
 using Xunit;
+using Sekiban.Dcb.TestSupport;
 
 namespace Sekiban.Dcb.Postgres.Tests;
 
@@ -875,7 +876,7 @@ public sealed class PostgresDurableSubscriptionTests : PostgresTestBase
             .ToSerializableEvent(Fixture.DomainTypes.EventTypes);
         var eventStore = new PostgresEventStoreFactory(Fixture.DbContextFactory, Fixture.DomainTypes.EventTypes)
             .CreateForService(serviceId);
-        var written = await eventStore.WriteSerializableEventsAsync([serialized]);
+        var written = await eventStore.WriteSerializableEventsAsync([serialized]).AsResultBoxAsync();
         Assert.True(written.IsSuccess, written.IsSuccess ? string.Empty : written.GetException().ToString());
         return eventId;
     }

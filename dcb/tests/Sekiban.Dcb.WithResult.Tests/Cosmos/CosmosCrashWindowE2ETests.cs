@@ -9,6 +9,7 @@ using Sekiban.Dcb.CosmosDb.Tags;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.ServiceId;
 using Sekiban.Dcb.Tags;
+using Sekiban.Dcb.TestSupport;
 
 namespace Sekiban.Dcb.Tests.Cosmos;
 
@@ -132,7 +133,7 @@ public class CosmosCrashWindowE2ETests
         lineage.Store.TagWriteFaultInjector = new FailBeforeBatch(0); // die before the first batch
 
         var written = NewEvent("Student:1");
-        var result = await lineage.Store.WriteSerializableEventsAsync(new[] { written });
+        var result = await lineage.Store.WriteSerializableEventsAsync(new[] { written }).AsResultBoxAsync();
 
         // The crash residue: the event is durable and was NOT deleted, but no tag row landed.
         Assert.False(result.IsSuccess);
@@ -142,10 +143,10 @@ public class CosmosCrashWindowE2ETests
         Assert.Equal(0, lineage.Events.Deletes);
 
         // An all-events reader sees it; a tag-scoped reader does not. This is the window.
-        var all = await lineage.Store.ReadAllSerializableEventsAsync();
+        var all = await lineage.Store.ReadAllSerializableEventsAsync().AsResultBoxAsync();
         Assert.Single(all.GetValue());
 
-        var byTagBefore = await lineage.Store.ReadSerializableEventsByTagAsync(new TestTag("Student:1"));
+        var byTagBefore = await lineage.Store.ReadSerializableEventsByTagAsync(new TestTag("Student:1")).AsResultBoxAsync();
         Assert.Empty(byTagBefore.GetValue());
 
         // Restart: the fault is gone, and repair runs.
@@ -156,7 +157,7 @@ public class CosmosCrashWindowE2ETests
         Assert.Equal(1, report.Repaired);
 
         // The window is closed: the tag-scoped reader now sees the event.
-        var byTagAfter = await lineage.Store.ReadSerializableEventsByTagAsync(new TestTag("Student:1"));
+        var byTagAfter = await lineage.Store.ReadSerializableEventsByTagAsync(new TestTag("Student:1")).AsResultBoxAsync();
         Assert.Equal(written.Id, Assert.Single(byTagAfter.GetValue()).Id);
     }
 
@@ -171,7 +172,7 @@ public class CosmosCrashWindowE2ETests
         lineage.Store.TagWriteFaultInjector = new FailBeforeBatch(1);
 
         var written = NewEvent("Student:1", "Student:2", "Student:3");
-        var result = await lineage.Store.WriteSerializableEventsAsync(new[] { written });
+        var result = await lineage.Store.WriteSerializableEventsAsync(new[] { written }).AsResultBoxAsync();
 
         Assert.False(result.IsSuccess);
         Assert.Single(lineage.Events.Items);
@@ -188,7 +189,7 @@ public class CosmosCrashWindowE2ETests
 
         foreach (var tag in new[] { "Student:1", "Student:2", "Student:3" })
         {
-            var byTag = await lineage.Store.ReadSerializableEventsByTagAsync(new TestTag(tag));
+            var byTag = await lineage.Store.ReadSerializableEventsByTagAsync(new TestTag(tag)).AsResultBoxAsync();
             Assert.Equal(written.Id, Assert.Single(byTag.GetValue()).Id);
         }
     }
@@ -205,7 +206,7 @@ public class CosmosCrashWindowE2ETests
         lineage.Events.WriteFaults.Enqueue(CosmosFailures.Conflict());
 
         var events = new[] { NewEvent("Student:1"), NewEvent("Student:2") };
-        var result = await lineage.Store.WriteSerializableEventsAsync(events);
+        var result = await lineage.Store.WriteSerializableEventsAsync(events).AsResultBoxAsync();
 
         Assert.False(result.IsSuccess);
         var failure = Assert.IsType<CosmosPartialEventWriteException>(result.GetException());
@@ -262,7 +263,7 @@ public class CosmosCrashWindowE2ETests
         lineage.Store.TagWriteFaultInjector = new FailFirstAttempts(1);
 
         var written = NewEvent("Student:1", "Student:2", "Student:3");
-        var result = await lineage.Store.WriteSerializableEventsAsync(new[] { written });
+        var result = await lineage.Store.WriteSerializableEventsAsync(new[] { written }).AsResultBoxAsync();
 
         // Re-executing a tag write is safe because the rows derive deterministically: the retry re-derives
         // identical rows, accepts the one the failed attempt already created, and fills in the rest.
@@ -272,7 +273,7 @@ public class CosmosCrashWindowE2ETests
 
         foreach (var tag in new[] { "Student:1", "Student:2", "Student:3" })
         {
-            var byTag = await lineage.Store.ReadSerializableEventsByTagAsync(new TestTag(tag));
+            var byTag = await lineage.Store.ReadSerializableEventsByTagAsync(new TestTag(tag)).AsResultBoxAsync();
             Assert.Equal(written.Id, Assert.Single(byTag.GetValue()).Id);
         }
     }
@@ -283,16 +284,16 @@ public class CosmosCrashWindowE2ETests
         var lineage = NewLineage();
         var written = NewEvent("Student:1");
 
-        var first = await lineage.Store.WriteSerializableEventsAsync(new[] { written });
+        var first = await lineage.Store.WriteSerializableEventsAsync(new[] { written }).AsResultBoxAsync();
         Assert.True(first.IsSuccess);
         Assert.Single(lineage.Tags.Items);
 
         // Replaying the same event: the event create conflicts, but the tag rows must not multiply.
-        var second = await lineage.Store.WriteSerializableEventsAsync(new[] { written });
+        var second = await lineage.Store.WriteSerializableEventsAsync(new[] { written }).AsResultBoxAsync();
         Assert.False(second.IsSuccess); // the event already exists
 
         Assert.Single(lineage.Tags.Items);
-        var byTag = await lineage.Store.ReadSerializableEventsByTagAsync(new TestTag("Student:1"));
+        var byTag = await lineage.Store.ReadSerializableEventsByTagAsync(new TestTag("Student:1")).AsResultBoxAsync();
         Assert.Single(byTag.GetValue());
     }
 
@@ -301,7 +302,7 @@ public class CosmosCrashWindowE2ETests
     {
         var lineage = NewLineage();
         var written = NewEvent("Student:1");
-        await lineage.Store.WriteSerializableEventsAsync(new[] { written });
+        await lineage.Store.WriteSerializableEventsAsync(new[] { written }).AsResultBoxAsync();
 
         // Something outside Sekiban rewrote the row's event type.
         var corrupted = CosmosTagIdentity.DeriveRow(
@@ -327,7 +328,7 @@ public class CosmosCrashWindowE2ETests
     {
         var lineage = NewLineage();
         lineage.Store.TagWriteFaultInjector = new FailBeforeBatch(0);
-        await lineage.Store.WriteSerializableEventsAsync(new[] { NewEvent("Student:1") });
+        await lineage.Store.WriteSerializableEventsAsync(new[] { NewEvent("Student:1") }).AsResultBoxAsync();
         lineage.Store.TagWriteFaultInjector = null;
 
         // Two repairs racing each other over the same residue.
@@ -358,7 +359,7 @@ public class CosmosCrashWindowE2ETests
         lineage.Store.TagWriteFaultInjector = new FailBeforeBatch(0);
         for (var i = 0; i < 6; i++)
         {
-            await lineage.Store.WriteSerializableEventsAsync(new[] { NewEvent($"Student:{i}") });
+            await lineage.Store.WriteSerializableEventsAsync(new[] { NewEvent($"Student:{i}") }).AsResultBoxAsync();
         }
 
         lineage.Store.TagWriteFaultInjector = null;
@@ -401,7 +402,7 @@ public class CosmosCrashWindowE2ETests
         lineage.Store.TagWriteFaultInjector = new FailBeforeBatch(0);
         for (var i = 0; i < 4; i++)
         {
-            await lineage.Store.WriteSerializableEventsAsync(new[] { NewEvent($"Student:{i}") });
+            await lineage.Store.WriteSerializableEventsAsync(new[] { NewEvent($"Student:{i}") }).AsResultBoxAsync();
         }
 
         lineage.Store.TagWriteFaultInjector = null;
@@ -456,28 +457,28 @@ public class CosmosCrashWindowE2ETests
         var lineage = NewLineage();
         lineage.Store.TagWriteFaultInjector = new FailBeforeBatch(0);
         var written = NewEvent("Student:1");
-        await lineage.Store.WriteSerializableEventsAsync(new[] { written });
+        await lineage.Store.WriteSerializableEventsAsync(new[] { written }).AsResultBoxAsync();
         lineage.Store.TagWriteFaultInjector = null;
 
         var tag = new TestTag("Student:1");
 
         // Before repair, a tag reader does NOT see the event, and the tag-consistent baseline is regressed
         // with it. Nothing gates the reader — this is the documented window, asserted rather than wished away.
-        Assert.Empty((await lineage.Store.ReadSerializableEventsByTagAsync(tag)).GetValue());
-        Assert.False((await lineage.Store.TagExistsAsync(tag)).GetValue());
-        Assert.Equal(string.Empty, (await lineage.Store.GetLatestTagAsync(tag)).GetValue().LastSortedUniqueId);
+        Assert.Empty((await lineage.Store.ReadSerializableEventsByTagAsync(tag).AsResultBoxAsync()).GetValue());
+        Assert.False((await lineage.Store.TagExistsAsync(tag).AsResultBoxAsync()).GetValue());
+        Assert.Equal(string.Empty, (await lineage.Store.GetLatestTagAsync(tag).AsResultBoxAsync()).GetValue().LastSortedUniqueId);
 
         // Meanwhile the event is durable and visible to all-events readers the whole time.
-        Assert.Single((await lineage.Store.ReadAllSerializableEventsAsync()).GetValue());
+        Assert.Single((await lineage.Store.ReadAllSerializableEventsAsync().AsResultBoxAsync()).GetValue());
 
         await RunRepairAsync(lineage);
 
         // Only after repair does the tag reader converge. "Eventually" — never "before the read".
-        Assert.Single((await lineage.Store.ReadSerializableEventsByTagAsync(tag)).GetValue());
-        Assert.True((await lineage.Store.TagExistsAsync(tag)).GetValue());
+        Assert.Single((await lineage.Store.ReadSerializableEventsByTagAsync(tag).AsResultBoxAsync()).GetValue());
+        Assert.True((await lineage.Store.TagExistsAsync(tag).AsResultBoxAsync()).GetValue());
         Assert.Equal(
             written.SortableUniqueIdValue,
-            (await lineage.Store.GetLatestTagAsync(tag)).GetValue().LastSortedUniqueId);
+            (await lineage.Store.GetLatestTagAsync(tag).AsResultBoxAsync()).GetValue().LastSortedUniqueId);
     }
 
     // ── Consumer contract: both registration styles ─────────────────────────────────────────────────
@@ -509,7 +510,7 @@ public class CosmosCrashWindowE2ETests
         // end-to-end proof, not just a smoke check that it constructs.
         var lineage = NewLineage();
         lineage.Store.TagWriteFaultInjector = new FailBeforeBatch(0);
-        await lineage.Store.WriteSerializableEventsAsync(new[] { NewEvent("Student:1") });
+        await lineage.Store.WriteSerializableEventsAsync(new[] { NewEvent("Student:1") }).AsResultBoxAsync();
         lineage.Store.TagWriteFaultInjector = null;
 
         var report = await RunRepairAsync(lineage);
@@ -535,7 +536,7 @@ public class CosmosCrashWindowE2ETests
         var lineage = NewLineage(options: options);
         lineage.Store.TagWriteFaultInjector = new FailBeforeBatch(0);
 
-        var result = await lineage.Store.WriteSerializableEventsAsync(new[] { NewEvent("Student:1") });
+        var result = await lineage.Store.WriteSerializableEventsAsync(new[] { NewEvent("Student:1") }).AsResultBoxAsync();
 
         // The pre-upgrade behavior, unchanged: no retry, and the legacy rollback deletes the written event.
         Assert.False(result.IsSuccess);
@@ -588,8 +589,8 @@ public class CosmosCrashWindowE2ETests
         // Both crash with residue.
         runtime.Store.TagWriteFaultInjector = new FailBeforeBatch(0);
         management.Store.TagWriteFaultInjector = new FailBeforeBatch(0);
-        await runtime.Store.WriteSerializableEventsAsync(new[] { NewEvent("Student:1") });
-        await management.Store.WriteSerializableEventsAsync(new[] { NewEvent("Student:1") });
+        await runtime.Store.WriteSerializableEventsAsync(new[] { NewEvent("Student:1") }).AsResultBoxAsync();
+        await management.Store.WriteSerializableEventsAsync(new[] { NewEvent("Student:1") }).AsResultBoxAsync();
         runtime.Store.TagWriteFaultInjector = null;
         management.Store.TagWriteFaultInjector = null;
 
@@ -616,7 +617,7 @@ public class CosmosCrashWindowE2ETests
     {
         var lineage = NewLineage();
         lineage.Store.TagWriteFaultInjector = new FailBeforeBatch(0);
-        await lineage.Store.WriteSerializableEventsAsync(new[] { NewEvent("Student:1") });
+        await lineage.Store.WriteSerializableEventsAsync(new[] { NewEvent("Student:1") }).AsResultBoxAsync();
         lineage.Store.TagWriteFaultInjector = null;
 
         var report = await RunRepairAsync(lineage, dryRun: true);

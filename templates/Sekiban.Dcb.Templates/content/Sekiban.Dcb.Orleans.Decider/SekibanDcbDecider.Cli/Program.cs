@@ -911,19 +911,28 @@ static async Task ShowStatusAsync(string connectionString, string databaseType, 
     var domainTypes = services.GetRequiredService<DcbDomainTypes>();
 
     // Get total event count
-    var eventCountResult = await eventStore.GetEventCountAsync();
-    var totalEvents = eventCountResult.IsSuccess ? eventCountResult.GetValue() : 0;
+    long totalEvents;
+    try
+    {
+        totalEvents = await eventStore.GetEventCountAsync();
+    }
+    catch (Exception)
+    {
+        totalEvents = 0;
+    }
     Console.WriteLine($"Total Events in Store: {totalEvents:N0}\n");
 
     // List all states
-    var listResult = await stateStore.ListAllAsync();
-    if (!listResult.IsSuccess)
+    IReadOnlyList<ProjectorStateInfo> states;
+    try
     {
-        Console.WriteLine($"Error listing states: {listResult.GetException().Message}");
+        states = await stateStore.ListAllAsync();
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"Error listing states: {ex.Message}");
         return;
     }
-
-    var states = listResult.GetValue();
     if (states.Count == 0)
     {
         Console.WriteLine("No projection states found.\n");
@@ -1003,13 +1012,17 @@ static string FormatBytes(long bytes)
 
 static async Task<byte[]?> TryReadStateDataAsync(IMultiProjectionStateStore stateStore, MultiProjectionStateRecord state)
 {
-    var streamResult = await stateStore.OpenStateDataReadStreamAsync(state).ConfigureAwait(false);
-    if (!streamResult.IsSuccess)
+    Stream stateStream;
+    try
+    {
+        stateStream = await stateStore.OpenStateDataReadStreamAsync(state).ConfigureAwait(false);
+    }
+    catch (Exception)
     {
         return null;
     }
 
-    await using var stateStream = streamResult.GetValue();
+    await using var _ = stateStream;
     using var ms = new MemoryStream();
     await stateStream.CopyToAsync(ms).ConfigureAwait(false);
     return ms.ToArray();
@@ -1029,14 +1042,16 @@ static async Task SaveStateJsonAsync(string connectionString, string databaseTyp
     Directory.CreateDirectory(outputDir);
 
     // Get list of states (summary info)
-    var listResult = await stateStore.ListAllAsync();
-    if (!listResult.IsSuccess)
+    IReadOnlyList<ProjectorStateInfo> stateInfos;
+    try
     {
-        Console.WriteLine($"Error listing states: {listResult.GetException().Message}");
+        stateInfos = await stateStore.ListAllAsync();
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"Error listing states: {ex.Message}");
         return;
     }
-
-    var stateInfos = listResult.GetValue();
     if (!string.IsNullOrEmpty(projectorName))
     {
         stateInfos = stateInfos.Where(s => s.ProjectorName == projectorName).ToList();
@@ -1056,14 +1071,21 @@ static async Task SaveStateJsonAsync(string connectionString, string databaseTyp
         Console.WriteLine($"Saving: {info.ProjectorName} (v{info.ProjectorVersion})");
 
         // Fetch the full record with state data
-        var recordResult = await stateStore.GetLatestForVersionAsync(info.ProjectorName, info.ProjectorVersion);
-        if (!recordResult.IsSuccess || !recordResult.GetValue().HasValue)
+        MultiProjectionStateRecord? state;
+        try
+        {
+            state = await stateStore.GetLatestForVersionAsync(info.ProjectorName, info.ProjectorVersion);
+        }
+        catch (Exception)
+        {
+            state = null;
+        }
+
+        if (state is null)
         {
             Console.WriteLine($"  Error: Could not fetch full record");
             continue;
         }
-
-        var state = recordResult.GetValue().GetValue();
 
         // Save metadata
         var metadataFileName = $"{state.ProjectorName}_{timestamp}_metadata.json";
@@ -1151,14 +1173,16 @@ static async Task DeleteStateAsync(string connectionString, string databaseType,
     var stateStore = services.GetRequiredService<IMultiProjectionStateStore>();
 
     // Get states to delete
-    var listResult = await stateStore.ListAllAsync();
-    if (!listResult.IsSuccess)
+    IReadOnlyList<ProjectorStateInfo> states;
+    try
     {
-        Console.WriteLine($"Error listing states: {listResult.GetException().Message}");
+        states = await stateStore.ListAllAsync();
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"Error listing states: {ex.Message}");
         return;
     }
-
-    var states = listResult.GetValue();
     if (!string.IsNullOrEmpty(projectorName))
     {
         states = states.Where(s => s.ProjectorName == projectorName).ToList();
@@ -1188,15 +1212,15 @@ static async Task DeleteStateAsync(string connectionString, string databaseType,
     var deleted = 0;
     foreach (var state in states)
     {
-        var deleteResult = await stateStore.DeleteAsync(state.ProjectorName, state.ProjectorVersion);
-        if (deleteResult.IsSuccess)
+        try
         {
+            await stateStore.DeleteAsync(state.ProjectorName, state.ProjectorVersion);
             Console.WriteLine($"  Deleted: {state.ProjectorName} (v{state.ProjectorVersion})");
             deleted++;
         }
-        else
+        catch (Exception ex)
         {
-            Console.WriteLine($"  Failed to delete {state.ProjectorName}: {deleteResult.GetException().Message}");
+            Console.WriteLine($"  Failed to delete {state.ProjectorName}: {ex.Message}");
         }
     }
 
@@ -1233,14 +1257,16 @@ static async Task FetchTagEventsAsync(
 
     // Fetch events for the tag
     Console.WriteLine("Fetching events...");
-    var eventsResult = await eventStore.ReadEventsByTagAsync(tag, domainTypes.EventTypes);
-    if (!eventsResult.IsSuccess)
+    List<Sekiban.Dcb.Events.Event> events;
+    try
     {
-        Console.WriteLine($"Error fetching events: {eventsResult.GetException().Message}");
+        events = (await eventStore.ReadEventsByTagAsync(tag, domainTypes.EventTypes)).ToList();
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"Error fetching events: {ex.Message}");
         return;
     }
-
-    var events = eventsResult.GetValue().ToList();
     Console.WriteLine($"Found {events.Count} event(s)\n");
 
     if (events.Count == 0)
@@ -1326,14 +1352,16 @@ static async Task ShowProjectionAsync(string connectionString, string databaseTy
     var domainTypes = services.GetRequiredService<DcbDomainTypes>();
 
     // Get list of states
-    var listResult = await stateStore.ListAllAsync();
-    if (!listResult.IsSuccess)
+    IReadOnlyList<ProjectorStateInfo> stateInfos;
+    try
     {
-        Console.WriteLine($"Error listing states: {listResult.GetException().Message}");
+        stateInfos = await stateStore.ListAllAsync();
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"Error listing states: {ex.Message}");
         return;
     }
-
-    var stateInfos = listResult.GetValue();
     if (!string.IsNullOrEmpty(projectorName))
     {
         stateInfos = stateInfos.Where(s => s.ProjectorName == projectorName).ToList();
@@ -1366,14 +1394,21 @@ static async Task ShowProjectionAsync(string connectionString, string databaseTy
         Console.WriteLine();
 
         // Fetch the full record to show state details
-        var recordResult = await stateStore.GetLatestForVersionAsync(info.ProjectorName, info.ProjectorVersion);
-        if (!recordResult.IsSuccess || !recordResult.GetValue().HasValue)
+        MultiProjectionStateRecord? state;
+        try
+        {
+            state = await stateStore.GetLatestForVersionAsync(info.ProjectorName, info.ProjectorVersion);
+        }
+        catch (Exception)
+        {
+            state = null;
+        }
+
+        if (state is null)
         {
             Console.WriteLine("  Could not fetch full state record.");
             continue;
         }
-
-        var state = recordResult.GetValue().GetValue();
 
         Console.WriteLine($"  Last SortableUniqueId: {state.LastSortableUniqueId}");
         Console.WriteLine($"  Safe Window Threshold: {state.SafeWindowThreshold}");
@@ -1786,10 +1821,13 @@ static async Task ShowCacheStatsAsync(string cacheDir)
     var localStore = new SqliteEventStore(cachePath, domainTypes.EventTypes, serviceIdProvider: new FixedServiceIdProvider(GetServiceId()));
 
     // Get event count
-    var countResult = await localStore.GetEventCountAsync();
-    if (countResult.IsSuccess)
+    try
     {
-        Console.WriteLine($"Total Events: {countResult.GetValue():N0}");
+        Console.WriteLine($"Total Events: {await localStore.GetEventCountAsync():N0}");
+    }
+    catch (Exception)
+    {
+        // Count unavailable: keep showing the rest of the cache statistics.
     }
 
     // Get metadata
@@ -1806,10 +1844,18 @@ static async Task ShowCacheStatsAsync(string cacheDir)
     }
 
     // Get tag summary
-    var tagsResult = await localStore.GetAllTagsAsync();
-    if (tagsResult.IsSuccess)
+    List<TagInfo>? tags;
+    try
     {
-        var tags = tagsResult.GetValue().ToList();
+        tags = (await localStore.GetAllTagsAsync()).ToList();
+    }
+    catch (Exception)
+    {
+        tags = null;
+    }
+
+    if (tags is not null)
+    {
         var tagGroups = tags.GroupBy(t => t.TagGroup).ToList();
 
         Console.WriteLine();

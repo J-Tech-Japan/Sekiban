@@ -1,5 +1,4 @@
 using System.Collections.Concurrent;
-using ResultBoxes;
 using Sekiban.Dcb.Common;
 using Sekiban.Dcb.ServiceId;
 using Sekiban.Dcb.Storage;
@@ -52,10 +51,10 @@ public sealed class SortableUniqueIdSeedCoordinator
     private async Task SeedCoreAsync(string serviceId, IEventStore eventStore, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        ResultBox<string> result;
+        string head;
         try
         {
-            result = await eventStore.GetLatestSortableUniqueIdAsync().ConfigureAwait(false);
+            head = await eventStore.GetLatestSortableUniqueIdAsync().ConfigureAwait(false);
         }
         catch (Exception exception)
         {
@@ -65,15 +64,6 @@ public sealed class SortableUniqueIdSeedCoordinator
                 exception);
         }
 
-        if (!result.IsSuccess)
-        {
-            throw new SortableUniqueIdSeedException(
-                serviceId,
-                $"Failed to read the persisted SortableUniqueId head for service '{serviceId}'.",
-                result.GetException());
-        }
-
-        var head = result.GetValue();
         if (string.IsNullOrEmpty(head))
         {
             return;

@@ -10,6 +10,7 @@ using Sekiban.Dcb.InMemory;
 using Sekiban.Dcb.MaterializedView;
 using Sekiban.Dcb.ServiceId;
 using Xunit;
+using Sekiban.Dcb.TestSupport;
 
 namespace Sekiban.Dcb.MaterializedView.MultiProvider.Tests;
 
@@ -134,9 +135,9 @@ internal static class MvGenerationSwitchAssertions
             Assert.True(initialSwitch.Succeeded, initialSwitch.Message);
         }
 
-        var writeResult = await fixture.EventStore.WriteSerializableEventsAsync(durableEvents).ConfigureAwait(false);
+        var writeResult = await fixture.EventStore.WriteSerializableEventsAsync(durableEvents).AsResultBoxAsync().ConfigureAwait(false);
         Assert.True(writeResult.IsSuccess, writeResult.IsSuccess ? string.Empty : writeResult.GetException().Message);
-        var durableRead = await fixture.EventStore.ReadAllSerializableEventsAsync().ConfigureAwait(false);
+        var durableRead = await fixture.EventStore.ReadAllSerializableEventsAsync().AsResultBoxAsync().ConfigureAwait(false);
         Assert.True(durableRead.IsSuccess, durableRead.IsSuccess ? string.Empty : durableRead.GetException().Message);
         Assert.Equal(durableEvents.Count, durableRead.GetValue().Count());
 

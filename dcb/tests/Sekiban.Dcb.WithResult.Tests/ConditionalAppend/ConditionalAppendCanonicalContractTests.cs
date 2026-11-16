@@ -54,7 +54,7 @@ public class ConditionalAppendCanonicalContractTests
         var json = domain.EventTypes.SerializeEventPayload(new CanonEvent("hello", 7, new[] { "z", "a" }));
         var digest = OperationFingerprint.ComputeCanonical(
             "svc-1", "key-1", domain.EventTypes, nameof(CanonEvent),
-            Encoding.UTF8.GetBytes(json), new[] { "Tag:1" }).GetValue();
+            Encoding.UTF8.GetBytes(json), new[] { "Tag:1" });
         Assert.Equal("9abe33d679a894b12ea1f4a5184fdcbf71378465770a7e75250aff496ed021bd", digest);
     }
 
@@ -149,8 +149,8 @@ public class ConditionalAppendCanonicalContractTests
         var domain = Domain();
         var jsonA = domain.EventTypes.SerializeEventPayload(new CanonEvent("x", 1, Array.Empty<string>()));
         var jsonB = domain.EventTypes.SerializeEventPayload(new OtherCanonEvent("x", 1, Array.Empty<string>()));
-        var fa = OperationFingerprint.ComputeCanonical("s", "k", domain.EventTypes, nameof(CanonEvent), Encoding.UTF8.GetBytes(jsonA), Array.Empty<string>()).GetValue();
-        var fb = OperationFingerprint.ComputeCanonical("s", "k", domain.EventTypes, nameof(OtherCanonEvent), Encoding.UTF8.GetBytes(jsonB), Array.Empty<string>()).GetValue();
+        var fa = OperationFingerprint.ComputeCanonical("s", "k", domain.EventTypes, nameof(CanonEvent), Encoding.UTF8.GetBytes(jsonA), Array.Empty<string>());
+        var fb = OperationFingerprint.ComputeCanonical("s", "k", domain.EventTypes, nameof(OtherCanonEvent), Encoding.UTF8.GetBytes(jsonB), Array.Empty<string>());
         Assert.NotEqual(fa, fb);
     }
 
@@ -160,18 +160,14 @@ public class ConditionalAppendCanonicalContractTests
     public void UnregisteredType_FailsClosed()
     {
         var domain = Domain();
-        var r = OperationFingerprint.ComputeCanonical("s", "k", domain.EventTypes, "Nope", Encoding.UTF8.GetBytes("{}"), Array.Empty<string>());
-        Assert.False(r.IsSuccess);
-        Assert.IsType<OperationCanonicalizationException>(r.GetException());
+        Assert.Throws<OperationCanonicalizationException>(() => OperationFingerprint.ComputeCanonical("s", "k", domain.EventTypes, "Nope", Encoding.UTF8.GetBytes("{}"), Array.Empty<string>()));
     }
 
     [Fact]
     public void UnparseablePayload_FailsClosed()
     {
         var domain = Domain();
-        var r = OperationFingerprint.ComputeCanonical("s", "k", domain.EventTypes, nameof(CanonEvent), Encoding.UTF8.GetBytes("{ not json "), Array.Empty<string>());
-        Assert.False(r.IsSuccess);
-        Assert.IsType<OperationCanonicalizationException>(r.GetException());
+        Assert.Throws<OperationCanonicalizationException>(() => OperationFingerprint.ComputeCanonical("s", "k", domain.EventTypes, nameof(CanonEvent), Encoding.UTF8.GetBytes("{ not json "), Array.Empty<string>()));
     }
 
     // ---- Secret-safe canonicalization failure ----
@@ -183,12 +179,9 @@ public class ConditionalAppendCanonicalContractTests
         var domain = Domain();
 
         // A payload whose deserialization throws with the sentinel embedded; the key also carries the sentinel.
-        var r = OperationFingerprint.ComputeCanonical(
+        var ex = Assert.Throws<OperationCanonicalizationException>(() => OperationFingerprint.ComputeCanonical(
             "svc", sentinel, domain.EventTypes, nameof(HostileEvent),
-            Encoding.UTF8.GetBytes($"{{\"Value\":\"{sentinel}\"}}"), new[] { $"Tag:{sentinel}" });
-
-        Assert.False(r.IsSuccess);
-        var ex = Assert.IsType<OperationCanonicalizationException>(r.GetException());
+            Encoding.UTF8.GetBytes($"{{\"Value\":\"{sentinel}\"}}"), new[] { $"Tag:{sentinel}" }));
         Assert.Null(ex.InnerException); // no chained converter/deserializer exception at all
         AssertNoSecretInExceptionGraph(ex, sentinel);
     }

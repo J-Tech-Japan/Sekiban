@@ -1,4 +1,3 @@
-using ResultBoxes;
 using Sekiban.Dcb.Events;
 
 namespace Sekiban.Dcb.Storage;
@@ -205,13 +204,13 @@ public interface IExpectedTagPositionEventStore
     string? ExpectedTagPositionServiceId => null;
 
     /// <summary>Checks the service's provisioning-plane enablement epoch without creating or advancing a head.</summary>
-    Task<ResultBox<bool>> EnsureExpectedTagPositionEnforcementEnabledAsync(CancellationToken cancellationToken = default);
+    Task<bool> EnsureExpectedTagPositionEnforcementEnabledAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
     ///     Writes a serialized batch through the canonical head protocol. NoEnforcement entries still create, lock,
     ///     reconcile and advance durable heads; they only skip the expected-head comparison.
     /// </summary>
-    Task<ResultBox<ExpectedTagPositionWriteResult>> WriteSerializableEventsWithExpectedTagPositionsAsync(
+    Task<ExpectedTagPositionWriteResult> WriteSerializableEventsWithExpectedTagPositionsAsync(
         IReadOnlyList<SerializableEvent> events,
         ExpectedTagPositionSpecification specification,
         CancellationToken cancellationToken = default);

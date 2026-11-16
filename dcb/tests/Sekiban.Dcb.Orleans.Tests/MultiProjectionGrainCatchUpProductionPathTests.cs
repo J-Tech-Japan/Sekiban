@@ -24,6 +24,7 @@ using Sekiban.Dcb.Snapshots;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
 using Xunit;
+using Sekiban.Dcb.TestSupport;
 
 namespace Sekiban.Dcb.Orleans.Tests;
 
@@ -53,7 +54,7 @@ public sealed partial class MultiProjectionGrainCatchUpProductionPathTests
         try
         {
             _ = await grain.PersistStateAsync();
-            var active = (await checkpoints.ReadCheckpointSlotAsync("production-catch-up", "v1")).GetValue();
+            var active = (await checkpoints.ReadCheckpointSlotAsync("production-catch-up", "v1").AsResultBoxAsync()).GetValue();
             var invalidation = await checkpoints.InvalidateWithTombstoneAsync("production-catch-up", "v1", CheckpointExpectation.FromSlot(active));
             Assert.Equal(CheckpointCasStatus.Committed, invalidation.Status);
             _ = await grain.PersistStateAsync();
@@ -65,7 +66,7 @@ public sealed partial class MultiProjectionGrainCatchUpProductionPathTests
             for (var i = 0; i < 3; i++)
             {
                 _ = await grain.PersistStateAsync();
-                Assert.Equal(invalidation.ResultingSlot, (await checkpoints.ReadCheckpointSlotAsync("production-catch-up", "v1")).GetValue());
+                Assert.Equal(invalidation.ResultingSlot, (await checkpoints.ReadCheckpointSlotAsync("production-catch-up", "v1").AsResultBoxAsync()).GetValue());
                 Assert.Equal(lastGood, state.State.LastGoodSafeVersion);
                 Assert.Equal(lastGoodEvents, state.State.LastGoodEventsProcessed);
                 Assert.False(state.State.RebuildRequired);
@@ -99,7 +100,7 @@ public sealed partial class MultiProjectionGrainCatchUpProductionPathTests
             Assert.True(result.IsSuccess, result.IsSuccess ? "" : result.GetException().ToString());
         }
         async Task<CheckpointSlot> ReadAsync() =>
-            (await checkpoints.ReadCheckpointSlotAsync("production-catch-up", "v1").WaitAsync(timeout)).GetValue();
+            (await checkpoints.ReadCheckpointSlotAsync("production-catch-up", "v1").AsResultBoxAsync().WaitAsync(timeout)).GetValue();
         async Task InvalidateAsync(CheckpointSlot slot)
         {
             var result = await checkpoints.InvalidateWithTombstoneAsync("production-catch-up", "v1",
@@ -108,7 +109,7 @@ public sealed partial class MultiProjectionGrainCatchUpProductionPathTests
         }
         async Task<byte[]> PayloadAsync(MultiProjectionStateRecord record)
         {
-            await using var stream = (await checkpoints.OpenStateDataReadStreamAsync(record).WaitAsync(timeout)).GetValue();
+            await using var stream = (await checkpoints.OpenStateDataReadStreamAsync(record).AsResultBoxAsync().WaitAsync(timeout)).GetValue();
             using var bytes = new MemoryStream();
             await stream.CopyToAsync(bytes).WaitAsync(timeout);
             return bytes.ToArray();
@@ -174,7 +175,7 @@ public sealed partial class MultiProjectionGrainCatchUpProductionPathTests
         public TaskCompletionSource ReadEntered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public TaskCompletionSource ReleaseRead { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        async Task<ResultBox<OptionalValue<MultiProjectionStateRecord>>> IMultiProjectionStateStore.GetLatestForVersionAsync(
+        async Task<MultiProjectionStateRecord?> IMultiProjectionStateStore.GetLatestForVersionAsync(
             string projectorName, string projectorVersion, CancellationToken cancellationToken)
         {
             if (ParkNextRead)
@@ -208,7 +209,7 @@ public sealed partial class MultiProjectionGrainCatchUpProductionPathTests
         SetPrivateField(grain, "_grainKey", name);
         await grain.AddEventsAsync([ProjectionFaultOrleansTests.Event(false, 1_000)]).WaitAsync(timeout);
         Assert.True((await grain.PersistStateAsync().WaitAsync(timeout)).IsSuccess);
-        var active = (await checkpoints.ReadCheckpointSlotAsync(name, version).WaitAsync(timeout)).GetValue();
+        var active = (await checkpoints.ReadCheckpointSlotAsync(name, version).AsResultBoxAsync().WaitAsync(timeout)).GetValue();
         Assert.True(active.IsActive);
         var invalidated = await checkpoints.InvalidateWithTombstoneAsync(name, version,
             CheckpointExpectation.FromSlot(active)).WaitAsync(timeout);
@@ -258,7 +259,7 @@ public sealed partial class MultiProjectionGrainCatchUpProductionPathTests
             Assert.Equal(poison.Id, committed.GetValue().Fault!.FaultEventId);
             Assert.Equal(writes, checkpoints.WriteCalls);
             Assert.Equal(invalidated.ResultingSlot,
-                (await checkpoints.ReadCheckpointSlotAsync(name, version).WaitAsync(timeout)).GetValue());
+                (await checkpoints.ReadCheckpointSlotAsync(name, version).AsResultBoxAsync().WaitAsync(timeout)).GetValue());
         }
         finally
         {
@@ -304,11 +305,11 @@ public sealed partial class MultiProjectionGrainCatchUpProductionPathTests
             hostFactory: new ProductionCatchUpProjectionHostFactory(fresh));
         SetPrivateField(grain, "_hostIsPristine", false);
         _ = await grain.PersistStateAsync();
-        var active = (await checkpoints.ReadCheckpointSlotAsync("production-catch-up", "v1")).GetValue();
+        var active = (await checkpoints.ReadCheckpointSlotAsync("production-catch-up", "v1").AsResultBoxAsync()).GetValue();
         var invalidated = await checkpoints.InvalidateWithTombstoneAsync("production-catch-up", "v1", CheckpointExpectation.FromSlot(active));
         Assert.Equal(CheckpointCasStatus.Committed, invalidated.Status);
         _ = await grain.PersistStateAsync(); // real rejection adopts the peer's generation
-        var tomb = (await checkpoints.ReadCheckpointSlotAsync("production-catch-up", "v1")).GetValue();
+        var tomb = (await checkpoints.ReadCheckpointSlotAsync("production-catch-up", "v1").AsResultBoxAsync()).GetValue();
         var catchUp = grain.RefreshAsync();
         Task<Exception?>? queryEntry = null;
         try
@@ -327,7 +328,7 @@ public sealed partial class MultiProjectionGrainCatchUpProductionPathTests
             Assert.Equal(0L, GetPrivateField<long>(grain, "_eventsProcessed"));
             Assert.Null(GetCatchUpCurrentPosition(grain));
             // CompleteCatchUp attempted its pending-tombstone persist before releasing the gate. No commit escaped.
-            Assert.Equal(tomb, (await checkpoints.ReadCheckpointSlotAsync("production-catch-up", "v1")).GetValue());
+            Assert.Equal(tomb, (await checkpoints.ReadCheckpointSlotAsync("production-catch-up", "v1").AsResultBoxAsync()).GetValue());
             Assert.Equal(new[] { "catch_up_complete" }, log.Reasons);
             Assert.Equal(2, stale.SnapshotWriteCalls); // initial save + rejected save, no serialization on completion
             Assert.Equal(0, fresh.SnapshotWriteCalls);
@@ -352,7 +353,7 @@ public sealed partial class MultiProjectionGrainCatchUpProductionPathTests
         var persisted = await grain.PersistStateAsync();
         Assert.True(persisted.IsSuccess, persisted.IsSuccess ? "" : persisted.GetException().ToString());
         Assert.True(persisted.GetValue());
-        var active = (await store.ReadCheckpointSlotAsync("production-catch-up", "v1")).GetValue();
+        var active = (await store.ReadCheckpointSlotAsync("production-catch-up", "v1").AsResultBoxAsync()).GetValue();
         Assert.True(active.IsActive);
         var invalidated = await store.InvalidateWithTombstoneAsync("production-catch-up", "v1",
             CheckpointExpectation.FromSlot(active));
@@ -363,7 +364,7 @@ public sealed partial class MultiProjectionGrainCatchUpProductionPathTests
         await grain.RefreshAsync();
 
         Assert.Equal(new[] { "catch_up_complete" }, log.Reasons);
-        Assert.True((await store.ReadCheckpointSlotAsync("production-catch-up", "v1")).GetValue().IsActive);
+        Assert.True((await store.ReadCheckpointSlotAsync("production-catch-up", "v1").AsResultBoxAsync()).GetValue().IsActive);
         Assert.False((bool)coordinator.GetType().GetProperty("PendingRebuiltCommit")!.GetValue(coordinator)!);
 
         await grain.RefreshAsync();
@@ -2317,13 +2318,13 @@ public sealed partial class MultiProjectionGrainCatchUpProductionPathTests
             return Events.Skip(offset).Take(_batchSizes[batchIndex]).ToArray();
         }
 
-        public virtual async Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null) =>
-            ResultBox.FromValue<IEnumerable<SerializableEvent>>(await ReadNextBatchAsync(since));
+        public virtual async Task<IEnumerable<SerializableEvent>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null) =>
+            await ReadNextBatchAsync(since);
 
-        public virtual async Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(
+        public virtual async Task<IEnumerable<SerializableEvent>> ReadAllSerializableEventsAsync(
             SortableUniqueId? since,
             int? maxCount) =>
-            ResultBox.FromValue<IEnumerable<SerializableEvent>>(await ReadNextBatchAsync(since));
+            await ReadNextBatchAsync(since);
 
         private async Task<IReadOnlyList<SerializableEvent>> ReadNextBatchAsync(SortableUniqueId? since)
         {
@@ -2339,18 +2340,18 @@ public sealed partial class MultiProjectionGrainCatchUpProductionPathTests
             return NextBatch();
         }
 
-        public Task<ResultBox<IEnumerable<TagStream>>> ReadTagsAsync(ITag tag) => throw new NotSupportedException();
-        public Task<ResultBox<TagState>> GetLatestTagAsync(ITag tag) => throw new NotSupportedException();
-        public Task<ResultBox<bool>> TagExistsAsync(ITag tag) => throw new NotSupportedException();
-        public Task<ResultBox<long>> GetEventCountAsync(SortableUniqueId? since = null) => throw new NotSupportedException();
-        public Task<ResultBox<IEnumerable<TagInfo>>> GetAllTagsAsync(string? tagGroup = null) => throw new NotSupportedException();
-        public Task<ResultBox<SerializableEvent>> ReadSerializableEventAsync(Guid eventId) => throw new NotSupportedException();
-        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadSerializableEventsByTagAsync(ITag tag, SortableUniqueId? since = null) => throw new NotSupportedException();
+        public Task<IEnumerable<TagStream>> ReadTagsAsync(ITag tag) => throw new NotSupportedException();
+        public Task<TagState> GetLatestTagAsync(ITag tag) => throw new NotSupportedException();
+        public Task<bool> TagExistsAsync(ITag tag) => throw new NotSupportedException();
+        public Task<long> GetEventCountAsync(SortableUniqueId? since = null) => throw new NotSupportedException();
+        public Task<IEnumerable<TagInfo>> GetAllTagsAsync(string? tagGroup = null) => throw new NotSupportedException();
+        public Task<SerializableEvent?> ReadSerializableEventAsync(Guid eventId) => throw new NotSupportedException();
+        public Task<IEnumerable<SerializableEvent>> ReadSerializableEventsByTagAsync(ITag tag, SortableUniqueId? since = null) => throw new NotSupportedException();
 
-        public Task<ResultBox<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>> WriteSerializableEventsAsync(
+        public Task<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)> WriteSerializableEventsAsync(
             IEnumerable<SerializableEvent> events) => throw new NotSupportedException();
 
-        public virtual Task<ResultBox<string>> GetLatestSortableUniqueIdAsync() => throw new NotSupportedException();
+        public virtual Task<string> GetLatestSortableUniqueIdAsync() => throw new NotSupportedException();
     }
 
     public class DeactivationOnlyRuntime : DispatchProxy
@@ -2365,17 +2366,17 @@ public sealed partial class MultiProjectionGrainCatchUpProductionPathTests
     private sealed class CursorAwareProductionCatchUpEventStore(IReadOnlyList<SerializableEvent> events)
         : ProductionCatchUpEventStore([], events: events)
     {
-        public override Task<ResultBox<string>> GetLatestSortableUniqueIdAsync() =>
-            Task.FromResult(ResultBox.FromValue(Events.LastOrDefault()?.SortableUniqueIdValue ?? string.Empty));
+        public override Task<string> GetLatestSortableUniqueIdAsync() =>
+            Task.FromResult(Events.LastOrDefault()?.SortableUniqueIdValue ?? string.Empty);
 
-        public override Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null) =>
+        public override Task<IEnumerable<SerializableEvent>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null) =>
             ReadAllSerializableEventsAsync(since, null);
 
-        public override Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(SortableUniqueId? since, int? maxCount)
+        public override Task<IEnumerable<SerializableEvent>> ReadAllSerializableEventsAsync(SortableUniqueId? since, int? maxCount)
         {
             ReadSinceValuesStorage.Add(since?.Value);
             var remaining = Events.Where(ev => since is null || new SortableUniqueId(ev.SortableUniqueIdValue).IsLaterThan(since));
-            return Task.FromResult(ResultBox.FromValue<IEnumerable<SerializableEvent>>(remaining.Take(maxCount ?? int.MaxValue).ToArray()));
+            return Task.FromResult<IEnumerable<SerializableEvent>>(remaining.Take(maxCount ?? int.MaxValue).ToArray());
         }
     }
 
@@ -2385,10 +2386,10 @@ public sealed partial class MultiProjectionGrainCatchUpProductionPathTests
     {
         public int HeadReadCalls { get; private set; }
 
-        public override Task<ResultBox<string>> GetLatestSortableUniqueIdAsync()
+        public override Task<string> GetLatestSortableUniqueIdAsync()
         {
             HeadReadCalls++;
-            return Task.FromResult(ResultBox.FromValue(Events[^1].SortableUniqueIdValue));
+            return Task.FromResult(Events[^1].SortableUniqueIdValue);
         }
     }
 
@@ -2408,7 +2409,7 @@ public sealed partial class MultiProjectionGrainCatchUpProductionPathTests
             _releaseFirstRead = releaseFirstRead;
         }
 
-        public async Task<ResultBox<SerializableEventStreamReadResult>> StreamAllSerializableEventsAsync(
+        public async Task<SerializableEventStreamReadResult> StreamAllSerializableEventsAsync(
             SortableUniqueId? since,
             int? maxCount,
             Func<SerializableEvent, ValueTask> onEvent,
@@ -2429,9 +2430,9 @@ public sealed partial class MultiProjectionGrainCatchUpProductionPathTests
                 await onEvent(ev);
             }
 
-            return ResultBox.FromValue(new SerializableEventStreamReadResult(
+            return new SerializableEventStreamReadResult(
                 batch.Count,
-                batch.Count == 0 ? null : batch[^1].SortableUniqueIdValue));
+                batch.Count == 0 ? null : batch[^1].SortableUniqueIdValue);
         }
 
         private void ReadSinceValuesInternal(SortableUniqueId? since) => ReadSinceValuesStorage.Add(since?.Value);
@@ -2440,19 +2441,19 @@ public sealed partial class MultiProjectionGrainCatchUpProductionPathTests
 
     private sealed class EmptyColdObjectStorage : IColdObjectStorage
     {
-        public Task<ResultBox<ColdStorageObject>> GetAsync(string path, CancellationToken ct) =>
-            Task.FromResult(ResultBox.Error<ColdStorageObject>(new FileNotFoundException(path)));
+        public Task<ColdStorageObject?> GetAsync(string path, CancellationToken ct) =>
+            Task.FromResult<ColdStorageObject?>(null);
 
-        public Task<ResultBox<bool>> PutAsync(string path, Stream data, string? expectedETag, CancellationToken ct) =>
-            Task.FromResult(ResultBox.FromValue(true));
+        public Task<bool> PutAsync(string path, Stream data, string? expectedETag, CancellationToken ct) =>
+            Task.FromResult(true);
 
-        public Task<ResultBox<bool>> PutAsync(string path, byte[] data, string? expectedETag, CancellationToken ct) =>
-            Task.FromResult(ResultBox.FromValue(true));
+        public Task<bool> PutAsync(string path, byte[] data, string? expectedETag, CancellationToken ct) =>
+            Task.FromResult(true);
 
-        public Task<ResultBox<IReadOnlyList<string>>> ListAsync(string prefix, CancellationToken ct) =>
-            Task.FromResult(ResultBox.FromValue<IReadOnlyList<string>>(Array.Empty<string>()));
+        public Task<IReadOnlyList<string>> ListAsync(string prefix, CancellationToken ct) =>
+            Task.FromResult<IReadOnlyList<string>>(Array.Empty<string>());
 
-        public Task<ResultBox<bool>> DeleteAsync(string path, CancellationToken ct) =>
-            Task.FromResult(ResultBox.FromValue(true));
+        public Task<bool> DeleteAsync(string path, CancellationToken ct) =>
+            Task.FromResult(true);
     }
 }

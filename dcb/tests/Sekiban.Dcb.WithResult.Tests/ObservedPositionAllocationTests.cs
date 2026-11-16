@@ -8,6 +8,7 @@ using Sekiban.Dcb.Events;
 using Sekiban.Dcb.Tags;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Testing;
+using Sekiban.Dcb.TestSupport;
 
 namespace Sekiban.Dcb.Tests;
 
@@ -72,7 +73,7 @@ public partial class ObservedPositionClockSkewTests
             Assert.True(result.IsSuccess);
         }
         Assert.Equal(new[] { long.Parse(largest.EventId[..19]) }, generator.Seeds);
-        var events = (await rig.Store.ReadAllSerializableEventsAsync()).GetValue()
+        var events = (await rig.Store.ReadAllSerializableEventsAsync().AsResultBoxAsync()).GetValue()
             .Where(e => ((ProbeCounterIncremented)e.ToEvent(rig.Domain.EventTypes).GetValue().Payload).Label is "one" or "two");
         Assert.Equal(2, events.Count());
         Assert.All(events, e => Assert.True(string.CompareOrdinal(e.SortableUniqueIdValue, largest.EventId) > 0));
@@ -108,7 +109,7 @@ public partial class ObservedPositionClockSkewTests
             Assert.False(result.IsSuccess);
         }
         Assert.Equal(alreadySeeded ? Array.Empty<long>() : new[] { long.Parse(head.EventId[..19]) }, generator.Seeds);
-        Assert.Equal(1, (await rig.Store.ReadEventsByTagAsync(tag, rig.Domain.EventTypes)).GetValue().Count());
+        Assert.Equal(1, (await rig.Store.ReadEventsByTagAsync(tag, rig.Domain.EventTypes).AsResultBoxAsync()).GetValue().Count());
     }
 
     [Theory]
@@ -136,7 +137,7 @@ public partial class ObservedPositionClockSkewTests
         Assert.False(await Write());
         generator.ThrowOnSeed = false;
         Assert.True(await Write()); // Same actor and head: succeeds only if the first reservation was released.
-        Assert.Equal(2, (await rig.Store.ReadEventsByTagAsync(tag, rig.Domain.EventTypes)).GetValue().Count());
+        Assert.Equal(2, (await rig.Store.ReadEventsByTagAsync(tag, rig.Domain.EventTypes).AsResultBoxAsync()).GetValue().Count());
     }
 
     [Theory]

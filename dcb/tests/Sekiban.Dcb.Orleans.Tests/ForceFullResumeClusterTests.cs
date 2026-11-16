@@ -19,6 +19,7 @@ using Sekiban.Dcb.Storage.Checkpoints;
 using Sekiban.Dcb.Tags;
 using Sekiban.Dcb.Testing;
 using Xunit;
+using Sekiban.Dcb.TestSupport;
 namespace Sekiban.Dcb.Orleans.Tests;
 
 /// <summary>SEK-G92: forced restart and first-query handoff resume at SAFE on the same native host.</summary>
@@ -52,17 +53,17 @@ public class ForceFullResumeClusterTests : IAsyncLifetime
     private async Task PrepareTombstoneAsync(int tailEvents)
     {
         var t0 = DateTime.UtcNow.AddHours(-1);
-        await Env.EventStore.WriteSerializableEventsAsync(Enumerable.Range(0, 30).Select(i => CountEvent($"base{i}", t0.AddMilliseconds(i))));
+        await Env.EventStore.WriteSerializableEventsAsync(Enumerable.Range(0, 30).Select(i => CountEvent($"base{i}", t0.AddMilliseconds(i)))).AsResultBoxAsync();
         await Grain.RefreshAsync();
         Assert.True((await Grain.PersistStateAsync()).IsSuccess);
         Assert.Equal(30, ((CountProjector)(await Grain.GetStateAsync()).GetValue().Payload).Count);
-        var slot = (await Env.GatingStore.ReadCheckpointSlotAsync(CountProjector.MultiProjectorName, "1.0.0")).GetValue();
+        var slot = (await Env.GatingStore.ReadCheckpointSlotAsync(CountProjector.MultiProjectorName, "1.0.0").AsResultBoxAsync()).GetValue();
         var tombstone = await Env.GatingStore.InvalidateWithTombstoneAsync(CountProjector.MultiProjectorName, "1.0.0", CheckpointExpectation.FromSlot(slot));
         Assert.Equal(CheckpointCasStatus.Committed, tombstone.Status);
-        await Env.EventStore.WriteSerializableEventsAsync(Enumerable.Range(30, tailEvents).Select(i => CountEvent($"tail{i}", t0.AddMilliseconds(i))));
+        await Env.EventStore.WriteSerializableEventsAsync(Enumerable.Range(30, tailEvents).Select(i => CountEvent($"tail{i}", t0.AddMilliseconds(i)))).AsResultBoxAsync();
         await Grain.RequestDeactivationAsync();
         await Task.Delay(1000);
-        Assert.True((await Env.GatingStore.ReadCheckpointSlotAsync(CountProjector.MultiProjectorName, "1.0.0")).GetValue().IsTombstoned);
+        Assert.True((await Env.GatingStore.ReadCheckpointSlotAsync(CountProjector.MultiProjectorName, "1.0.0").AsResultBoxAsync()).GetValue().IsTombstoned);
         Env.Store.ResetReads();
     }
 
@@ -103,7 +104,7 @@ public class ForceFullResumeClusterTests : IAsyncLifetime
         Assert.Equal(3030, ((CountProjector)(await Grain.GetStateAsync(canGetUnsafeState: true)).GetValue().Payload).Count);
         Assert.Equal(3030, (await Grain.GetStatusAsync()).EventsProcessed);
         Assert.True((await Grain.PersistStateAsync()).IsSuccess);
-        var record = (await Env.GatingStore.GetLatestForVersionAsync(CountProjector.MultiProjectorName, "1.0.0")).GetValue();
+        var record = (await Env.GatingStore.GetLatestForVersionAsync(CountProjector.MultiProjectorName, "1.0.0").AsOptionalResultBoxAsync()).GetValue();
         Assert.True(record.HasValue);
         Assert.Equal(3030, record.GetValue().EventsProcessed);
         Assert.Equal(0, rebuilds);
@@ -122,7 +123,7 @@ public class ForceFullResumeClusterTests : IAsyncLifetime
         var safe = CountEvent("safe", t0.AddHours(-1));
         var tailTime = recentTail ? t0.AddSeconds(-10) : t0.AddMinutes(-10);
         var tail = Enumerable.Range(0, 300).Select(i => CountEvent($"tail{i}", tailTime.AddMilliseconds(i))).ToArray();
-        await Env.EventStore.WriteSerializableEventsAsync(new[] { safe }.Concat(tail));
+        await Env.EventStore.WriteSerializableEventsAsync(new[] { safe }.Concat(tail)).AsResultBoxAsync();
         var parked = new TaskCompletionSource<CatchUpProductionObservation>(TaskCreationOptions.RunContinuationsAsynchronously);
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var invocationBefore = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -157,7 +158,7 @@ public class ForceFullResumeClusterTests : IAsyncLifetime
                 late = CountEvent("late-earlier", tailTime.AddMilliseconds(50.5));
                 Assert.True(new SortableUniqueId(late.SortableUniqueIdValue).IsEarlierThanOrEqual(timer.Cursor!));
                 Assert.True(new SortableUniqueId(late.SortableUniqueIdValue).IsLaterThan(new SortableUniqueId(safe.SortableUniqueIdValue)));
-                await Env.EventStore.WriteSerializableEventsAsync(new[] { late });
+                await Env.EventStore.WriteSerializableEventsAsync(new[] { late }).AsResultBoxAsync();
             }
             var query = Grain.GetStateAsync(canGetUnsafeState: true);
             await invocationBefore.Task.WaitAsync(TimeSpan.FromSeconds(10));
@@ -189,7 +190,7 @@ public class ForceFullResumeClusterTests : IAsyncLifetime
         if (transition == "fresh-tombstone") await PrepareTombstoneAsync(0);
         else
         {
-            await Env.EventStore.WriteSerializableEventsAsync(new[] { safe });
+            await Env.EventStore.WriteSerializableEventsAsync(new[] { safe }).AsResultBoxAsync();
             await Grain.RefreshAsync();
             Assert.True((await Grain.PersistStateAsync()).IsSuccess);
             if (transition == "restore")
@@ -264,9 +265,9 @@ public class ForceFullResumeClusterTests : IAsyncLifetime
         private int _thrown;
         public int Thrown => Volatile.Read(ref _thrown);
         public void ResetReads() { Interlocked.Exchange(ref _reads, 0); Interlocked.Exchange(ref _thrown, 0); }
-        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null) =>
+        public Task<IEnumerable<SerializableEvent>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null) =>
             ReadAllSerializableEventsAsync(since, null);
-        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(SortableUniqueId? since, int? maxCount)
+        public Task<IEnumerable<SerializableEvent>> ReadAllSerializableEventsAsync(SortableUniqueId? since, int? maxCount)
         {
             var read = Interlocked.Increment(ref _reads);
             if (FailOnReads.Contains(read))
@@ -276,23 +277,22 @@ public class ForceFullResumeClusterTests : IAsyncLifetime
             }
             return ReadSortedAsync(since, maxCount);
         }
-        private async Task<ResultBox<IEnumerable<SerializableEvent>>> ReadSortedAsync(SortableUniqueId? since, int? maxCount)
+        private async Task<IEnumerable<SerializableEvent>> ReadSortedAsync(SortableUniqueId? since, int? maxCount)
         {
             var all = await inner.ReadAllSerializableEventsAsync(since, null);
-            if (!all.IsSuccess) return all;
             // Real stores sort globally before limiting, so late commits must not be skipped by insertion-order batches.
-            var sorted = all.GetValue().OrderBy(e => e.SortableUniqueIdValue, StringComparer.Ordinal);
-            return ResultBox.FromValue<IEnumerable<SerializableEvent>>((maxCount is { } m ? sorted.Take(m) : sorted).ToList());
+            var sorted = all.OrderBy(e => e.SortableUniqueIdValue, StringComparer.Ordinal);
+            return (maxCount is { } m ? sorted.Take(m) : sorted).ToList();
         }
-        public Task<ResultBox<IEnumerable<TagStream>>> ReadTagsAsync(ITag tag) => inner.ReadTagsAsync(tag);
-        public Task<ResultBox<TagState>> GetLatestTagAsync(ITag tag) => inner.GetLatestTagAsync(tag);
-        public Task<ResultBox<bool>> TagExistsAsync(ITag tag) => inner.TagExistsAsync(tag);
-        public Task<ResultBox<long>> GetEventCountAsync(SortableUniqueId? since = null) => inner.GetEventCountAsync(since);
-        public Task<ResultBox<IEnumerable<TagInfo>>> GetAllTagsAsync(string? tagGroup = null) => inner.GetAllTagsAsync(tagGroup);
-        public Task<ResultBox<SerializableEvent>> ReadSerializableEventAsync(Guid id) => inner.ReadSerializableEventAsync(id);
-        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadSerializableEventsByTagAsync(ITag tag, SortableUniqueId? since = null) => inner.ReadSerializableEventsByTagAsync(tag, since);
-        public Task<ResultBox<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>> WriteSerializableEventsAsync(IEnumerable<SerializableEvent> events) => inner.WriteSerializableEventsAsync(events);
-        public Task<ResultBox<string>> GetLatestSortableUniqueIdAsync() => inner.GetLatestSortableUniqueIdAsync();
+        public Task<IEnumerable<TagStream>> ReadTagsAsync(ITag tag) => inner.ReadTagsAsync(tag);
+        public Task<TagState> GetLatestTagAsync(ITag tag) => inner.GetLatestTagAsync(tag);
+        public Task<bool> TagExistsAsync(ITag tag) => inner.TagExistsAsync(tag);
+        public Task<long> GetEventCountAsync(SortableUniqueId? since = null) => inner.GetEventCountAsync(since);
+        public Task<IEnumerable<TagInfo>> GetAllTagsAsync(string? tagGroup = null) => inner.GetAllTagsAsync(tagGroup);
+        public Task<SerializableEvent?> ReadSerializableEventAsync(Guid id) => inner.ReadSerializableEventAsync(id);
+        public Task<IEnumerable<SerializableEvent>> ReadSerializableEventsByTagAsync(ITag tag, SortableUniqueId? since = null) => inner.ReadSerializableEventsByTagAsync(tag, since);
+        public Task<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)> WriteSerializableEventsAsync(IEnumerable<SerializableEvent> events) => inner.WriteSerializableEventsAsync(events);
+        public Task<string> GetLatestSortableUniqueIdAsync() => inner.GetLatestSortableUniqueIdAsync();
     }
 
     internal static class Env

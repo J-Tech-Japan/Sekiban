@@ -3,7 +3,6 @@ using System.IO.Pipelines;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
-using ResultBoxes;
 using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Events;
 
@@ -17,7 +16,7 @@ public sealed class JsonlColdSegmentFormatHandler : IColdSegmentFormatHandler
     public Task<IColdSegmentFileBuilder> CreateBuilderAsync(SerializableEvent firstEvent, CancellationToken ct)
         => JsonlColdSegmentFileBuilder.CreateAsync(this, firstEvent, ct);
 
-    public async Task<ResultBox<ColdSegmentStreamResult>> StreamSegmentAsync(
+    public async Task<ColdSegmentStreamResult> StreamSegmentAsync(
         Stream data,
         SortableUniqueId? since,
         int? maxCount,
@@ -49,8 +48,7 @@ public sealed class JsonlColdSegmentFormatHandler : IColdSegmentFormatHandler
                     SerializableEvent? evt = DeserializeLine(trimmedLine);
                     if (evt is null)
                     {
-                        return ResultBox.Error<ColdSegmentStreamResult>(
-                            new InvalidDataException("Cold JSONL segment line deserialized to null."));
+                        throw new InvalidDataException("Cold JSONL segment line deserialized to null.");
                     }
 
                     if (since is not null
@@ -67,8 +65,7 @@ public sealed class JsonlColdSegmentFormatHandler : IColdSegmentFormatHandler
                         reader.AdvanceTo(buffer.Start, buffer.End);
                         await reader.CompleteAsync().ConfigureAwait(false);
                         reader = null;
-                        return ResultBox.FromValue(
-                            new ColdSegmentStreamResult(eventsRead, lastSortableUniqueId, ReachedEndOfSegment: false));
+                        return new ColdSegmentStreamResult(eventsRead, lastSortableUniqueId, ReachedEndOfSegment: false);
                     }
                 }
 
@@ -80,8 +77,7 @@ public sealed class JsonlColdSegmentFormatHandler : IColdSegmentFormatHandler
                         SerializableEvent? evt = DeserializeLine(trimmedRemainder);
                         if (evt is null)
                         {
-                            return ResultBox.Error<ColdSegmentStreamResult>(
-                                new InvalidDataException("Cold JSONL segment line deserialized to null."));
+                            throw new InvalidDataException("Cold JSONL segment line deserialized to null.");
                         }
 
                         if (since is null
@@ -106,12 +102,7 @@ public sealed class JsonlColdSegmentFormatHandler : IColdSegmentFormatHandler
                 reader = null;
             }
 
-            return ResultBox.FromValue(
-                new ColdSegmentStreamResult(eventsRead, lastSortableUniqueId, ReachedEndOfSegment: true));
-        }
-        catch (Exception ex)
-        {
-            return ResultBox.Error<ColdSegmentStreamResult>(ex);
+            return new ColdSegmentStreamResult(eventsRead, lastSortableUniqueId, ReachedEndOfSegment: true);
         }
         finally
         {

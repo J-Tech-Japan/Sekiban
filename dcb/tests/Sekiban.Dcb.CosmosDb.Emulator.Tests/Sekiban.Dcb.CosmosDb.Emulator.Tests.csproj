@@ -15,4 +15,9 @@
     <ProjectReference Include="../../src/Sekiban.Dcb.CosmosDb/Sekiban.Dcb.CosmosDb.csproj" />
     <ProjectReference Include="../../internalUsages/Dcb.Domain/Dcb.Domain.csproj" />
   </ItemGroup>
+    <ItemGroup>
+        <!-- Test-only bridge from the exception-based storage contracts back to ResultBox assertions. -->
+        <Compile Include="../Sekiban.Dcb.TestSupport/StorageResultBoxExtensions.cs" Link="StorageResultBoxExtensions.cs" />
+    </ItemGroup>
+
 </Project>

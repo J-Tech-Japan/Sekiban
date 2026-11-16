@@ -10,6 +10,7 @@ using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
 using System.Text.Json;
 using CoreInMemoryEventStore = Sekiban.Dcb.Testing.InMemoryEventStore;
+using Sekiban.Dcb.TestSupport;
 namespace Sekiban.Dcb.Tests;
 
 /// <summary>
@@ -74,7 +75,7 @@ public class GeneralTagStateActorIncrementalTests
         var event1 = CreateEvent(new TestEvent { Value = 10 }, tag, "001");
         var event2 = CreateEvent(new IncrementEvent { Increment = 5 }, tag, "002");
 
-        await _eventStore.WriteEventsAsync(new[] { event1, event2 }, _domainTypes.EventTypes);
+        await _eventStore.WriteEventsAsync(new[] { event1, event2 }, _domainTypes.EventTypes).AsResultBoxAsync();
 
         // Set up tag consistent actor to return sortable unique ID
         var tagConsistentActor = await _actorAccessor.GetActorAsync<ITagConsistentActorCommon>("TestTag:123");
@@ -91,7 +92,7 @@ public class GeneralTagStateActorIncrementalTests
             // Add more events
             var event3 = CreateEvent(new IncrementEvent { Increment = 7 }, tag, "003");
             var event4 = CreateEvent(new IncrementEvent { Increment = 3 }, tag, "004");
-            await _eventStore.WriteEventsAsync(new[] { event3, event4 }, _domainTypes.EventTypes);
+            await _eventStore.WriteEventsAsync(new[] { event3, event4 }, _domainTypes.EventTypes).AsResultBoxAsync();
 
             // Second state computation should use incremental update
             var state2 = await actor.GetTagStateAsync();
@@ -124,7 +125,7 @@ public class GeneralTagStateActorIncrementalTests
         var event1 = CreateEvent(new TestEvent { Value = 20 }, tag, "010");
         var event2 = CreateEvent(new IncrementEvent { Increment = 10 }, tag, "011");
 
-        await _eventStore.WriteEventsAsync(new[] { event1, event2 }, _domainTypes.EventTypes);
+        await _eventStore.WriteEventsAsync(new[] { event1, event2 }, _domainTypes.EventTypes).AsResultBoxAsync();
 
         // First state computation
         var state1 = await actor.GetTagStateAsync();
@@ -172,7 +173,7 @@ public class GeneralTagStateActorIncrementalTests
         var tag = new TestTag("789");
         var event1 = CreateEvent(new TestEvent { Value = 100 }, tag, "020");
 
-        await _eventStore.WriteEventsAsync(new[] { event1 }, _domainTypes.EventTypes);
+        await _eventStore.WriteEventsAsync(new[] { event1 }, _domainTypes.EventTypes).AsResultBoxAsync();
 
         // First call - computes state
         var state1 = await actor.GetTagStateAsync();

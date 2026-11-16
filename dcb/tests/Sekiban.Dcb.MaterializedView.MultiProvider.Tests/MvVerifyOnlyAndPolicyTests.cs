@@ -20,6 +20,7 @@ using Sekiban.Dcb.MaterializedView.Sqlite;
 using Sekiban.Dcb.MaterializedView.SqlServer;
 using Sekiban.Dcb.Storage;
 using Xunit;
+using Sekiban.Dcb.TestSupport;
 
 namespace Sekiban.Dcb.MaterializedView.MultiProvider.Tests;
 
@@ -1407,7 +1408,7 @@ public sealed class PostgresMvVerifyOnlyTests(PostgresMvFixture fixture)
                     projector.ViewVersion)
                 .ConfigureAwait(false);
             var sourceEvent = CreateEvent(fixture, DateTime.UtcNow.AddSeconds(-30));
-            var writeSource = await fixture.EventStore.WriteSerializableEventsAsync([sourceEvent]).ConfigureAwait(false);
+            var writeSource = await fixture.EventStore.WriteSerializableEventsAsync([sourceEvent]).AsResultBoxAsync().ConfigureAwait(false);
             Assert.True(writeSource.IsSuccess);
             var target = await allowExecutor.CaptureTargetCheckpointAsync(host).ConfigureAwait(false);
             Assert.True(target.IsKnown);

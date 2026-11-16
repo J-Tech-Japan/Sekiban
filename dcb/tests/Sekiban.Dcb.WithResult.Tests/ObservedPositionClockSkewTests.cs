@@ -13,6 +13,7 @@ using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
 using Sekiban.Dcb.Testing;
 using Xunit.Abstractions;
+using Sekiban.Dcb.TestSupport;
 
 namespace Sekiban.Dcb.Tests;
 
@@ -234,7 +235,7 @@ public partial class ObservedPositionClockSkewTests(ITestOutputHelper output)
                             nameof(ProbeCounterIncremented), [tag.GetTag()])],
                         [new ConsistencyTagEntry(tag.GetTag(), seenLast)]));
                 Assert.True(commit.IsSuccess, commit.IsSuccess ? "" : commit.GetException().ToString());
-                var id = (await Store.ReadEventsByTagAsync(tag, Domain.EventTypes)).GetValue()
+                var id = (await Store.ReadEventsByTagAsync(tag, Domain.EventTypes).AsResultBoxAsync()).GetValue()
                     .Single(e => ((ProbeCounterIncremented)e.Payload).Label == label).SortableUniqueIdValue;
                 return new CommandOutcome(label, executor.Name, true, null, seenCount, seenLast, id);
             }
@@ -269,14 +270,14 @@ public partial class ObservedPositionClockSkewTests(ITestOutputHelper output)
                     (string.CompareOrdinal(outcomes[i].EventId, outcomes[i - 1].EventId) < 0));
             }
 
-            var events = (await Store.ReadEventsByTagAsync(tag, Domain.EventTypes)).GetValue().ToList();
+            var events = (await Store.ReadEventsByTagAsync(tag, Domain.EventTypes).AsResultBoxAsync()).GetValue().ToList();
             _output.WriteLine($"store: {events.Count} events for tag, in store read order:");
             foreach (var e in events)
             {
                 var p = (ProbeCounterIncremented)e.Payload;
                 _output.WriteLine($"   id={Short(e.SortableUniqueIdValue)} by={p.Label} decidedNewValue={p.NewValue}");
             }
-            var latest = (await Store.GetLatestTagAsync(tag)).GetValue().LastSortedUniqueId;
+            var latest = (await Store.GetLatestTagAsync(tag).AsResultBoxAsync()).GetValue().LastSortedUniqueId;
             _output.WriteLine($"store.GetLatestTagAsync = {Short(latest)}");
 
             // What the long-lived (shared, never re-activated) tag-state actor answers now.

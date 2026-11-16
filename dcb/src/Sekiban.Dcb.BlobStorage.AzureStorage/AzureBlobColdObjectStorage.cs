@@ -3,7 +3,6 @@ using Azure.Storage.Blobs;
 using Azure.Storage.Blobs.Models;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
-using ResultBoxes;
 using Sekiban.Dcb.ColdEvents;
 
 namespace Sekiban.Dcb.BlobStorage.AzureStorage;
@@ -36,7 +35,7 @@ public sealed class AzureBlobColdObjectStorage : IColdObjectStorage
         _logger = logger ?? NullLogger<AzureBlobColdObjectStorage>.Instance;
     }
 
-    public async Task<ResultBox<ColdStorageObject>> GetAsync(string path, CancellationToken ct)
+    public async Task<ColdStorageObject?> GetAsync(string path, CancellationToken ct)
     {
         try
         {
@@ -45,45 +44,44 @@ public sealed class AzureBlobColdObjectStorage : IColdObjectStorage
             var content = response.Value;
             var data = content.Content.ToArray();
             var etag = content.Details.ETag.ToString();
-            return ResultBox.FromValue(new ColdStorageObject(data, etag));
+            return new ColdStorageObject(data, etag);
         }
         catch (RequestFailedException ex) when (ex.Status == 404)
         {
-            return ResultBox.Error<ColdStorageObject>(new KeyNotFoundException($"Cold object not found: {path}", ex));
+            return null;
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Azure GetAsync failed: {Path}", path);
-            return ResultBox.Error<ColdStorageObject>(ex);
+            throw;
         }
     }
 
-    public async Task<ResultBox<Stream>> OpenReadAsync(string path, CancellationToken ct)
+    public async Task<Stream> OpenReadAsync(string path, CancellationToken ct)
     {
         try
         {
             var blob = _container.GetBlobClient(BuildBlobName(path));
-            var stream = await blob.OpenReadAsync(cancellationToken: ct).ConfigureAwait(false);
-            return ResultBox.FromValue<Stream>(stream);
+            return await blob.OpenReadAsync(cancellationToken: ct).ConfigureAwait(false);
         }
         catch (RequestFailedException ex) when (ex.Status == 404)
         {
-            return ResultBox.Error<Stream>(new KeyNotFoundException($"Cold object not found: {path}", ex));
+            throw new KeyNotFoundException($"Cold object not found: {path}", ex);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Azure OpenReadAsync failed: {Path}", path);
-            return ResultBox.Error<Stream>(ex);
+            throw;
         }
     }
 
-    public async Task<ResultBox<bool>> PutAsync(string path, byte[] data, string? expectedETag, CancellationToken ct)
+    public async Task<bool> PutAsync(string path, byte[] data, string? expectedETag, CancellationToken ct)
     {
         await using var stream = new MemoryStream(data, writable: false);
         return await PutAsync(path, stream, expectedETag, ct);
     }
 
-    public async Task<ResultBox<bool>> PutAsync(string path, Stream data, string? expectedETag, CancellationToken ct)
+    public async Task<bool> PutAsync(string path, Stream data, string? expectedETag, CancellationToken ct)
     {
         try
         {
@@ -105,24 +103,24 @@ public sealed class AzureBlobColdObjectStorage : IColdObjectStorage
             }
 
             await blob.UploadAsync(data, options, ct).ConfigureAwait(false);
-            return ResultBox.FromValue(true);
+            return true;
         }
         catch (RequestFailedException ex) when (ex.Status == 404 && !string.IsNullOrWhiteSpace(expectedETag))
         {
-            return ResultBox.Error<bool>(new InvalidOperationException($"Conditional write failed: {path} does not exist", ex));
+            throw new InvalidOperationException($"Conditional write failed: {path} does not exist", ex);
         }
         catch (RequestFailedException ex) when (ex.Status == 412)
         {
-            return ResultBox.Error<bool>(new InvalidOperationException($"ETag mismatch at {path}: expected={expectedETag}", ex));
+            throw new InvalidOperationException($"ETag mismatch at {path}: expected={expectedETag}", ex);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Azure PutAsync failed: {Path}", path);
-            return ResultBox.Error<bool>(ex);
+            throw;
         }
     }
 
-    public async Task<ResultBox<IReadOnlyList<string>>> ListAsync(string prefix, CancellationToken ct)
+    public async Task<IReadOnlyList<string>> ListAsync(string prefix, CancellationToken ct)
     {
         try
         {
@@ -138,27 +136,27 @@ public sealed class AzureBlobColdObjectStorage : IColdObjectStorage
                 paths.Add(ToRelativePath(item.Name));
             }
 
-            return ResultBox.FromValue<IReadOnlyList<string>>(paths);
+            return paths;
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Azure ListAsync failed: {Prefix}", prefix);
-            return ResultBox.Error<IReadOnlyList<string>>(ex);
+            throw;
         }
     }
 
-    public async Task<ResultBox<bool>> DeleteAsync(string path, CancellationToken ct)
+    public async Task<bool> DeleteAsync(string path, CancellationToken ct)
     {
         try
         {
             var blob = _container.GetBlobClient(BuildBlobName(path));
             var response = await blob.DeleteIfExistsAsync(cancellationToken: ct).ConfigureAwait(false);
-            return ResultBox.FromValue(response.Value);
+            return response.Value;
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Azure DeleteAsync failed: {Path}", path);
-            return ResultBox.Error<bool>(ex);
+            throw;
         }
     }
 

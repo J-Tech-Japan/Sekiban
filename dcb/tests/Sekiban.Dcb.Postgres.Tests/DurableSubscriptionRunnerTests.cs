@@ -8,6 +8,7 @@ using Sekiban.Dcb.ServiceId;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Subscriptions;
 using Xunit;
+using Sekiban.Dcb.TestSupport;
 
 namespace Sekiban.Dcb.Postgres.Tests;
 
@@ -28,7 +29,7 @@ public sealed class DurableSubscriptionRunnerTests
                 new EventMetadata("runner", "runner", "test"),
                 [])
             .ToSerializableEvent(domain.EventTypes);
-        var write = await source.WriteSerializableEventsAsync([serializable]);
+        var write = await source.WriteSerializableEventsAsync([serializable]).AsResultBoxAsync();
         Assert.True(write.IsSuccess, write.IsSuccess ? string.Empty : write.GetException().ToString());
 
         var nudge = new RecordingNudgeFactory();

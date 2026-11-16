@@ -374,7 +374,7 @@ internal sealed class CountingProjectionStatusStore(TargetProviderIoCounter targ
     public int UpsertCalls { get; private set; }
     public int TargetCallsObservedAtUpsert { get; private set; }
 
-    public async Task<ResultBox<ProjectionStatusWriteResult>> UpsertAsync(
+    public async Task<ProjectionStatusWriteResult> UpsertAsync(
         ProjectionStatusHeartbeat heartbeat,
         long expectedSequence,
         CancellationToken cancellationToken = default)
@@ -386,7 +386,7 @@ internal sealed class CountingProjectionStatusStore(TargetProviderIoCounter targ
         return result;
     }
 
-    public Task<ResultBox<IReadOnlyList<ProjectionStatusHeartbeat>>> ListAsync(
+    public Task<IReadOnlyList<ProjectionStatusHeartbeat>> ListAsync(
         string? projectorName = null,
         string? projectorVersion = null,
         CancellationToken cancellationToken = default) =>

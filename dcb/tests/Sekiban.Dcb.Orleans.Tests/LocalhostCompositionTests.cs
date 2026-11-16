@@ -11,6 +11,7 @@ using Sekiban.Dcb.Orleans;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Testing;
 using Xunit;
+using Sekiban.Dcb.TestSupport;
 namespace Sekiban.Dcb.Orleans.Tests;
 
 /// <summary>
@@ -71,7 +72,7 @@ public class LocalhostCompositionTests
         Assert.Single(result.GetValue().Events);
 
         // The events really went to the store we chose, not to somewhere a silo invented.
-        var stored = await eventStore.ReadAllSerializableEventsAsync();
+        var stored = await eventStore.ReadAllSerializableEventsAsync().AsResultBoxAsync();
         Assert.Single(stored.GetValue());
     }
 
@@ -158,7 +159,7 @@ public class LocalhostCompositionTests
         Assert.True(response.IsSuccessStatusCode, $"{(int)response.StatusCode}: {body}");
         Assert.Equal("1", body);
 
-        var stored = await eventStore.ReadAllSerializableEventsAsync();
+        var stored = await eventStore.ReadAllSerializableEventsAsync().AsResultBoxAsync();
         Assert.Single(stored.GetValue());
     }
 

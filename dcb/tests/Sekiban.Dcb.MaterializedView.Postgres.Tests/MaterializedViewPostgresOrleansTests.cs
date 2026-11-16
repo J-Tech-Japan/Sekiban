@@ -14,6 +14,7 @@ using Sekiban.Dcb.MaterializedView.Orleans;
 using Sekiban.Dcb.Orleans.ServiceId;
 using Sekiban.Dcb.ServiceId;
 using Xunit;
+using Sekiban.Dcb.TestSupport;
 
 namespace Sekiban.Dcb.MaterializedView.Postgres.Tests;
 
@@ -204,7 +205,7 @@ public sealed class MaterializedViewPostgresOrleansTests(MaterializedViewPostgre
 
         async Task<string> GetLatestSortableUniqueIdAsync()
         {
-            var result = await fixture.EventStore.ReadAllSerializableEventsAsync();
+            var result = await fixture.EventStore.ReadAllSerializableEventsAsync().AsResultBoxAsync();
             return result.GetValue()
                 .OrderByDescending(static serializableEvent => serializableEvent.SortableUniqueIdValue, StringComparer.Ordinal)
                 .Select(static serializableEvent => serializableEvent.SortableUniqueIdValue)
@@ -257,7 +258,7 @@ public sealed class MaterializedViewPostgresOrleansTests(MaterializedViewPostgre
                     AddedAt = DateTimeOffset.UtcNow.AddMinutes(-1)
                 });
 
-                var durableEvents = (await fixture.EventStore.ReadAllSerializableEventsAsync()).GetValue()
+                var durableEvents = (await fixture.EventStore.ReadAllSerializableEventsAsync().AsResultBoxAsync()).GetValue()
                     .OrderBy(serializableEvent => serializableEvent.SortableUniqueIdValue, StringComparer.Ordinal)
                     .ToList();
                 receiptEvent = durableEvents.Single(serializableEvent =>
@@ -476,7 +477,7 @@ public sealed class MaterializedViewPostgresOrleansTests(MaterializedViewPostgre
             UnitPrice = 5m,
             AddedAt = DateTimeOffset.UtcNow
         });
-        var idleSortableUniqueId = (await fixture.EventStore.ReadAllSerializableEventsAsync()).GetValue()
+        var idleSortableUniqueId = (await fixture.EventStore.ReadAllSerializableEventsAsync().AsResultBoxAsync()).GetValue()
             .OrderByDescending(serializableEvent => serializableEvent.SortableUniqueIdValue, StringComparer.Ordinal)
             .First()
             .SortableUniqueIdValue;
@@ -661,7 +662,7 @@ public sealed class MaterializedViewPostgresOrleansTests(MaterializedViewPostgre
             AddedAt = DateTimeOffset.UtcNow
         });
 
-        var latest = (await fixture.EventStore.ReadAllSerializableEventsAsync()).GetValue()
+        var latest = (await fixture.EventStore.ReadAllSerializableEventsAsync().AsResultBoxAsync()).GetValue()
             .OrderByDescending(serializableEvent => serializableEvent.SortableUniqueIdValue, StringComparer.Ordinal)
             .First()
             .SortableUniqueIdValue;
@@ -732,7 +733,7 @@ public sealed class MaterializedViewPostgresOrleansTests(MaterializedViewPostgre
             });
         }
 
-        var readResult = await fixture.EventStore.ReadAllSerializableEventsAsync();
+        var readResult = await fixture.EventStore.ReadAllSerializableEventsAsync().AsResultBoxAsync();
         var allEvents = readResult.GetValue()
             .OrderByDescending(static serializableEvent => serializableEvent.SortableUniqueIdValue, StringComparer.Ordinal)
             .ToList();
@@ -884,7 +885,7 @@ public sealed class MaterializedViewPostgresOrleansTests(MaterializedViewPostgre
             NewLocationName = "Loc-delayed-U"
         });
 
-        var events = (await fixture.EventStore.ReadAllSerializableEventsAsync()).GetValue()
+        var events = (await fixture.EventStore.ReadAllSerializableEventsAsync().AsResultBoxAsync()).GetValue()
             .Where(serializableEvent =>
             {
                 var eventResult = serializableEvent.ToEvent(fixture.DomainTypes.EventTypes);
@@ -1014,7 +1015,7 @@ public sealed class MaterializedViewPostgresOrleansTests(MaterializedViewPostgre
             NewLocationName = "Loc-buffered-U"
         });
 
-        var events = (await fixture.EventStore.ReadAllSerializableEventsAsync()).GetValue()
+        var events = (await fixture.EventStore.ReadAllSerializableEventsAsync().AsResultBoxAsync()).GetValue()
             .Where(serializableEvent =>
             {
                 var eventResult = serializableEvent.ToEvent(fixture.DomainTypes.EventTypes);
@@ -1137,7 +1138,7 @@ public sealed class MaterializedViewPostgresOrleansTests(MaterializedViewPostgre
             NewLocationName = "Loc-late-U"
         });
 
-        var allEvents = (await fixture.EventStore.ReadAllSerializableEventsAsync()).GetValue()
+        var allEvents = (await fixture.EventStore.ReadAllSerializableEventsAsync().AsResultBoxAsync()).GetValue()
             .Select(serializableEvent => new
             {
                 SerializableEvent = serializableEvent,

@@ -5,7 +5,6 @@ using Dcb.Domain.Student;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using ResultBoxes;
 using Sekiban.Dcb.Capabilities;
 using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Domains;
@@ -116,23 +115,23 @@ public sealed class DynamoDbSizeGateSurfaceTests
         AssertPublicMethod(
             typeof(DynamoDbEventStore),
             nameof(DynamoDbEventStore.AppendIfUniqueAsync),
-            typeof(Task<ResultBox<ConditionalAppendReceipt>>),
+            typeof(Task<ConditionalAppendReceipt>),
             typeof(ConditionalAppendRequest),
             typeof(CancellationToken));
         AssertPublicMethod(
             typeof(DynamoDbEventStore),
             nameof(DynamoDbEventStore.WriteEventsAsync),
-            typeof(Task<ResultBox<(IReadOnlyList<Event>, IReadOnlyList<TagWriteResult>)>>),
+            typeof(Task<(IReadOnlyList<Event>, IReadOnlyList<TagWriteResult>)>),
             typeof(IEnumerable<Event>));
         AssertPublicMethod(
             typeof(DynamoDbEventStore),
             nameof(DynamoDbEventStore.WriteSerializableEventsAsync),
-            typeof(Task<ResultBox<(IReadOnlyList<SerializableEvent>, IReadOnlyList<TagWriteResult>)>>),
+            typeof(Task<(IReadOnlyList<SerializableEvent>, IReadOnlyList<TagWriteResult>)>),
             typeof(IEnumerable<SerializableEvent>));
         AssertPublicMethod(
             typeof(DynamoDbEventStore),
             nameof(DynamoDbEventStore.StreamSerializableEventsByTagAsync),
-            typeof(Task<ResultBox<SerializableEventStreamReadResult>>),
+            typeof(Task<SerializableEventStreamReadResult>),
             typeof(ITag),
             typeof(SortableUniqueId),
             typeof(SortableUniqueId),

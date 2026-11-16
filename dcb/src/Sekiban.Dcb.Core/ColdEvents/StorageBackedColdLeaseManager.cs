@@ -1,6 +1,5 @@
 using System.Security.Cryptography;
 using System.Text.Json;
-using ResultBoxes;
 
 namespace Sekiban.Dcb.ColdEvents;
 
@@ -13,41 +12,28 @@ public sealed class StorageBackedColdLeaseManager : IColdLeaseManager
         _storage = storage;
     }
 
-    public Task<ResultBox<ColdLease>> AcquireAsync(string leaseId, TimeSpan duration, CancellationToken ct)
+    public Task<ColdLease> AcquireAsync(string leaseId, TimeSpan duration, CancellationToken ct)
         => UpsertLeaseAsync(leaseId, duration, expectedToken: null, requireOwnership: false, ct);
 
-    public Task<ResultBox<ColdLease>> RenewAsync(ColdLease lease, TimeSpan duration, CancellationToken ct)
+    public Task<ColdLease> RenewAsync(ColdLease lease, TimeSpan duration, CancellationToken ct)
         => UpsertLeaseAsync(lease.LeaseId, duration, lease.Token, requireOwnership: true, ct);
 
-    public async Task<ResultBox<bool>> ReleaseAsync(ColdLease lease, CancellationToken ct)
+    public async Task<bool> ReleaseAsync(ColdLease lease, CancellationToken ct)
     {
         var path = LeasePath(lease.LeaseId);
-        var existing = await _storage.GetAsync(path, ct);
-        if (!existing.IsSuccess)
-        {
-            if (!IsNotFound(existing.GetException()))
-            {
-                return ResultBox.Error<bool>(existing.GetException());
-            }
+        var existing = await _storage.GetAsync(path, ct)
+            ?? throw new InvalidOperationException($"Lease {lease.LeaseId} was not found");
 
-            return ResultBox.Error<bool>(new InvalidOperationException($"Lease {lease.LeaseId} was not found"));
-        }
-
-        var (storedLease, deserializeError) = DeserializeLease(existing.GetValue().Data, existing.GetValue().ETag, lease.LeaseId);
-        if (deserializeError is not null)
+        var storedLease = DeserializeLease(existing.Data, existing.ETag, lease.LeaseId);
+        if (storedLease.Token != lease.Token)
         {
-            return ResultBox.Error<bool>(deserializeError);
-        }
-
-        if (storedLease is null || storedLease.Token != lease.Token)
-        {
-            return ResultBox.Error<bool>(new InvalidOperationException($"Lease {lease.LeaseId} is not held by token"));
+            throw new InvalidOperationException($"Lease {lease.LeaseId} is not held by token");
         }
 
         return await _storage.DeleteAsync(path, ct);
     }
 
-    private async Task<ResultBox<ColdLease>> UpsertLeaseAsync(
+    private async Task<ColdLease> UpsertLeaseAsync(
         string leaseId,
         TimeSpan duration,
         string? expectedToken,
@@ -56,68 +42,38 @@ public sealed class StorageBackedColdLeaseManager : IColdLeaseManager
     {
         var path = LeasePath(leaseId);
         var now = DateTimeOffset.UtcNow;
-        var existingLeaseResult = await LoadExistingLeaseAsync(path, leaseId, ct);
-        if (!existingLeaseResult.IsSuccess)
-        {
-            return ResultBox.Error<ColdLease>(existingLeaseResult.GetException());
-        }
-
-        var existingLease = existingLeaseResult.GetValue();
-        var validateError = ValidateExistingLease(existingLease.Lease, leaseId, expectedToken, requireOwnership, now);
-        if (validateError is not null)
-        {
-            return ResultBox.Error<ColdLease>(validateError);
-        }
+        var existingLease = await LoadExistingLeaseAsync(path, leaseId, ct);
+        ValidateExistingLease(existingLease.Lease, leaseId, expectedToken, requireOwnership, now);
 
         var token = expectedToken ?? ComputeLeaseToken();
         var lease = new ColdLease(leaseId, token, now.Add(duration));
         var payload = JsonSerializer.SerializeToUtf8Bytes(lease);
 
-        var putResult = await _storage.PutAsync(path, payload, existingLease.ETag, ct);
-        if (!putResult.IsSuccess)
-        {
-            return ResultBox.Error<ColdLease>(putResult.GetException());
-        }
+        await _storage.PutAsync(path, payload, existingLease.ETag, ct);
 
         if (existingLease.ETag is null && !requireOwnership)
         {
-            var verifyResult = await VerifyAcquiredLeaseAsync(path, leaseId, lease.Token, ct);
-            if (!verifyResult.IsSuccess)
-            {
-                return ResultBox.Error<ColdLease>(verifyResult.GetException());
-            }
+            await VerifyAcquiredLeaseAsync(path, leaseId, lease.Token, ct);
         }
 
-        return ResultBox.FromValue(lease);
+        return lease;
     }
 
-    private async Task<ResultBox<StoredLeaseState>> LoadExistingLeaseAsync(
+    private async Task<StoredLeaseState> LoadExistingLeaseAsync(
         string path,
         string leaseId,
         CancellationToken ct)
     {
         var existing = await _storage.GetAsync(path, ct);
-        if (existing.IsSuccess)
+        if (existing is null)
         {
-            var objectValue = existing.GetValue();
-            var (storedLease, error) = DeserializeLease(objectValue.Data, objectValue.ETag, leaseId);
-            if (error is not null)
-            {
-                return ResultBox.Error<StoredLeaseState>(error);
-            }
-
-            return ResultBox.FromValue(new StoredLeaseState(storedLease, objectValue.ETag));
+            return new StoredLeaseState(null, null);
         }
 
-        if (IsNotFound(existing.GetException()))
-        {
-            return ResultBox.FromValue(new StoredLeaseState(null, null));
-        }
-
-        return ResultBox.Error<StoredLeaseState>(existing.GetException());
+        return new StoredLeaseState(DeserializeLease(existing.Data, existing.ETag, leaseId), existing.ETag);
     }
 
-    private static Exception? ValidateExistingLease(
+    private static void ValidateExistingLease(
         ColdLease? storedLease,
         string leaseId,
         string? expectedToken,
@@ -126,74 +82,47 @@ public sealed class StorageBackedColdLeaseManager : IColdLeaseManager
     {
         if (storedLease is null)
         {
-            return requireOwnership
-                ? new InvalidOperationException($"Lease {leaseId} is not held by token")
-                : null;
+            if (requireOwnership)
+            {
+                throw new InvalidOperationException($"Lease {leaseId} is not held by token");
+            }
+
+            return;
         }
 
         if (requireOwnership && !string.Equals(storedLease.Token, expectedToken, StringComparison.Ordinal))
         {
-            return new InvalidOperationException($"Lease {leaseId} is not held by token");
+            throw new InvalidOperationException($"Lease {leaseId} is not held by token");
         }
 
         if (!requireOwnership && storedLease.ExpiresAt > now)
         {
-            return new InvalidOperationException($"Lease {leaseId} is already held");
+            throw new InvalidOperationException($"Lease {leaseId} is already held");
         }
-
-        return null;
     }
 
-    private async Task<ResultBox<bool>> VerifyAcquiredLeaseAsync(
+    private async Task VerifyAcquiredLeaseAsync(
         string path,
         string leaseId,
         string expectedToken,
         CancellationToken ct)
     {
-        var verify = await _storage.GetAsync(path, ct);
-        if (!verify.IsSuccess)
-        {
-            return ResultBox.Error<bool>(verify.GetException());
-        }
+        var verify = await _storage.GetAsync(path, ct)
+            ?? throw new FileNotFoundException($"Cold object not found: {path}");
 
-        var (verifiedLease, verifyError) = DeserializeLease(verify.GetValue().Data, verify.GetValue().ETag, leaseId);
-        if (verifyError is not null)
+        var verifiedLease = DeserializeLease(verify.Data, verify.ETag, leaseId);
+        if (verifiedLease.Token != expectedToken)
         {
-            return ResultBox.Error<bool>(verifyError);
+            throw new InvalidOperationException($"Lease {leaseId} was acquired by another writer");
         }
-
-        if (verifiedLease is null || verifiedLease.Token != expectedToken)
-        {
-            return ResultBox.Error<bool>(new InvalidOperationException(
-                $"Lease {leaseId} was acquired by another writer"));
-        }
-
-        return ResultBox.FromValue(true);
     }
 
     private static string LeasePath(string leaseId)
         => $"control/{leaseId}/lease.json";
 
-    private static (ColdLease? Lease, Exception? Error) DeserializeLease(byte[] data, string etag, string leaseId)
-    {
-        try
-        {
-            var lease = JsonSerializer.Deserialize<ColdLease>(data);
-            if (lease is null)
-            {
-                return (null, new InvalidOperationException($"Failed to parse lease {leaseId} (etag:{etag})"));
-            }
-
-            return (lease, null);
-        }
-        catch (Exception ex)
-        {
-            return (null, ex);
-        }
-    }
-
-    private static bool IsNotFound(Exception ex)
-        => ex is FileNotFoundException or DirectoryNotFoundException or KeyNotFoundException;
+    private static ColdLease DeserializeLease(byte[] data, string etag, string leaseId)
+        => JsonSerializer.Deserialize<ColdLease>(data)
+            ?? throw new InvalidOperationException($"Failed to parse lease {leaseId} (etag:{etag})");
 
     private static string ComputeLeaseToken()
         => Convert.ToHexString(RandomNumberGenerator.GetBytes(16));

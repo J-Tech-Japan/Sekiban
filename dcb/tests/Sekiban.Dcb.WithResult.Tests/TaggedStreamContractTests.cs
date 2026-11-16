@@ -15,6 +15,7 @@ using Xunit;
 using CoreInMemoryEventStore = Sekiban.Dcb.Testing.InMemoryEventStore;
 using CoreTagStateService = Sekiban.Dcb.Services.TagStateService;
 using SqliteTagStateService = Sekiban.Dcb.Sqlite.Services.TagStateService;
+using Sekiban.Dcb.TestSupport;
 
 namespace Sekiban.Dcb.Tests;
 
@@ -41,7 +42,7 @@ public class TaggedStreamContractTests
         var write = await store.WriteSerializableEventsAsync(new[]
         {
             Event(P4, tag), Event(P2, tag), Event(P0, tag), Event(P3, tag), Event(P1, tag)
-        });
+        }).AsResultBoxAsync();
         Assert.True(write.IsSuccess, write.IsSuccess ? string.Empty : write.GetException().ToString());
 
         var emitted = new List<string>();
@@ -53,7 +54,7 @@ public class TaggedStreamContractTests
             {
                 emitted.Add(ev.SortableUniqueIdValue);
                 return ValueTask.CompletedTask;
-            });
+            }).AsResultBoxAsync();
 
         Assert.True(result.IsSuccess, result.IsSuccess ? string.Empty : result.GetException().ToString());
         Assert.Equal(new[] { P2, P3 }, emitted);
@@ -69,16 +70,16 @@ public class TaggedStreamContractTests
         var initialWrite = await store.WriteSerializableEventsAsync(new[]
         {
             Event(P0, tag), Event(P1, tag), Event(P2, tag), Event(P3, tag)
-        });
+        }).AsResultBoxAsync();
         Assert.True(initialWrite.IsSuccess, initialWrite.IsSuccess ? string.Empty : initialWrite.GetException().ToString());
 
-        var head = await store.GetLatestSortableUniqueIdAsync();
+        var head = await store.GetLatestSortableUniqueIdAsync().AsResultBoxAsync();
         Assert.True(head.IsSuccess, head.IsSuccess ? string.Empty : head.GetException().ToString());
         Assert.Equal(P3, head.GetValue());
         var capturedHead = new SortableUniqueId(head.GetValue());
 
         // P4 is the five-point fixture's after-until boundary. P5 is appended only after the native stream has started.
-        var afterUntilWrite = await store.WriteSerializableEventsAsync(new[] { Event(P4, tag) });
+        var afterUntilWrite = await store.WriteSerializableEventsAsync(new[] { Event(P4, tag) }).AsResultBoxAsync();
         Assert.True(afterUntilWrite.IsSuccess, afterUntilWrite.IsSuccess ? string.Empty : afterUntilWrite.GetException().ToString());
 
         var nativeSnapshotStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -102,7 +103,7 @@ public class TaggedStreamContractTests
         try
         {
             await nativeSnapshotStarted.Task.WaitAsync(TimeSpan.FromSeconds(10));
-            var aboveHeadWrite = await store.WriteSerializableEventsAsync(new[] { Event(P5, tag) });
+            var aboveHeadWrite = await store.WriteSerializableEventsAsync(new[] { Event(P5, tag) }).AsResultBoxAsync();
             Assert.True(aboveHeadWrite.IsSuccess, aboveHeadWrite.IsSuccess ? string.Empty : aboveHeadWrite.GetException().ToString());
         }
         finally
@@ -110,7 +111,7 @@ public class TaggedStreamContractTests
             releaseCallback.TrySetResult();
         }
 
-        var result = await streamTask;
+        var result = await streamTask.AsResultBoxAsync();
         Assert.True(result.IsSuccess, result.IsSuccess ? string.Empty : result.GetException().ToString());
         Assert.Equal(new[] { P2, P3 }, emitted);
         Assert.Equal(emitted.OrderBy(id => id, StringComparer.Ordinal), emitted);
@@ -129,7 +130,7 @@ public class TaggedStreamContractTests
             var write = await store.WriteSerializableEventsAsync(new[]
             {
                 Event(P4, tag), Event(P2, tag), Event(P0, tag), Event(P3, tag), Event(P1, tag)
-            });
+            }).AsResultBoxAsync();
             Assert.True(write.IsSuccess, write.IsSuccess ? string.Empty : write.GetException().ToString());
 
             var emitted = new List<string>();
@@ -141,7 +142,7 @@ public class TaggedStreamContractTests
                 {
                     emitted.Add(ev.SortableUniqueIdValue);
                     return ValueTask.CompletedTask;
-                });
+                }).AsResultBoxAsync();
 
             Assert.True(result.IsSuccess, result.IsSuccess ? string.Empty : result.GetException().ToString());
             Assert.Equal(new[] { P2, P3 }, emitted);
@@ -171,15 +172,15 @@ public class TaggedStreamContractTests
             var initialWrite = await store.WriteSerializableEventsAsync(new[]
             {
                 Event(P0, tag), Event(P1, tag), Event(P2, tag), Event(P3, tag)
-            });
+            }).AsResultBoxAsync();
             Assert.True(initialWrite.IsSuccess, initialWrite.IsSuccess ? string.Empty : initialWrite.GetException().ToString());
 
-            var head = await store.GetLatestSortableUniqueIdAsync();
+            var head = await store.GetLatestSortableUniqueIdAsync().AsResultBoxAsync();
             Assert.True(head.IsSuccess, head.IsSuccess ? string.Empty : head.GetException().ToString());
             Assert.Equal(P3, head.GetValue());
             var capturedHead = new SortableUniqueId(head.GetValue());
 
-            var afterUntilWrite = await store.WriteSerializableEventsAsync(new[] { Event(P4, tag) });
+            var afterUntilWrite = await store.WriteSerializableEventsAsync(new[] { Event(P4, tag) }).AsResultBoxAsync();
             Assert.True(afterUntilWrite.IsSuccess, afterUntilWrite.IsSuccess ? string.Empty : afterUntilWrite.GetException().ToString());
 
             var nativeReaderStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -203,7 +204,7 @@ public class TaggedStreamContractTests
             try
             {
                 await nativeReaderStarted.Task.WaitAsync(TimeSpan.FromSeconds(10));
-                var aboveHeadWrite = await store.WriteSerializableEventsAsync(new[] { Event(P5, tag) })
+                var aboveHeadWrite = await store.WriteSerializableEventsAsync(new[] { Event(P5, tag) }).AsResultBoxAsync()
                     .WaitAsync(TimeSpan.FromSeconds(10));
                 Assert.True(aboveHeadWrite.IsSuccess, aboveHeadWrite.IsSuccess ? string.Empty : aboveHeadWrite.GetException().ToString());
             }
@@ -212,7 +213,7 @@ public class TaggedStreamContractTests
                 releaseCallback.TrySetResult();
             }
 
-            var result = await streamTask;
+            var result = await streamTask.AsResultBoxAsync();
             Assert.True(result.IsSuccess, result.IsSuccess ? string.Empty : result.GetException().ToString());
             Assert.Equal(new[] { P2, P3 }, emitted);
             Assert.Equal(emitted.OrderBy(id => id, StringComparer.Ordinal), emitted);
@@ -236,7 +237,7 @@ public class TaggedStreamContractTests
         {
             var tag = new StreamTag("sqlite-cancel-before-read");
             var store = new SqliteEventStore(databasePath, Domain.EventTypes);
-            var write = await store.WriteSerializableEventsAsync(new[] { Event(P1, tag), Event(P2, tag) });
+            var write = await store.WriteSerializableEventsAsync(new[] { Event(P1, tag), Event(P2, tag) }).AsResultBoxAsync();
             Assert.True(write.IsSuccess, write.IsSuccess ? string.Empty : write.GetException().ToString());
 
             var readerStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -303,7 +304,7 @@ public class TaggedStreamContractTests
         {
             var tag = new StreamTag("sqlite-cancel-after-callback");
             var store = new SqliteEventStore(databasePath, Domain.EventTypes);
-            var write = await store.WriteSerializableEventsAsync(new[] { Event(P1, tag), Event(P2, tag) });
+            var write = await store.WriteSerializableEventsAsync(new[] { Event(P1, tag), Event(P2, tag) }).AsResultBoxAsync();
             Assert.True(write.IsSuccess, write.IsSuccess ? string.Empty : write.GetException().ToString());
 
             var readerStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -378,7 +379,7 @@ public class TaggedStreamContractTests
         {
             var tag = new StreamTag("sqlite");
             var store = new SqliteEventStore(databasePath, Domain.EventTypes);
-            var write = await store.WriteSerializableEventsAsync(new[] { Event(P1, tag), Event(P2, tag), Event(P3, tag) });
+            var write = await store.WriteSerializableEventsAsync(new[] { Event(P1, tag), Event(P2, tag), Event(P3, tag) }).AsResultBoxAsync();
             Assert.True(write.IsSuccess, write.IsSuccess ? string.Empty : write.GetException().ToString());
 
             using var cancellation = new CancellationTokenSource();
@@ -651,21 +652,21 @@ public class TaggedStreamContractTests
 
     private class EmptyStore : IEventStore
     {
-        public Task<ResultBox<IEnumerable<TagStream>>> ReadTagsAsync(ITag tag) => throw new NotSupportedException();
-        public Task<ResultBox<TagState>> GetLatestTagAsync(ITag tag) => throw new NotSupportedException();
-        public Task<ResultBox<bool>> TagExistsAsync(ITag tag) => throw new NotSupportedException();
-        public Task<ResultBox<long>> GetEventCountAsync(SortableUniqueId? since = null) => throw new NotSupportedException();
-        public Task<ResultBox<IEnumerable<TagInfo>>> GetAllTagsAsync(string? tagGroup = null) => throw new NotSupportedException();
-        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null) =>
+        public Task<IEnumerable<TagStream>> ReadTagsAsync(ITag tag) => throw new NotSupportedException();
+        public Task<TagState> GetLatestTagAsync(ITag tag) => throw new NotSupportedException();
+        public Task<bool> TagExistsAsync(ITag tag) => throw new NotSupportedException();
+        public Task<long> GetEventCountAsync(SortableUniqueId? since = null) => throw new NotSupportedException();
+        public Task<IEnumerable<TagInfo>> GetAllTagsAsync(string? tagGroup = null) => throw new NotSupportedException();
+        public Task<IEnumerable<SerializableEvent>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null) =>
             throw new NotSupportedException();
-        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(SortableUniqueId? since, int? maxCount) =>
+        public Task<IEnumerable<SerializableEvent>> ReadAllSerializableEventsAsync(SortableUniqueId? since, int? maxCount) =>
             throw new NotSupportedException();
-        public Task<ResultBox<SerializableEvent>> ReadSerializableEventAsync(Guid eventId) => throw new NotSupportedException();
-        public virtual Task<ResultBox<IEnumerable<SerializableEvent>>> ReadSerializableEventsByTagAsync(ITag tag, SortableUniqueId? since = null) =>
+        public Task<SerializableEvent?> ReadSerializableEventAsync(Guid eventId) => throw new NotSupportedException();
+        public virtual Task<IEnumerable<SerializableEvent>> ReadSerializableEventsByTagAsync(ITag tag, SortableUniqueId? since = null) =>
             throw new NotSupportedException();
-        public Task<ResultBox<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>>
+        public Task<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>
             WriteSerializableEventsAsync(IEnumerable<SerializableEvent> events) => throw new NotSupportedException();
-        public Task<ResultBox<string>> GetLatestSortableUniqueIdAsync() => throw new NotSupportedException();
+        public Task<string> GetLatestSortableUniqueIdAsync() => throw new NotSupportedException();
     }
 
     private sealed class HonestStore : EmptyStore, IStreamingTaggedSerializableEventStore, ITaggedStreamCapabilityProvider
@@ -673,24 +674,24 @@ public class TaggedStreamContractTests
         public TaggedStreamCapabilityDescriptor DescribeTaggedStream() =>
             TaggedStreamCapabilityDescriptor.Native("honest");
 
-        public Task<ResultBox<SerializableEventStreamReadResult>> StreamSerializableEventsByTagAsync(
+        public Task<SerializableEventStreamReadResult> StreamSerializableEventsByTagAsync(
             ITag tag,
             SortableUniqueId? since,
             SortableUniqueId? until,
             Func<SerializableEvent, ValueTask> onEvent,
             CancellationToken cancellationToken = default) =>
-            Task.FromResult(ResultBox.FromValue(new SerializableEventStreamReadResult(0, null)));
+            Task.FromResult(new SerializableEventStreamReadResult(0, null));
     }
 
     private sealed class SilentStreamingStore : EmptyStore, IStreamingTaggedSerializableEventStore
     {
-        public Task<ResultBox<SerializableEventStreamReadResult>> StreamSerializableEventsByTagAsync(
+        public Task<SerializableEventStreamReadResult> StreamSerializableEventsByTagAsync(
             ITag tag,
             SortableUniqueId? since,
             SortableUniqueId? until,
             Func<SerializableEvent, ValueTask> onEvent,
             CancellationToken cancellationToken = default) =>
-            Task.FromResult(ResultBox.FromValue(new SerializableEventStreamReadResult(0, null)));
+            Task.FromResult(new SerializableEventStreamReadResult(0, null));
     }
 
     private sealed class DeceptiveStore : EmptyStore, ITaggedStreamCapabilityProvider
@@ -709,7 +710,7 @@ public class TaggedStreamContractTests
         public TaggedStreamCapabilityDescriptor DescribeTaggedStream() =>
             TaggedStreamCapabilityDescriptor.Native("service tripwire");
 
-        public override Task<ResultBox<IEnumerable<SerializableEvent>>> ReadSerializableEventsByTagAsync(
+        public override Task<IEnumerable<SerializableEvent>> ReadSerializableEventsByTagAsync(
             ITag tag,
             SortableUniqueId? since = null)
         {
@@ -717,7 +718,7 @@ public class TaggedStreamContractTests
             throw new InvalidOperationException("The service streaming path must not call ReadSerializableEventsByTagAsync.");
         }
 
-        public async Task<ResultBox<SerializableEventStreamReadResult>> StreamSerializableEventsByTagAsync(
+        public async Task<SerializableEventStreamReadResult> StreamSerializableEventsByTagAsync(
             ITag tag,
             SortableUniqueId? since,
             SortableUniqueId? until,
@@ -735,7 +736,7 @@ public class TaggedStreamContractTests
                 lastId = @event.SortableUniqueIdValue;
             }
 
-            return ResultBox.FromValue(new SerializableEventStreamReadResult(count, lastId));
+            return new SerializableEventStreamReadResult(count, lastId);
         }
     }
 
@@ -758,7 +759,7 @@ public class TaggedStreamContractTests
         public TaggedStreamCapabilityDescriptor DescribeTaggedStream() =>
             TaggedStreamCapabilityDescriptor.Native("service cancellation gate");
 
-        public async Task<ResultBox<SerializableEventStreamReadResult>> StreamSerializableEventsByTagAsync(
+        public async Task<SerializableEventStreamReadResult> StreamSerializableEventsByTagAsync(
             ITag tag,
             SortableUniqueId? since,
             SortableUniqueId? until,
@@ -785,7 +786,7 @@ public class TaggedStreamContractTests
                 lastSortableUniqueId = serializableEvent.SortableUniqueIdValue;
             }
 
-            return ResultBox.FromValue(new SerializableEventStreamReadResult(count, lastSortableUniqueId));
+            return new SerializableEventStreamReadResult(count, lastSortableUniqueId);
         }
 
         public void ReleaseFirstRow() => _releaseFirstRow.TrySetResult();

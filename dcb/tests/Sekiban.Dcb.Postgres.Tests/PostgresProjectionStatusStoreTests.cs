@@ -8,6 +8,7 @@ using Sekiban.Dcb.Postgres;
 using Sekiban.Dcb.ServiceId;
 using Sekiban.Dcb.Storage;
 using Xunit;
+using Sekiban.Dcb.TestSupport;
 
 namespace Sekiban.Dcb.Postgres.Tests;
 
@@ -38,9 +39,9 @@ public sealed class PostgresProjectionStatusStoreTests : IAsyncLifetime
             new FixedServiceIdProvider("svc"));
         var first = Heartbeat("activation-a", 1);
 
-        var created = await store.UpsertAsync(first, 0);
-        var updated = await store.UpsertAsync(first with { Sequence = 2, AppliedEventCount = 2 }, 1);
-        var staleCreate = await store.UpsertAsync(first with { Sequence = 3 }, 0);
+        var created = await store.UpsertAsync(first, 0).AsResultBoxAsync();
+        var updated = await store.UpsertAsync(first with { Sequence = 2, AppliedEventCount = 2 }, 1).AsResultBoxAsync();
+        var staleCreate = await store.UpsertAsync(first with { Sequence = 3 }, 0).AsResultBoxAsync();
 
         Assert.True(created.IsSuccess);
         Assert.True(created.GetValue().Committed);
@@ -58,7 +59,7 @@ public sealed class PostgresProjectionStatusStoreTests : IAsyncLifetime
         Assert.Equal(createRaceConflict.ToCompatibilityReason(), staleCreate.GetValue().ConflictReason);
         Assert.DoesNotContain("activation row already exists", staleCreate.GetValue().ConflictReason!, StringComparison.OrdinalIgnoreCase);
 
-        var staleUpdate = await store.UpsertAsync(first with { Sequence = 3 }, 1);
+        var staleUpdate = await store.UpsertAsync(first with { Sequence = 3 }, 1).AsResultBoxAsync();
         Assert.True(staleUpdate.IsSuccess);
         var staleUpdateConflict = Assert.IsType<ProjectionStatusWriteConflict>(staleUpdate.GetValue().ConflictDetails);
         Assert.Equal(ProjectionStatusConflictReason.SequenceMismatch, staleUpdateConflict.Reason);
@@ -66,7 +67,7 @@ public sealed class PostgresProjectionStatusStoreTests : IAsyncLifetime
         Assert.Equal(2, staleUpdateConflict.ObservedSequence);
 
         var missing = first with { ClusterId = "missing", Sequence = 2 };
-        var absent = await store.UpsertAsync(missing, 1);
+        var absent = await store.UpsertAsync(missing, 1).AsResultBoxAsync();
         Assert.True(absent.IsSuccess);
         var absentConflict = Assert.IsType<ProjectionStatusWriteConflict>(absent.GetValue().ConflictDetails);
         Assert.Equal(ProjectionStatusConflictReason.RowAbsent, absentConflict.Reason);
@@ -75,7 +76,7 @@ public sealed class PostgresProjectionStatusStoreTests : IAsyncLifetime
         Assert.Null(absentConflict.ObservedSequence);
         Assert.Equal(missing.ProjectorVersion, absentConflict.ExpectedProjectorVersion);
         Assert.Null(absentConflict.ObservedProjectorVersion);
-        var listedAfterAbsentWrite = await store.ListAsync();
+        var listedAfterAbsentWrite = await store.ListAsync().AsResultBoxAsync();
         Assert.True(
             listedAfterAbsentWrite.IsSuccess,
             listedAfterAbsentWrite.IsSuccess ? string.Empty : listedAfterAbsentWrite.GetException().ToString());
@@ -83,15 +84,15 @@ public sealed class PostgresProjectionStatusStoreTests : IAsyncLifetime
 
         // A later conditional create can race. The loser observes RowAlreadyExists and must not overwrite the winner.
         var competitor = missing with { ActivationId = "competitor", Sequence = 1 };
-        Assert.True((await store.UpsertAsync(competitor, 0)).GetValue().Committed);
-        var losingCreate = await store.UpsertAsync(missing with { ActivationId = "retrying", Sequence = 1 }, 0);
+        Assert.True((await store.UpsertAsync(competitor, 0).AsResultBoxAsync()).GetValue().Committed);
+        var losingCreate = await store.UpsertAsync(missing with { ActivationId = "retrying", Sequence = 1 }, 0).AsResultBoxAsync();
         Assert.True(losingCreate.IsSuccess);
         Assert.Equal(
             ProjectionStatusConflictReason.RowAlreadyExists,
             Assert.IsType<ProjectionStatusWriteConflict>(losingCreate.GetValue().ConflictDetails).Reason);
         Assert.Equal("competitor", losingCreate.GetValue().Current!.ActivationId);
 
-        var afterRebase = await store.UpsertAsync(missing with { ActivationId = "retrying", Sequence = 2 }, 1);
+        var afterRebase = await store.UpsertAsync(missing with { ActivationId = "retrying", Sequence = 2 }, 1).AsResultBoxAsync();
         Assert.True(afterRebase.IsSuccess);
         Assert.True(afterRebase.GetValue().Committed);
         Assert.Equal(2, afterRebase.GetValue().Current!.Sequence);
@@ -123,10 +124,10 @@ public sealed class PostgresProjectionStatusStoreTests : IAsyncLifetime
                 SwitchedAtUtc = new DateTimeOffset(2026, 1, 2, 3, 4, 5, TimeSpan.Zero).AddTicks(1_234_560)
             };
 
-            var created = await store.UpsertAsync(first, 0);
-            var listed = await store.ListAsync();
-            var updated = await store.UpsertAsync(first with { Sequence = 2, AppliedEventCount = 2 }, 1);
-            var stale = await store.UpsertAsync(first with { Sequence = 3 }, 1);
+            var created = await store.UpsertAsync(first, 0).AsResultBoxAsync();
+            var listed = await store.ListAsync().AsResultBoxAsync();
+            var updated = await store.UpsertAsync(first with { Sequence = 2, AppliedEventCount = 2 }, 1).AsResultBoxAsync();
+            var stale = await store.UpsertAsync(first with { Sequence = 3 }, 1).AsResultBoxAsync();
 
             Assert.True(created.IsSuccess, created.IsSuccess ? string.Empty : created.GetException().ToString());
             Assert.True(created.GetValue().Committed);
@@ -146,7 +147,7 @@ public sealed class PostgresProjectionStatusStoreTests : IAsyncLifetime
                 new FixedServiceIdProvider("other"),
                 null,
                 options);
-            var isolated = await otherService.ListAsync();
+            var isolated = await otherService.ListAsync().AsResultBoxAsync();
             Assert.True(isolated.IsSuccess, isolated.IsSuccess ? string.Empty : isolated.GetException().ToString());
             Assert.Empty(isolated.GetValue());
 
@@ -180,7 +181,7 @@ public sealed class PostgresProjectionStatusStoreTests : IAsyncLifetime
                 factoryStore.CreateForService("factory-service"));
             var factoryWrite = await serviceStore.UpsertAsync(
                 Heartbeat("factory-activation", 1) with { ServiceId = "factory-service" },
-                0);
+                0).AsResultBoxAsync();
             Assert.True(factoryWrite.IsSuccess, factoryWrite.IsSuccess ? string.Empty : factoryWrite.GetException().ToString());
             Assert.True(factoryWrite.GetValue().Committed);
 
@@ -192,7 +193,7 @@ public sealed class PostgresProjectionStatusStoreTests : IAsyncLifetime
             var diStore = provider.GetRequiredService<IProjectionStatusStore>();
             var diWrite = await diStore.UpsertAsync(
                 Heartbeat("di-activation", 1) with { ServiceId = DefaultServiceIdProvider.DefaultServiceId },
-                0);
+                0).AsResultBoxAsync();
             Assert.True(diWrite.IsSuccess, diWrite.IsSuccess ? string.Empty : diWrite.GetException().ToString());
             Assert.True(diWrite.GetValue().Committed);
 
@@ -220,7 +221,7 @@ public sealed class PostgresProjectionStatusStoreTests : IAsyncLifetime
                 null,
                 new ProjectionStatusOptions { ProvisioningMode = ProjectionStatusProvisioningMode.PreProvisioned });
 
-            var result = await store.UpsertAsync(Heartbeat("activation-missing", 1), 0);
+            var result = await store.UpsertAsync(Heartbeat("activation-missing", 1), 0).AsResultBoxAsync();
 
             Assert.False(result.IsSuccess);
             var failure = Assert.IsType<PostgresException>(result.GetException());
@@ -228,7 +229,7 @@ public sealed class PostgresProjectionStatusStoreTests : IAsyncLifetime
             // A DDL attempt by this role would be 42501; 42P01 is the direct DML failure with no auto-provisioning.
             Assert.NotEmpty(commands);
             Assert.DoesNotContain(commands, ContainsDdl);
-            var list = await store.ListAsync();
+            var list = await store.ListAsync().AsResultBoxAsync();
             Assert.False(list.IsSuccess);
             Assert.Equal(PostgresErrorCodes.UndefinedTable, Assert.IsType<PostgresException>(list.GetException()).SqlState);
         }
@@ -258,7 +259,7 @@ public sealed class PostgresProjectionStatusStoreTests : IAsyncLifetime
                 null,
                 new ProjectionStatusOptions { ProvisioningMode = ProjectionStatusProvisioningMode.PreProvisioned });
 
-            var result = await store.UpsertAsync(Heartbeat("activation-missing-column", 1), 0);
+            var result = await store.UpsertAsync(Heartbeat("activation-missing-column", 1), 0).AsResultBoxAsync();
 
             Assert.False(result.IsSuccess);
             var failure = Assert.IsType<PostgresException>(result.GetException());
@@ -266,7 +267,7 @@ public sealed class PostgresProjectionStatusStoreTests : IAsyncLifetime
             // A DDL attempt by this role would be 42501; 42703 is the direct DML failure with no auto-repair.
             Assert.NotEmpty(commands);
             Assert.DoesNotContain(commands, ContainsDdl);
-            var list = await store.ListAsync();
+            var list = await store.ListAsync().AsResultBoxAsync();
             Assert.False(list.IsSuccess);
             Assert.Equal(PostgresErrorCodes.UndefinedColumn, Assert.IsType<PostgresException>(list.GetException()).SqlState);
         }

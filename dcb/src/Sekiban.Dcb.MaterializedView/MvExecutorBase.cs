@@ -680,9 +680,9 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvOrleansCatch
             var currentPosition = currentStatus.CurrentCheckpointTruth.IsKnown
                 ? currentStatus.CurrentCheckpointTruth.PositionValue
                 : null;
-            var readResult = await selectedEventStore.ReadAllSerializableEventsAsync(
+            var readResult = await ResultBox.WrapTry(() => selectedEventStore.ReadAllSerializableEventsAsync(
                     SortableUniqueId.NullableValue(currentPosition),
-                    _options.BatchSize)
+                    _options.BatchSize))
                 .ConfigureAwait(false);
             var result = await CompleteCatchUpInternalAsync(
                     host,
@@ -1642,13 +1642,8 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvOrleansCatch
     {
         try
         {
-            var result = await eventStore.GetLatestSortableUniqueIdAsync().ConfigureAwait(false);
-            if (!result.IsSuccess)
-            {
-                return MvCheckpointTruth.Unknown(MvCheckpointUnknownReason.ReadUnavailable);
-            }
-
-            var latestSortableUniqueId = result.GetValue();
+            // A failed read is reported as ReadUnavailable by the catch below.
+            var latestSortableUniqueId = await eventStore.GetLatestSortableUniqueIdAsync().ConfigureAwait(false);
             if (string.IsNullOrWhiteSpace(latestSortableUniqueId))
             {
                 return MvCheckpointTruth.KnownZero(MvCheckpointProvenance.AuthoritativeTargetCapture());

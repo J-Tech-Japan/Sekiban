@@ -1,4 +1,3 @@
-using ResultBoxes;
 using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.Tags;
@@ -14,10 +13,10 @@ public interface IStreamingTaggedSerializableEventStore
 {
     /// <summary>
     ///     Streams events whose sortable unique id is greater than <paramref name="since" /> and less than or equal to
-    ///     <paramref name="until" />. Providers emit strictly increasing ordinal ids, return non-cancellation failures
-    ///     as <see cref="ResultBox{T}.Error" />, and propagate cancellation.
+    ///     <paramref name="until" />. Providers emit strictly increasing ordinal ids, throw non-cancellation failures
+    ///     and propagate cancellation as <see cref="OperationCanceledException" />.
     /// </summary>
-    Task<ResultBox<SerializableEventStreamReadResult>> StreamSerializableEventsByTagAsync(
+    Task<SerializableEventStreamReadResult> StreamSerializableEventsByTagAsync(
         ITag tag,
         SortableUniqueId? since,
         SortableUniqueId? until,

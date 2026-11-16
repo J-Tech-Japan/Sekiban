@@ -6,6 +6,7 @@ using Sekiban.Dcb.Events;
 using Sekiban.Dcb.ServiceId;
 using Sekiban.Dcb.Storage;
 using Xunit;
+using Sekiban.Dcb.TestSupport;
 namespace Sekiban.Dcb.Tests.Cosmos;
 
 /// <summary>
@@ -50,9 +51,9 @@ public class CosmosExclusiveAfterPositionTests
     public async Task ReadAllEventsAsync_AfterPosition_ExcludesTheEventAtThePosition()
     {
         var store = NewStore("svc");
-        Assert.True((await store.WriteEventsAsync(new[] { Ev(P1), Ev(P2), Ev(P3) })).IsSuccess);
+        Assert.True((await store.WriteEventsAsync(new[] { Ev(P1), Ev(P2), Ev(P3) }).AsResultBoxAsync()).IsSuccess);
 
-        var read = (await store.ReadAllEventsAsync(new SortableUniqueId(P2))).GetValue().ToList();
+        var read = (await store.ReadAllEventsAsync(new SortableUniqueId(P2)).AsResultBoxAsync()).GetValue().ToList();
 
         Assert.Single(read);                                  // P1 (< P2) and P2 (== P2) excluded
         Assert.Equal(P3, read[0].SortableUniqueIdValue);      // only the strictly-later event

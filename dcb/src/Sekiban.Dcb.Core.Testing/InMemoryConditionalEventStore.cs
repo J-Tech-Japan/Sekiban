@@ -1,4 +1,3 @@
-using ResultBoxes;
 using Sekiban.Dcb.Capabilities;
 using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.ServiceId;
@@ -56,36 +55,34 @@ public sealed class InMemoryConditionalEventStore : InMemoryEventStore, IConditi
     public WriteConditionCapabilityDescriptor DescribeWriteConditions() =>
         WriteConditionCapabilityDescriptor.Supporting(ProviderName, WriteConditionKind.SingleEventUniqueKey);
 
-    public Task<ResultBox<ConditionalAppendReceipt>> AppendIfUniqueAsync(
+    public Task<ConditionalAppendReceipt> AppendIfUniqueAsync(
         ConditionalAppendRequest request,
         CancellationToken cancellationToken = default)
     {
-        var serviceId = _serviceIdProvider.GetCurrentServiceId();
-        string normalizedKey;
         try
         {
-            normalizedKey = OperationFingerprint.NormalizeKey(request.IdempotencyKey);
+            return Task.FromResult(AppendIfUnique(request));
         }
-        catch (ArgumentException ex)
+        catch (Exception ex)
         {
-            return Task.FromResult(ResultBox.Error<ConditionalAppendReceipt>(ex));
+            return Task.FromException<ConditionalAppendReceipt>(ex);
         }
+    }
+
+    private ConditionalAppendReceipt AppendIfUnique(ConditionalAppendRequest request)
+    {
+        var serviceId = _serviceIdProvider.GetCurrentServiceId();
+        var normalizedKey = OperationFingerprint.NormalizeKey(request.IdempotencyKey);
 
         // Canonical, authoritative fingerprint. Fails closed (typed) BEFORE any write when the type is unregistered or
         // the payload cannot be canonicalized.
-        var fingerprintResult = OperationFingerprint.ComputeCanonical(
+        var fingerprint = OperationFingerprint.ComputeCanonical(
             serviceId,
             request.IdempotencyKey,
             _eventTypes,
             request.Event.EventPayloadName,
             request.Event.Payload,
             request.Event.Tags);
-        if (!fingerprintResult.IsSuccess)
-        {
-            return Task.FromResult(ResultBox.Error<ConditionalAppendReceipt>(fingerprintResult.GetException()));
-        }
-
-        var fingerprint = fingerprintResult.GetValue();
 
         var claims = _claimsByService.GetOrAdd(serviceId, _ => new ServiceClaims());
         lock (claims.Lock)
@@ -94,19 +91,15 @@ public sealed class InMemoryConditionalEventStore : InMemoryEventStore, IConditi
             {
                 if (string.Equals(existing.Fingerprint, fingerprint, StringComparison.Ordinal))
                 {
-                    return Task.FromResult(
-                        ResultBox.FromValue(
-                            new ConditionalAppendReceipt(
-                                ConditionalAppendStatus.AlreadyCommittedSameOperation,
-                                existing.EventId,
-                                existing.SortableUniqueId,
-                                existing.Fingerprint)));
+                    return new ConditionalAppendReceipt(
+                        ConditionalAppendStatus.AlreadyCommittedSameOperation,
+                        existing.EventId,
+                        existing.SortableUniqueId,
+                        existing.Fingerprint);
                 }
 
                 // Conflict discovered by read — no provider exception occurred, so none is fabricated.
-                return Task.FromResult(
-                    ResultBox.Error<ConditionalAppendReceipt>(
-                        new KeyReuseConflictException(existing.Fingerprint, fingerprint, ProviderName)));
+                throw new KeyReuseConflictException(existing.Fingerprint, fingerprint, ProviderName);
             }
 
             // First claim: write the event through the base store, then record the claim. The base write is synchronous,
@@ -117,16 +110,10 @@ public sealed class InMemoryConditionalEventStore : InMemoryEventStore, IConditi
             if (FailNextDurableWrite)
             {
                 FailNextDurableWrite = false;
-                return Task.FromResult(
-                    ResultBox.Error<ConditionalAppendReceipt>(
-                        new InvalidOperationException("injected: durable base-store write failure")));
+                throw new InvalidOperationException("injected: durable base-store write failure");
             }
 
-            var writeResult = base.WriteSerializableEventsAsync(new[] { request.Event }).GetAwaiter().GetResult();
-            if (!writeResult.IsSuccess)
-            {
-                return Task.FromResult(ResultBox.Error<ConditionalAppendReceipt>(writeResult.GetException()));
-            }
+            base.WriteSerializableEventsAsync(new[] { request.Event }).GetAwaiter().GetResult();
 
             // Count the SUCCESSFUL durable write only after the base append committed, then record the claim.
             Interlocked.Increment(ref _writeCalls);
@@ -134,13 +121,11 @@ public sealed class InMemoryConditionalEventStore : InMemoryEventStore, IConditi
                 request.Event.Id,
                 request.Event.SortableUniqueIdValue,
                 fingerprint);
-            return Task.FromResult(
-                ResultBox.FromValue(
-                    new ConditionalAppendReceipt(
-                        ConditionalAppendStatus.Appended,
-                        request.Event.Id,
-                        request.Event.SortableUniqueIdValue,
-                        fingerprint)));
+            return new ConditionalAppendReceipt(
+                ConditionalAppendStatus.Appended,
+                request.Event.Id,
+                request.Event.SortableUniqueIdValue,
+                fingerprint);
         }
     }
 

@@ -22,6 +22,7 @@ using Sekiban.Dcb.Storage.Checkpoints;
 using Sekiban.Dcb.Tags;
 using Sekiban.Dcb.Testing;
 using Xunit;
+using Sekiban.Dcb.TestSupport;
 namespace Sekiban.Dcb.Orleans.Tests;
 
 public class PermanentlyTombstonedCheckpointRunbookTests : IAsyncLifetime
@@ -56,7 +57,7 @@ public class PermanentlyTombstonedCheckpointRunbookTests : IAsyncLifetime
         var t0 = DateTime.UtcNow.AddMinutes(-5);
         var events = Enumerable.Range(0, 50)
             .Select(i => ToSerializable(CreateEvent(new Counted($"e{i}"), t0.AddSeconds(i)))).ToArray();
-        Assert.True((await Env.EventStore.WriteSerializableEventsAsync(events)).IsSuccess);
+        Assert.True((await Env.EventStore.WriteSerializableEventsAsync(events).AsResultBoxAsync()).IsSuccess);
         var grain = _client.GetGrain<IMultiProjectionGrain>(CountProjector.MultiProjectorName);
         await grain.RefreshAsync();
         await AssertCountAndIdleAsync(grain);
@@ -64,10 +65,10 @@ public class PermanentlyTombstonedCheckpointRunbookTests : IAsyncLifetime
         var active = await ReadSlotAsync();
         Assert.True(active.IsActive);
         var record = (await Env.StateStore.GetLatestForVersionAsync(
-            CountProjector.MultiProjectorName, CountProjector.MultiProjectorVersion)).GetValue().GetValue();
+            CountProjector.MultiProjectorName, CountProjector.MultiProjectorVersion).AsOptionalResultBoxAsync()).GetValue().GetValue();
 
         // Model an inflated legacy count / retained projection store after an event-store reset.
-        await using var input = (await Env.StateStore.OpenStateDataReadStreamAsync(record)).GetValue();
+        await using var input = (await Env.StateStore.OpenStateDataReadStreamAsync(record).AsResultBoxAsync()).GetValue();
         await using var payload = new MemoryStream();
         await input.CopyToAsync(payload);
         payload.Position = 0;
@@ -87,7 +88,7 @@ public class PermanentlyTombstonedCheckpointRunbookTests : IAsyncLifetime
         Assert.True(unchanged.IsTombstoned);
         Assert.Equal(tombstone.ResultingSlot!.Generation, unchanged.Generation);
         Assert.Equal(100, (await Env.StateStore.GetLatestForVersionAsync(
-            record.ProjectorName, record.ProjectorVersion)).GetValue().GetValue().EventsProcessed);
+            record.ProjectorName, record.ProjectorVersion).AsOptionalResultBoxAsync()).GetValue().GetValue().EventsProcessed);
 
         // A fresh host replays all 50 events and replaces the retained count of 100 at its first persist.
         var activations = Env.Log.CountEvent(1001);
@@ -99,7 +100,7 @@ public class PermanentlyTombstonedCheckpointRunbookTests : IAsyncLifetime
         Assert.Equal(activations + 1, Env.Log.CountEvent(1001));
         Assert.Equal(0, Env.Log.CountWarningOnCurrentActivation(1030));
         Assert.Equal(50, (await Env.StateStore.GetLatestForVersionAsync(
-            record.ProjectorName, record.ProjectorVersion)).GetValue().GetValue().EventsProcessed);
+            record.ProjectorName, record.ProjectorVersion).AsOptionalResultBoxAsync()).GetValue().GetValue().EventsProcessed);
         Assert.Null((await grain.GetStatusAsync()).LastError);
 
         // Another actual activation restores that checkpoint and performs only incremental reads.
@@ -154,7 +155,7 @@ public class PermanentlyTombstonedCheckpointRunbookTests : IAsyncLifetime
     }
 
     private static async Task<CheckpointSlot> ReadSlotAsync() =>
-        (await Env.StateStore.ReadCheckpointSlotAsync(CountProjector.MultiProjectorName, "1.0.0")).GetValue();
+        (await Env.StateStore.ReadCheckpointSlotAsync(CountProjector.MultiProjectorName, "1.0.0").AsResultBoxAsync()).GetValue();
 
     private static Event CreateEvent(IEventPayload payload, DateTime timestamp) => new(
         payload, SortableUniqueId.Generate(timestamp, Guid.NewGuid()), payload.GetType().Name,
@@ -182,26 +183,25 @@ public class PermanentlyTombstonedCheckpointRunbookTests : IAsyncLifetime
     {
         private int _fullReads;
         public int FullReads => Volatile.Read(ref _fullReads);
-        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null) =>
+        public Task<IEnumerable<SerializableEvent>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null) =>
             ReadAllSerializableEventsAsync(since, null);
-        public async Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(SortableUniqueId? since, int? maxCount)
+        public async Task<IEnumerable<SerializableEvent>> ReadAllSerializableEventsAsync(SortableUniqueId? since, int? maxCount)
         {
             if (since is null) Interlocked.Increment(ref _fullReads);
             var all = await inner.ReadAllSerializableEventsAsync(since, null);
-            if (!all.IsSuccess) return all;
-            var sorted = all.GetValue().OrderBy(e => e.SortableUniqueIdValue, StringComparer.Ordinal);
+            var sorted = all.OrderBy(e => e.SortableUniqueIdValue, StringComparer.Ordinal);
             var page = (maxCount is { } m ? sorted.Take(m) : sorted).ToList();
-            return ResultBox.FromValue<IEnumerable<SerializableEvent>>(page);
+            return page;
         }
-        public Task<ResultBox<IEnumerable<TagStream>>> ReadTagsAsync(ITag tag) => inner.ReadTagsAsync(tag);
-        public Task<ResultBox<TagState>> GetLatestTagAsync(ITag tag) => inner.GetLatestTagAsync(tag);
-        public Task<ResultBox<bool>> TagExistsAsync(ITag tag) => inner.TagExistsAsync(tag);
-        public Task<ResultBox<long>> GetEventCountAsync(SortableUniqueId? since = null) => inner.GetEventCountAsync(since);
-        public Task<ResultBox<IEnumerable<TagInfo>>> GetAllTagsAsync(string? tagGroup = null) => inner.GetAllTagsAsync(tagGroup);
-        public Task<ResultBox<SerializableEvent>> ReadSerializableEventAsync(Guid id) => inner.ReadSerializableEventAsync(id);
-        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadSerializableEventsByTagAsync(ITag tag, SortableUniqueId? since = null) => inner.ReadSerializableEventsByTagAsync(tag, since);
-        public Task<ResultBox<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>> WriteSerializableEventsAsync(IEnumerable<SerializableEvent> events) => inner.WriteSerializableEventsAsync(events);
-        public Task<ResultBox<string>> GetLatestSortableUniqueIdAsync() => inner.GetLatestSortableUniqueIdAsync();
+        public Task<IEnumerable<TagStream>> ReadTagsAsync(ITag tag) => inner.ReadTagsAsync(tag);
+        public Task<TagState> GetLatestTagAsync(ITag tag) => inner.GetLatestTagAsync(tag);
+        public Task<bool> TagExistsAsync(ITag tag) => inner.TagExistsAsync(tag);
+        public Task<long> GetEventCountAsync(SortableUniqueId? since = null) => inner.GetEventCountAsync(since);
+        public Task<IEnumerable<TagInfo>> GetAllTagsAsync(string? tagGroup = null) => inner.GetAllTagsAsync(tagGroup);
+        public Task<SerializableEvent?> ReadSerializableEventAsync(Guid id) => inner.ReadSerializableEventAsync(id);
+        public Task<IEnumerable<SerializableEvent>> ReadSerializableEventsByTagAsync(ITag tag, SortableUniqueId? since = null) => inner.ReadSerializableEventsByTagAsync(tag, since);
+        public Task<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)> WriteSerializableEventsAsync(IEnumerable<SerializableEvent> events) => inner.WriteSerializableEventsAsync(events);
+        public Task<string> GetLatestSortableUniqueIdAsync() => inner.GetLatestSortableUniqueIdAsync();
     }
 
     internal sealed class RunbookCheckpointStore(IGenerationAwareCheckpointStore inner)

@@ -7,6 +7,7 @@ using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
 using CoreInMemoryEventStore = Sekiban.Dcb.Testing.InMemoryEventStore;
 using CoreInMemoryMultiProjectionStateStore = Sekiban.Dcb.Testing.InMemoryMultiProjectionStateStore;
+using Sekiban.Dcb.TestSupport;
 
 namespace Sekiban.Dcb.Tests;
 
@@ -21,24 +22,24 @@ public class ServiceIdIsolationTests
 
         var studentId = Guid.NewGuid();
         var evt = EventTestHelper.CreateEvent(new StudentCreated(studentId, "Alice"), new StudentTag(studentId));
-        var writeResult = await store.WriteEventsAsync([evt], domainTypes.EventTypes);
+        var writeResult = await store.WriteEventsAsync([evt], domainTypes.EventTypes).AsResultBoxAsync();
         Assert.True(writeResult.IsSuccess);
 
-        var readAlpha = await store.ReadAllEventsAsync(domainTypes.EventTypes);
+        var readAlpha = await store.ReadAllEventsAsync(domainTypes.EventTypes).AsResultBoxAsync();
         Assert.True(readAlpha.IsSuccess);
         Assert.Single(readAlpha.GetValue());
 
         provider.ServiceId = "beta";
-        var readBeta = await store.ReadAllEventsAsync(domainTypes.EventTypes);
+        var readBeta = await store.ReadAllEventsAsync(domainTypes.EventTypes).AsResultBoxAsync();
         Assert.True(readBeta.IsSuccess);
         Assert.Empty(readBeta.GetValue());
 
         var readEventBeta = await store.ReadEventAsync(evt.Id, domainTypes.EventTypes);
-        Assert.False(readEventBeta.IsSuccess);
+        Assert.Null(readEventBeta);
 
         provider.ServiceId = "alpha";
         var readEventAlpha = await store.ReadEventAsync(evt.Id, domainTypes.EventTypes);
-        Assert.True(readEventAlpha.IsSuccess);
+        Assert.NotNull(readEventAlpha);
     }
 
     [Fact]
@@ -49,20 +50,20 @@ public class ServiceIdIsolationTests
 
         var request = CreateWriteRequest("Projector", "v1", 10);
         await using var stream = new MemoryStream([1, 2, 3]);
-        var upsert = await store.UpsertFromStreamAsync(request, stream, 1_000_000);
+        var upsert = await store.UpsertFromStreamAsync(request, stream, 1_000_000).AsResultBoxAsync();
         Assert.True(upsert.IsSuccess);
 
-        var alphaLatest = await store.GetLatestAnyVersionAsync("Projector");
+        var alphaLatest = await store.GetLatestAnyVersionAsync("Projector").AsOptionalResultBoxAsync();
         Assert.True(alphaLatest.IsSuccess);
         Assert.True(alphaLatest.GetValue().HasValue);
 
         provider.ServiceId = "beta";
-        var betaLatest = await store.GetLatestAnyVersionAsync("Projector");
+        var betaLatest = await store.GetLatestAnyVersionAsync("Projector").AsOptionalResultBoxAsync();
         Assert.True(betaLatest.IsSuccess);
         Assert.False(betaLatest.GetValue().HasValue);
 
         provider.ServiceId = "alpha";
-        var alphaLatestAgain = await store.GetLatestAnyVersionAsync("Projector");
+        var alphaLatestAgain = await store.GetLatestAnyVersionAsync("Projector").AsOptionalResultBoxAsync();
         Assert.True(alphaLatestAgain.IsSuccess);
         Assert.True(alphaLatestAgain.GetValue().HasValue);
     }

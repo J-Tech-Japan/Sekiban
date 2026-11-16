@@ -19,6 +19,7 @@ using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
 using Sekiban.Dcb.Testing;
 using Xunit;
+using Sekiban.Dcb.TestSupport;
 namespace Sekiban.Dcb.Orleans.Tests;
 
 /// <summary>
@@ -81,7 +82,7 @@ public class TwoClusterGraduationReconcileConvergenceTests : IAsyncLifetime
         var earlier = CreateEvent(new CreatedWithId("team-1", "earlier"), DateTime.UtcNow.AddSeconds(-2.0));
         var later = CreateEvent(new CreatedWithId("team-1", "later"), DateTime.UtcNow.AddSeconds(-1.0));
         // Persist "later" first, then "earlier" — the arrival order that produced the #1092 permanent divergence.
-        await SharedStores.EventStore.WriteSerializableEventsAsync(new[] { ToSerializable(later), ToSerializable(earlier) });
+        await SharedStores.EventStore.WriteSerializableEventsAsync(new[] { ToSerializable(later), ToSerializable(earlier) }).AsResultBoxAsync();
 
         var grainA = _clusterA.Client.GetGrain<IMultiProjectionGrain>(FirstWinsProjector.MultiProjectorName);
         var grainB = _clusterB.Client.GetGrain<IMultiProjectionGrain>(FirstWinsProjector.MultiProjectorName);
@@ -130,7 +131,7 @@ public class TwoClusterGraduationReconcileConvergenceTests : IAsyncLifetime
     public async Task TwoColdReplicas_WithSafeBaseline_ReachRecentHeadBeforeSafeWindow()
     {
         var baseline = CreateEvent(new CreatedWithId("baseline", "safe"), DateTime.UtcNow.AddMinutes(-1));
-        await SharedStores.EventStore.WriteSerializableEventsAsync(new[] { ToSerializable(baseline) });
+        await SharedStores.EventStore.WriteSerializableEventsAsync(new[] { ToSerializable(baseline) }).AsResultBoxAsync();
 
         var seed = _clusterA.Client.GetGrain<IMultiProjectionGrain>(FirstWinsProjector.MultiProjectorName);
         var seeded = await seed.GetStateAsync();
@@ -140,7 +141,7 @@ public class TwoClusterGraduationReconcileConvergenceTests : IAsyncLifetime
         await seed.RequestDeactivationAsync();
 
         var recent = CreateEvent(new CreatedWithId("recent", "head"), DateTime.UtcNow);
-        await SharedStores.EventStore.WriteSerializableEventsAsync(new[] { ToSerializable(recent) });
+        await SharedStores.EventStore.WriteSerializableEventsAsync(new[] { ToSerializable(recent) }).AsResultBoxAsync();
 
         var grainA = _clusterA.Client.GetGrain<IMultiProjectionGrain>(
             ServiceIdGrainKey.Build(ReplicaServiceA, FirstWinsProjector.MultiProjectorName));
@@ -403,14 +404,14 @@ public class TwoClusterGraduationReconcileConvergenceTests : IAsyncLifetime
             return gate;
         }
 
-        public Task<ResultBox<string>> GetLatestSortableUniqueIdAsync() =>
+        public Task<string> GetLatestSortableUniqueIdAsync() =>
             inner.GetLatestSortableUniqueIdAsync();
 
-        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(
+        public Task<IEnumerable<SerializableEvent>> ReadAllSerializableEventsAsync(
             SortableUniqueId? since = null) =>
             ReadAllSerializableEventsAsync(since, null);
 
-        public async Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(
+        public async Task<IEnumerable<SerializableEvent>> ReadAllSerializableEventsAsync(
             SortableUniqueId? since,
             int? maxCount)
         {
@@ -424,18 +425,18 @@ public class TwoClusterGraduationReconcileConvergenceTests : IAsyncLifetime
             return await inner.ReadAllSerializableEventsAsync(since, maxCount);
         }
 
-        public Task<ResultBox<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>>
+        public Task<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>
             WriteSerializableEventsAsync(IEnumerable<SerializableEvent> events) =>
             inner.WriteSerializableEventsAsync(events);
 
-        public Task<ResultBox<IEnumerable<TagStream>>> ReadTagsAsync(ITag tag) => inner.ReadTagsAsync(tag);
-        public Task<ResultBox<TagState>> GetLatestTagAsync(ITag tag) => inner.GetLatestTagAsync(tag);
-        public Task<ResultBox<bool>> TagExistsAsync(ITag tag) => inner.TagExistsAsync(tag);
-        public Task<ResultBox<long>> GetEventCountAsync(SortableUniqueId? since = null) => inner.GetEventCountAsync(since);
-        public Task<ResultBox<IEnumerable<TagInfo>>> GetAllTagsAsync(string? tagGroup = null) => inner.GetAllTagsAsync(tagGroup);
-        public Task<ResultBox<SerializableEvent>> ReadSerializableEventAsync(Guid eventId) =>
+        public Task<IEnumerable<TagStream>> ReadTagsAsync(ITag tag) => inner.ReadTagsAsync(tag);
+        public Task<TagState> GetLatestTagAsync(ITag tag) => inner.GetLatestTagAsync(tag);
+        public Task<bool> TagExistsAsync(ITag tag) => inner.TagExistsAsync(tag);
+        public Task<long> GetEventCountAsync(SortableUniqueId? since = null) => inner.GetEventCountAsync(since);
+        public Task<IEnumerable<TagInfo>> GetAllTagsAsync(string? tagGroup = null) => inner.GetAllTagsAsync(tagGroup);
+        public Task<SerializableEvent?> ReadSerializableEventAsync(Guid eventId) =>
             inner.ReadSerializableEventAsync(eventId);
-        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadSerializableEventsByTagAsync(
+        public Task<IEnumerable<SerializableEvent>> ReadSerializableEventsByTagAsync(
             ITag tag,
             SortableUniqueId? since = null) => inner.ReadSerializableEventsByTagAsync(tag, since);
 

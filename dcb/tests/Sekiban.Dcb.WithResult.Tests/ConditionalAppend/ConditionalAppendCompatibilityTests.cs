@@ -1,4 +1,3 @@
-using ResultBoxes;
 using Sekiban.Dcb.Capabilities;
 using Sekiban.Dcb.Commands;
 using Sekiban.Dcb.Common;
@@ -49,17 +48,17 @@ public class ConditionalAppendCompatibilityTests
     {
         var expected = new[]
         {
-            "System.Threading.Tasks.Task`1[ResultBoxes.ResultBox`1[System.Collections.Generic.IEnumerable`1[Sekiban.Dcb.Storage.TagInfo]]] GetAllTagsAsync(System.String tagGroup)",
-            "System.Threading.Tasks.Task`1[ResultBoxes.ResultBox`1[System.Collections.Generic.IEnumerable`1[Sekiban.Dcb.Tags.TagStream]]] ReadTagsAsync(Sekiban.Dcb.Tags.ITag tag)",
-            "System.Threading.Tasks.Task`1[ResultBoxes.ResultBox`1[System.Collections.Generic.IEnumerable`1[Sekiban.Dcb.Events.SerializableEvent]]] ReadAllSerializableEventsAsync(Sekiban.Dcb.Common.SortableUniqueId since)",
-            "System.Threading.Tasks.Task`1[ResultBoxes.ResultBox`1[System.Collections.Generic.IEnumerable`1[Sekiban.Dcb.Events.SerializableEvent]]] ReadAllSerializableEventsAsync(Sekiban.Dcb.Common.SortableUniqueId since, System.Nullable`1[System.Int32] maxCount)",
-            "System.Threading.Tasks.Task`1[ResultBoxes.ResultBox`1[System.Collections.Generic.IEnumerable`1[Sekiban.Dcb.Events.SerializableEvent]]] ReadSerializableEventsByTagAsync(Sekiban.Dcb.Tags.ITag tag, Sekiban.Dcb.Common.SortableUniqueId since)",
-            "System.Threading.Tasks.Task`1[ResultBoxes.ResultBox`1[Sekiban.Dcb.Events.SerializableEvent]] ReadSerializableEventAsync(System.Guid eventId)",
-            "System.Threading.Tasks.Task`1[ResultBoxes.ResultBox`1[Sekiban.Dcb.Tags.TagState]] GetLatestTagAsync(Sekiban.Dcb.Tags.ITag tag)",
-            "System.Threading.Tasks.Task`1[ResultBoxes.ResultBox`1[System.Boolean]] TagExistsAsync(Sekiban.Dcb.Tags.ITag tag)",
-            "System.Threading.Tasks.Task`1[ResultBoxes.ResultBox`1[System.Int64]] GetEventCountAsync(Sekiban.Dcb.Common.SortableUniqueId since)",
-            "System.Threading.Tasks.Task`1[ResultBoxes.ResultBox`1[System.String]] GetLatestSortableUniqueIdAsync()",
-            "System.Threading.Tasks.Task`1[ResultBoxes.ResultBox`1[System.ValueTuple`2[System.Collections.Generic.IReadOnlyList`1[Sekiban.Dcb.Events.SerializableEvent],System.Collections.Generic.IReadOnlyList`1[Sekiban.Dcb.Tags.TagWriteResult]]]] WriteSerializableEventsAsync(System.Collections.Generic.IEnumerable`1[Sekiban.Dcb.Events.SerializableEvent] events)"
+            "System.Threading.Tasks.Task`1[System.Collections.Generic.IEnumerable`1[Sekiban.Dcb.Storage.TagInfo]] GetAllTagsAsync(System.String tagGroup)",
+            "System.Threading.Tasks.Task`1[System.Collections.Generic.IEnumerable`1[Sekiban.Dcb.Tags.TagStream]] ReadTagsAsync(Sekiban.Dcb.Tags.ITag tag)",
+            "System.Threading.Tasks.Task`1[System.Collections.Generic.IEnumerable`1[Sekiban.Dcb.Events.SerializableEvent]] ReadAllSerializableEventsAsync(Sekiban.Dcb.Common.SortableUniqueId since)",
+            "System.Threading.Tasks.Task`1[System.Collections.Generic.IEnumerable`1[Sekiban.Dcb.Events.SerializableEvent]] ReadAllSerializableEventsAsync(Sekiban.Dcb.Common.SortableUniqueId since, System.Nullable`1[System.Int32] maxCount)",
+            "System.Threading.Tasks.Task`1[System.Collections.Generic.IEnumerable`1[Sekiban.Dcb.Events.SerializableEvent]] ReadSerializableEventsByTagAsync(Sekiban.Dcb.Tags.ITag tag, Sekiban.Dcb.Common.SortableUniqueId since)",
+            "System.Threading.Tasks.Task`1[Sekiban.Dcb.Events.SerializableEvent] ReadSerializableEventAsync(System.Guid eventId)",
+            "System.Threading.Tasks.Task`1[Sekiban.Dcb.Tags.TagState] GetLatestTagAsync(Sekiban.Dcb.Tags.ITag tag)",
+            "System.Threading.Tasks.Task`1[System.Boolean] TagExistsAsync(Sekiban.Dcb.Tags.ITag tag)",
+            "System.Threading.Tasks.Task`1[System.Int64] GetEventCountAsync(Sekiban.Dcb.Common.SortableUniqueId since)",
+            "System.Threading.Tasks.Task`1[System.String] GetLatestSortableUniqueIdAsync()",
+            "System.Threading.Tasks.Task`1[System.ValueTuple`2[System.Collections.Generic.IReadOnlyList`1[Sekiban.Dcb.Events.SerializableEvent],System.Collections.Generic.IReadOnlyList`1[Sekiban.Dcb.Tags.TagWriteResult]]] WriteSerializableEventsAsync(System.Collections.Generic.IEnumerable`1[Sekiban.Dcb.Events.SerializableEvent] events)"
         }.OrderBy(s => s, StringComparer.Ordinal).ToArray();
 
         Assert.Equal(expected, FrozenSignatures(typeof(IEventStore)));

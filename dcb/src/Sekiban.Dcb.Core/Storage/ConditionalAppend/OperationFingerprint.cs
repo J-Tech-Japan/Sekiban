@@ -1,4 +1,3 @@
-using ResultBoxes;
 using Sekiban.Dcb.Domains;
 using System.Buffers;
 using System.Buffers.Binary;
@@ -77,7 +76,7 @@ public static class OperationFingerprint
     ///     <see cref="OperationCanonicalizationException" />) BEFORE returning a value when the type is not registered or
     ///     the payload cannot be canonicalized — so a caller can reject it before any store side effect.
     /// </summary>
-    public static ResultBox<string> ComputeCanonical(
+    public static string ComputeCanonical(
         string serviceId,
         string idempotencyKey,
         IEventTypes eventTypes,
@@ -90,9 +89,8 @@ public static class OperationFingerprint
         var authoritativeType = eventTypes.GetEventType(eventPayloadName);
         if (authoritativeType is null)
         {
-            return ResultBox.Error<string>(
-                new OperationCanonicalizationException(
-                    $"Event type '{eventPayloadName}' is not registered; its authoritative identity cannot be resolved."));
+            throw new OperationCanonicalizationException(
+                $"Event type '{eventPayloadName}' is not registered; its authoritative identity cannot be resolved.");
         }
 
         var typeIdentity = authoritativeType.FullName ?? authoritativeType.Name;
@@ -103,52 +101,48 @@ public static class OperationFingerprint
         // be stable) is rejected before it can produce any output — it can never yield two fingerprints for one key.
         if (eventTypes is not IEventTypeJsonMetadataProvider metadataProvider)
         {
-            return ResultBox.Error<string>(
-                new OperationCanonicalizationException(
-                    $"Event type '{eventPayloadName}' cannot be conditionally appended: its event-types registry does "
-                    + "not expose JSON metadata, so a stable canonical shape cannot be proven."));
+            throw new OperationCanonicalizationException(
+                $"Event type '{eventPayloadName}' cannot be conditionally appended: its event-types registry does "
+                + "not expose JSON metadata, so a stable canonical shape cannot be proven.");
         }
 
         var effectiveTypeInfo = metadataProvider.GetEffectiveTypeInfo(eventPayloadName);
         if (effectiveTypeInfo is null || !CanonicalShapeValidator.IsSupported(effectiveTypeInfo))
         {
-            return ResultBox.Error<string>(
-                new OperationCanonicalizationException(
-                    $"Event type '{eventPayloadName}' has a payload shape that is not supported for conditional append "
-                    + "(converter-owned, non-object, or non-deterministically-ordered), so a stable canonical "
-                    + "fingerprint cannot be proven. Use a plain object payload of deterministic, structure-preserving "
-                    + "members."));
+            throw new OperationCanonicalizationException(
+                $"Event type '{eventPayloadName}' has a payload shape that is not supported for conditional append "
+                + "(converter-owned, non-object, or non-deterministically-ordered), so a stable canonical "
+                + "fingerprint cannot be proven. Use a plain object payload of deterministic, structure-preserving "
+                + "members.");
         }
 
-        byte[] canonicalPayload;
+        byte[]? canonicalPayload;
         try
         {
             var rawJson = Encoding.UTF8.GetString(rawPayload);
             var payloadObject = eventTypes.DeserializeEventPayload(eventPayloadName, rawJson);
-            if (payloadObject is null)
-            {
-                return ResultBox.Error<string>(
-                    new OperationCanonicalizationException(
-                        $"Payload for event type '{eventPayloadName}' could not be deserialized into its authoritative type."));
-            }
-
-            var normalizedJson = eventTypes.SerializeEventPayload(payloadObject);
-            canonicalPayload = CanonicalizeJson(normalizedJson);
+            canonicalPayload = payloadObject is null
+                ? null
+                : CanonicalizeJson(eventTypes.SerializeEventPayload(payloadObject));
         }
         catch (Exception)
         {
             // SECRET-SAFE: a deserializer/converter exception can carry the raw payload (and, via constructors, the raw
-            // key) in its Message/Data/InnerException/stack. It must NOT enter the ResultBox.Error graph. We deliberately
+            // key) in its Message/Data/InnerException/stack. It must NOT enter the thrown exception graph. We deliberately
             // discard the caught exception and surface only a sanitized failure whose sole caller-supplied datum is the
             // registered event-type NAME (safe metadata, not payload/key). No inner exception is attached.
-            return ResultBox.Error<string>(
-                new OperationCanonicalizationException(
-                    $"Payload for event type '{eventPayloadName}' could not be canonicalized. "
-                    + "Details are withheld to avoid exposing payload or key contents."));
+            throw new OperationCanonicalizationException(
+                $"Payload for event type '{eventPayloadName}' could not be canonicalized. "
+                + "Details are withheld to avoid exposing payload or key contents.");
         }
 
-        return ResultBox.FromValue(
-            ComputeFromCanonical(serviceId, idempotencyKey, typeIdentity, canonicalPayload, tags));
+        if (canonicalPayload is null)
+        {
+            throw new OperationCanonicalizationException(
+                $"Payload for event type '{eventPayloadName}' could not be deserialized into its authoritative type.");
+        }
+
+        return ComputeFromCanonical(serviceId, idempotencyKey, typeIdentity, canonicalPayload, tags);
     }
 
     /// <summary>

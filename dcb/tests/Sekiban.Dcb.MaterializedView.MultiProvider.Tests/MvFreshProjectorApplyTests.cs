@@ -12,6 +12,7 @@ using Sekiban.Dcb.MaterializedView.Postgres;
 using Sekiban.Dcb.MaterializedView.SqlServer;
 using Sekiban.Dcb.Storage;
 using Xunit;
+using Sekiban.Dcb.TestSupport;
 
 namespace Sekiban.Dcb.MaterializedView.MultiProvider.Tests;
 
@@ -76,7 +77,7 @@ internal static class FreshProjectorApplyAssertions
         }
 
         var serializableEvent = CreateEvent(fixture);
-        var writeResult = await fixture.EventStore.WriteSerializableEventsAsync([serializableEvent]).ConfigureAwait(false);
+        var writeResult = await fixture.EventStore.WriteSerializableEventsAsync([serializableEvent]).AsResultBoxAsync().ConfigureAwait(false);
         Assert.True(writeResult.IsSuccess, writeResult.IsSuccess ? string.Empty : writeResult.GetException().Message);
 
         using (var executionProvider = CreateProjectorProvider(storageInfo))

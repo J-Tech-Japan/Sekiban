@@ -7,6 +7,7 @@ using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
+using Sekiban.Dcb.TestSupport;
 namespace Sekiban.Dcb.ColdEvents.Tests;
 
 public class ColdExporterTests
@@ -94,7 +95,7 @@ public class ColdExporterTests
         var exporter = CreateExporter(new StubEventStore([]));
 
         // When
-        var result = await exporter.ExportIncrementalAsync(ServiceId, CancellationToken.None);
+        var result = await exporter.ExportIncrementalAsync(ServiceId, CancellationToken.None).AsResultBoxAsync();
 
         // Then
         Assert.True(result.IsSuccess);
@@ -109,7 +110,7 @@ public class ColdExporterTests
         var exporter = CreateExporter(new StubEventStore([]), options);
 
         // When
-        var result = await exporter.ExportIncrementalAsync(ServiceId, CancellationToken.None);
+        var result = await exporter.ExportIncrementalAsync(ServiceId, CancellationToken.None).AsResultBoxAsync();
 
         // Then
         Assert.False(result.IsSuccess);
@@ -131,7 +132,7 @@ public class ColdExporterTests
         var exporter = CreateExporter(new StubEventStore(events));
 
         // When
-        var result = await exporter.ExportIncrementalAsync(ServiceId, CancellationToken.None);
+        var result = await exporter.ExportIncrementalAsync(ServiceId, CancellationToken.None).AsResultBoxAsync();
 
         // Then
         Assert.True(result.IsSuccess);
@@ -143,12 +144,12 @@ public class ColdExporterTests
     public async Task ExportIncrementalAsync_should_skip_when_lease_held()
     {
         // Given: lease already held
-        await _leaseManager.AcquireAsync($"cold-export-{ServiceId}", TimeSpan.FromHours(1), CancellationToken.None);
+        await _leaseManager.AcquireAsync($"cold-export-{ServiceId}", TimeSpan.FromHours(1), CancellationToken.None).AsResultBoxAsync();
         var events = new[] { CreateEvent(DateTime.UtcNow.AddMinutes(-10), "Event1") };
         var exporter = CreateExporter(new StubEventStore(events));
 
         // When
-        var result = await exporter.ExportIncrementalAsync(ServiceId, CancellationToken.None);
+        var result = await exporter.ExportIncrementalAsync(ServiceId, CancellationToken.None).AsResultBoxAsync();
 
         // Then: should return 0 exported (skipped)
         Assert.True(result.IsSuccess);
@@ -164,10 +165,10 @@ public class ColdExporterTests
         var exporter = CreateExporter(new StubEventStore(events));
 
         // When
-        await exporter.ExportIncrementalAsync(ServiceId, CancellationToken.None);
+        await exporter.ExportIncrementalAsync(ServiceId, CancellationToken.None).AsResultBoxAsync();
 
         // Then: manifest should be readable
-        var progressResult = await exporter.GetProgressAsync(ServiceId, CancellationToken.None);
+        var progressResult = await exporter.GetProgressAsync(ServiceId, CancellationToken.None).AsResultBoxAsync();
         Assert.True(progressResult.IsSuccess);
         var progress = progressResult.GetValue();
         Assert.NotNull(progress.LatestSafeSortableUniqueId);
@@ -187,7 +188,7 @@ public class ColdExporterTests
         var firstExporter = CreateExporter(new StubEventStore([e1, e2]), options, _storage, _leaseManager);
 
         // When: first export creates one segment with 2 events
-        var first = await firstExporter.ExportIncrementalAsync(ServiceId, CancellationToken.None);
+        var first = await firstExporter.ExportIncrementalAsync(ServiceId, CancellationToken.None).AsResultBoxAsync();
 
         // Then
         Assert.True(first.IsSuccess);
@@ -195,7 +196,7 @@ public class ColdExporterTests
         var firstPath = first.GetValue().NewSegments[0].Path;
 
         var secondExporter = CreateExporter(new StubEventStore([e1, e2, e3]), options, _storage, _leaseManager);
-        var second = await secondExporter.ExportIncrementalAsync(ServiceId, CancellationToken.None);
+        var second = await secondExporter.ExportIncrementalAsync(ServiceId, CancellationToken.None).AsResultBoxAsync();
 
         Assert.True(second.IsSuccess);
         var manifest = await ColdControlFileHelper.LoadManifestAsync(_storage, ServiceId, CancellationToken.None);
@@ -218,11 +219,11 @@ public class ColdExporterTests
         var e3 = CreateEvent(t0.AddSeconds(2), "Event3");
 
         var firstExporter = CreateExporter(new StubEventStore([e1, e2]), options, _storage, _leaseManager);
-        var first = await firstExporter.ExportIncrementalAsync(ServiceId, CancellationToken.None);
+        var first = await firstExporter.ExportIncrementalAsync(ServiceId, CancellationToken.None).AsResultBoxAsync();
         Assert.True(first.IsSuccess);
 
         var secondExporter = CreateExporter(new StubEventStore([e1, e2, e3]), options, _storage, _leaseManager);
-        var second = await secondExporter.ExportIncrementalAsync(ServiceId, CancellationToken.None);
+        var second = await secondExporter.ExportIncrementalAsync(ServiceId, CancellationToken.None).AsResultBoxAsync();
         Assert.True(second.IsSuccess);
 
         var manifest = await ColdControlFileHelper.LoadManifestAsync(_storage, ServiceId, CancellationToken.None);
@@ -248,11 +249,11 @@ public class ColdExporterTests
         var e3 = CreateEvent(t0.AddSeconds(2), "Event3");
 
         var firstExporter = CreateExporter(new StubEventStore([e1, e2]), options, _storage, _leaseManager);
-        var first = await firstExporter.ExportIncrementalAsync(ServiceId, CancellationToken.None);
+        var first = await firstExporter.ExportIncrementalAsync(ServiceId, CancellationToken.None).AsResultBoxAsync();
         Assert.True(first.IsSuccess);
 
         var secondExporter = CreateExporter(new StubEventStore([e1, e2, e3]), options, _storage, _leaseManager);
-        var second = await secondExporter.ExportIncrementalAsync(ServiceId, CancellationToken.None);
+        var second = await secondExporter.ExportIncrementalAsync(ServiceId, CancellationToken.None).AsResultBoxAsync();
         Assert.True(second.IsSuccess);
 
         var manifest = await ColdControlFileHelper.LoadManifestAsync(_storage, ServiceId, CancellationToken.None);
@@ -277,11 +278,11 @@ public class ColdExporterTests
         var e3 = CreateEvent(t0.AddSeconds(2), "Event3");
 
         var firstExporter = CreateExporter(new StubEventStore([e1, e2]), options, _storage, _leaseManager);
-        var first = await firstExporter.ExportIncrementalAsync(ServiceId, CancellationToken.None);
+        var first = await firstExporter.ExportIncrementalAsync(ServiceId, CancellationToken.None).AsResultBoxAsync();
         Assert.True(first.IsSuccess);
 
         var secondExporter = CreateExporter(new StubEventStore([e1, e2, e3]), options, _storage, _leaseManager);
-        var second = await secondExporter.ExportIncrementalAsync(ServiceId, CancellationToken.None);
+        var second = await secondExporter.ExportIncrementalAsync(ServiceId, CancellationToken.None).AsResultBoxAsync();
         Assert.True(second.IsSuccess);
 
         var manifest = await ColdControlFileHelper.LoadManifestAsync(_storage, ServiceId, CancellationToken.None);
@@ -306,11 +307,11 @@ public class ColdExporterTests
         var e3 = CreateEvent(t0.AddSeconds(2), "Event3");
 
         var firstExporter = CreateExporter(new StubEventStore([e1, e2]), options, _storage, _leaseManager);
-        var first = await firstExporter.ExportIncrementalAsync(ServiceId, CancellationToken.None);
+        var first = await firstExporter.ExportIncrementalAsync(ServiceId, CancellationToken.None).AsResultBoxAsync();
         Assert.True(first.IsSuccess);
 
         var secondExporter = CreateExporter(new StubEventStore([e1, e2, e3]), options, _storage, _leaseManager);
-        var second = await secondExporter.ExportIncrementalAsync(ServiceId, CancellationToken.None);
+        var second = await secondExporter.ExportIncrementalAsync(ServiceId, CancellationToken.None).AsResultBoxAsync();
         Assert.True(second.IsSuccess);
 
         var manifest = await ColdControlFileHelper.LoadManifestAsync(_storage, ServiceId, CancellationToken.None);
@@ -331,7 +332,7 @@ public class ColdExporterTests
         var trickleThree = CreateEvents(t0.AddMinutes(3), 8, "TrickleC");
 
         var firstExporter = CreateExporter(new StubEventStore(initialEvents), options, _storage, _leaseManager);
-        var first = await firstExporter.ExportIncrementalAsync(ServiceId, CancellationToken.None);
+        var first = await firstExporter.ExportIncrementalAsync(ServiceId, CancellationToken.None).AsResultBoxAsync();
         Assert.True(first.IsSuccess);
 
         var secondExporter = CreateExporter(
@@ -339,7 +340,7 @@ public class ColdExporterTests
             options,
             _storage,
             _leaseManager);
-        var second = await secondExporter.ExportIncrementalAsync(ServiceId, CancellationToken.None);
+        var second = await secondExporter.ExportIncrementalAsync(ServiceId, CancellationToken.None).AsResultBoxAsync();
         Assert.True(second.IsSuccess);
         var secondManifest = await ColdControlFileHelper.LoadManifestAsync(_storage, ServiceId, CancellationToken.None);
         Assert.NotNull(secondManifest);
@@ -351,7 +352,7 @@ public class ColdExporterTests
             options,
             _storage,
             _leaseManager);
-        var third = await thirdExporter.ExportIncrementalAsync(ServiceId, CancellationToken.None);
+        var third = await thirdExporter.ExportIncrementalAsync(ServiceId, CancellationToken.None).AsResultBoxAsync();
         Assert.True(third.IsSuccess);
         var thirdManifest = await ColdControlFileHelper.LoadManifestAsync(_storage, ServiceId, CancellationToken.None);
         Assert.NotNull(thirdManifest);
@@ -364,7 +365,7 @@ public class ColdExporterTests
             options,
             _storage,
             _leaseManager);
-        var fourth = await fourthExporter.ExportIncrementalAsync(ServiceId, CancellationToken.None);
+        var fourth = await fourthExporter.ExportIncrementalAsync(ServiceId, CancellationToken.None).AsResultBoxAsync();
         Assert.True(fourth.IsSuccess);
 
         var manifest = await ColdControlFileHelper.LoadManifestAsync(_storage, ServiceId, CancellationToken.None);
@@ -388,11 +389,11 @@ public class ColdExporterTests
         var flakyStorage = new FailFirstManifestWriteStorage(baseStorage, ServiceId);
 
         var firstExporter = CreateExporter(new StubEventStore([e1, e2]), options, flakyStorage, _leaseManager);
-        var first = await firstExporter.ExportIncrementalAsync(ServiceId, CancellationToken.None);
+        var first = await firstExporter.ExportIncrementalAsync(ServiceId, CancellationToken.None).AsResultBoxAsync();
         Assert.True(first.IsSuccess);
 
         var secondExporter = CreateExporter(new StubEventStore([e1, e2, e3]), options, flakyStorage, _leaseManager);
-        var second = await secondExporter.ExportIncrementalAsync(ServiceId, CancellationToken.None);
+        var second = await secondExporter.ExportIncrementalAsync(ServiceId, CancellationToken.None).AsResultBoxAsync();
 
         Assert.True(second.IsSuccess);
         var manifest = await ColdControlFileHelper.LoadManifestAsync(flakyStorage, ServiceId, CancellationToken.None);
@@ -416,21 +417,20 @@ public class ColdExporterTests
         var failingCheckpointStorage = new FailingCheckpointStorage(baseStorage, ServiceId);
 
         var firstExporter = CreateExporter(new StubEventStore([e1, e2]), options, baseStorage, _leaseManager);
-        var first = await firstExporter.ExportIncrementalAsync(ServiceId, CancellationToken.None);
+        var first = await firstExporter.ExportIncrementalAsync(ServiceId, CancellationToken.None).AsResultBoxAsync();
         Assert.True(first.IsSuccess);
 
         var secondExporter = CreateExporter(new StubEventStore([e1, e2, e3]), options, failingCheckpointStorage, _leaseManager);
-        var second = await secondExporter.ExportIncrementalAsync(ServiceId, CancellationToken.None);
+        var second = await secondExporter.ExportIncrementalAsync(ServiceId, CancellationToken.None).AsResultBoxAsync();
         Assert.False(second.IsSuccess);
 
         var staleProgress = await CreateExporter(new StubEventStore([]), options, baseStorage, _leaseManager)
             .GetProgressAsync(ServiceId, CancellationToken.None);
-        Assert.True(staleProgress.IsSuccess);
-        Assert.Equal(e2.SortableUniqueIdValue, staleProgress.GetValue().NextSinceSortableUniqueId);
-        Assert.Equal(e3.SortableUniqueIdValue, staleProgress.GetValue().LatestSafeSortableUniqueId);
+        Assert.Equal(e2.SortableUniqueIdValue, staleProgress.NextSinceSortableUniqueId);
+        Assert.Equal(e3.SortableUniqueIdValue, staleProgress.LatestSafeSortableUniqueId);
 
         var retryExporter = CreateExporter(new StubEventStore([e1, e2, e3]), options, baseStorage, _leaseManager);
-        var retry = await retryExporter.ExportIncrementalAsync(ServiceId, CancellationToken.None);
+        var retry = await retryExporter.ExportIncrementalAsync(ServiceId, CancellationToken.None).AsResultBoxAsync();
 
         Assert.True(retry.IsSuccess);
         Assert.Equal(0, retry.GetValue().ExportedEventCount);
@@ -441,7 +441,7 @@ public class ColdExporterTests
         Assert.Equal(3, manifest.Segments[0].EventCount);
         Assert.Equal(e3.SortableUniqueIdValue, manifest.Segments[0].ToSortableUniqueId);
 
-        var repairedProgress = await retryExporter.GetProgressAsync(ServiceId, CancellationToken.None);
+        var repairedProgress = await retryExporter.GetProgressAsync(ServiceId, CancellationToken.None).AsResultBoxAsync();
         Assert.True(repairedProgress.IsSuccess);
         Assert.Equal(e3.SortableUniqueIdValue, repairedProgress.GetValue().NextSinceSortableUniqueId);
     }
@@ -457,7 +457,7 @@ public class ColdExporterTests
         var exporter = CreateExporter(new StubEventStore(events), storage: failingStorage);
 
         // When
-        var result = await exporter.ExportIncrementalAsync(ServiceId, CancellationToken.None);
+        var result = await exporter.ExportIncrementalAsync(ServiceId, CancellationToken.None).AsResultBoxAsync();
 
         // Then
         Assert.False(result.IsSuccess);
@@ -474,7 +474,7 @@ public class ColdExporterTests
         };
         var exporter = CreateExporter(new StreamOnlyStubEventStore(events));
 
-        var result = await exporter.ExportIncrementalAsync(ServiceId, CancellationToken.None);
+        var result = await exporter.ExportIncrementalAsync(ServiceId, CancellationToken.None).AsResultBoxAsync();
 
         Assert.True(result.IsSuccess);
         Assert.Equal(2, result.GetValue().ExportedEventCount);
@@ -488,7 +488,7 @@ public class ColdExporterTests
         var exporter = CreateExporter(new StubEventStore([]));
 
         // When
-        var result = await exporter.GetProgressAsync(ServiceId, CancellationToken.None);
+        var result = await exporter.GetProgressAsync(ServiceId, CancellationToken.None).AsResultBoxAsync();
 
         // Then
         Assert.True(result.IsSuccess);
@@ -507,34 +507,34 @@ public class ColdExporterTests
             _events = events;
         }
 
-        public Task<ResultBox<IEnumerable<TagStream>>> ReadTagsAsync(ITag tag)
+        public Task<IEnumerable<TagStream>> ReadTagsAsync(ITag tag)
             => throw new NotSupportedException();
 
-        public Task<ResultBox<TagState>> GetLatestTagAsync(ITag tag)
+        public Task<TagState> GetLatestTagAsync(ITag tag)
             => throw new NotSupportedException();
 
-        public Task<ResultBox<bool>> TagExistsAsync(ITag tag)
+        public Task<bool> TagExistsAsync(ITag tag)
             => throw new NotSupportedException();
 
-        public Task<ResultBox<long>> GetEventCountAsync(SortableUniqueId? since = null)
+        public Task<long> GetEventCountAsync(SortableUniqueId? since = null)
             => throw new NotSupportedException();
 
-        public Task<ResultBox<IEnumerable<TagInfo>>> GetAllTagsAsync(string? tagGroup = null)
+        public Task<IEnumerable<TagInfo>> GetAllTagsAsync(string? tagGroup = null)
             => throw new NotSupportedException();
 
-        public Task<ResultBox<string>> GetLatestSortableUniqueIdAsync()
+        public Task<string> GetLatestSortableUniqueIdAsync()
             => throw new NotSupportedException();
 
-        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null)
+        public Task<IEnumerable<SerializableEvent>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null)
         {
             IEnumerable<SerializableEvent> result = since is null
                 ? _events
                 : _events.Where(e =>
                     string.Compare(e.SortableUniqueIdValue, since.Value, StringComparison.Ordinal) > 0);
-            return Task.FromResult(ResultBox.FromValue(result));
+            return Task.FromResult(result);
         }
 
-        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(
+        public Task<IEnumerable<SerializableEvent>> ReadAllSerializableEventsAsync(
             SortableUniqueId? since,
             int? maxCount)
         {
@@ -547,23 +547,21 @@ public class ColdExporterTests
                 result = result.Take(maxCount.Value);
             }
 
-            return Task.FromResult(ResultBox.FromValue(result));
+            return Task.FromResult(result);
         }
 
-        public Task<ResultBox<SerializableEvent>> ReadSerializableEventAsync(Guid eventId)
+        public Task<SerializableEvent?> ReadSerializableEventAsync(Guid eventId)
         {
             var result = _events.FirstOrDefault(e => e.Id == eventId);
-            return result == null
-                ? Task.FromResult(ResultBox.Error<SerializableEvent>(new KeyNotFoundException($"Event {eventId} not found")))
-                : Task.FromResult(ResultBox.FromValue(result));
+            return Task.FromResult<SerializableEvent?>(result);
         }
 
-        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadSerializableEventsByTagAsync(
+        public Task<IEnumerable<SerializableEvent>> ReadSerializableEventsByTagAsync(
             ITag tag,
             SortableUniqueId? since = null)
             => throw new NotSupportedException();
 
-        public Task<ResultBox<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>>
+        public Task<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>
             WriteSerializableEventsAsync(IEnumerable<SerializableEvent> events)
             => throw new NotSupportedException();
     }
@@ -579,34 +577,34 @@ public class ColdExporterTests
             _checkpointPath = ColdStoragePaths.CheckpointPath(serviceId);
         }
 
-        public Task<ResultBox<ColdStorageObject>> GetAsync(string path, CancellationToken ct)
+        public Task<ColdStorageObject?> GetAsync(string path, CancellationToken ct)
             => _inner.GetAsync(path, ct);
 
-        public Task<ResultBox<bool>> PutAsync(string path, byte[] data, string? expectedETag, CancellationToken ct)
+        public Task<bool> PutAsync(string path, byte[] data, string? expectedETag, CancellationToken ct)
         {
             if (string.Equals(path, _checkpointPath, StringComparison.Ordinal))
             {
-                return Task.FromResult(ResultBox.Error<bool>(
-                    new InvalidOperationException("checkpoint write failed")));
+                return Task.FromException<bool>(
+                    new InvalidOperationException("checkpoint write failed"));
             }
             return _inner.PutAsync(path, data, expectedETag, ct);
         }
 
-        public Task<ResultBox<bool>> PutAsync(string path, Stream data, string? expectedETag, CancellationToken ct)
+        public Task<bool> PutAsync(string path, Stream data, string? expectedETag, CancellationToken ct)
         {
             if (string.Equals(path, _checkpointPath, StringComparison.Ordinal))
             {
-                return Task.FromResult(ResultBox.Error<bool>(
-                    new InvalidOperationException("checkpoint write failed")));
+                return Task.FromException<bool>(
+                    new InvalidOperationException("checkpoint write failed"));
             }
 
             return _inner.PutAsync(path, data, expectedETag, ct);
         }
 
-        public Task<ResultBox<IReadOnlyList<string>>> ListAsync(string prefix, CancellationToken ct)
+        public Task<IReadOnlyList<string>> ListAsync(string prefix, CancellationToken ct)
             => _inner.ListAsync(prefix, ct);
 
-        public Task<ResultBox<bool>> DeleteAsync(string path, CancellationToken ct)
+        public Task<bool> DeleteAsync(string path, CancellationToken ct)
             => _inner.DeleteAsync(path, ct);
     }
 
@@ -648,46 +646,44 @@ public class ColdExporterTests
             }
         }
 
-        public Task<ResultBox<IEnumerable<TagStream>>> ReadTagsAsync(ITag tag)
+        public Task<IEnumerable<TagStream>> ReadTagsAsync(ITag tag)
             => throw new NotSupportedException();
 
-        public Task<ResultBox<TagState>> GetLatestTagAsync(ITag tag)
+        public Task<TagState> GetLatestTagAsync(ITag tag)
             => throw new NotSupportedException();
 
-        public Task<ResultBox<bool>> TagExistsAsync(ITag tag)
+        public Task<bool> TagExistsAsync(ITag tag)
             => throw new NotSupportedException();
 
-        public Task<ResultBox<long>> GetEventCountAsync(SortableUniqueId? since = null)
+        public Task<long> GetEventCountAsync(SortableUniqueId? since = null)
             => throw new NotSupportedException();
 
-        public Task<ResultBox<IEnumerable<TagInfo>>> GetAllTagsAsync(string? tagGroup = null)
+        public Task<IEnumerable<TagInfo>> GetAllTagsAsync(string? tagGroup = null)
             => throw new NotSupportedException();
 
-        public Task<ResultBox<string>> GetLatestSortableUniqueIdAsync()
+        public Task<string> GetLatestSortableUniqueIdAsync()
             => throw new NotSupportedException();
 
-        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null)
+        public Task<IEnumerable<SerializableEvent>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null)
             => throw new NotSupportedException("stream path should be used");
 
-        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(
+        public Task<IEnumerable<SerializableEvent>> ReadAllSerializableEventsAsync(
             SortableUniqueId? since,
             int? maxCount)
             => throw new NotSupportedException("stream path should be used");
 
-        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadSerializableEventsByTagAsync(
+        public Task<IEnumerable<SerializableEvent>> ReadSerializableEventsByTagAsync(
             ITag tag,
             SortableUniqueId? since = null)
             => throw new NotSupportedException();
 
-        public Task<ResultBox<SerializableEvent>> ReadSerializableEventAsync(Guid eventId)
+        public Task<SerializableEvent?> ReadSerializableEventAsync(Guid eventId)
         {
             var result = _events.FirstOrDefault(e => e.Id == eventId);
-            return result == null
-                ? Task.FromResult(ResultBox.Error<SerializableEvent>(new KeyNotFoundException($"Event {eventId} not found")))
-                : Task.FromResult(ResultBox.FromValue(result));
+            return Task.FromResult<SerializableEvent?>(result);
         }
 
-        public Task<ResultBox<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>>
+        public Task<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>
             WriteSerializableEventsAsync(IEnumerable<SerializableEvent> events)
             => throw new NotSupportedException();
     }
@@ -704,30 +700,30 @@ public class ColdExporterTests
             _manifestPath = ColdStoragePaths.ManifestPath(serviceId);
         }
 
-        public Task<ResultBox<ColdStorageObject>> GetAsync(string path, CancellationToken ct)
+        public Task<ColdStorageObject?> GetAsync(string path, CancellationToken ct)
             => _inner.GetAsync(path, ct);
 
-        public Task<ResultBox<bool>> PutAsync(string path, byte[] data, string? expectedETag, CancellationToken ct)
+        public Task<bool> PutAsync(string path, byte[] data, string? expectedETag, CancellationToken ct)
         {
             if (_shouldFail
                 && string.Equals(path, _manifestPath, StringComparison.Ordinal)
                 && expectedETag is not null)
             {
                 _shouldFail = false;
-                return Task.FromResult(ResultBox.Error<bool>(
-                    new InvalidOperationException("ETag mismatch at manifest")));
+                return Task.FromException<bool>(
+                    new InvalidOperationException("ETag mismatch at manifest"));
             }
 
             return _inner.PutAsync(path, data, expectedETag, ct);
         }
 
-        public Task<ResultBox<bool>> PutAsync(string path, Stream data, string? expectedETag, CancellationToken ct)
+        public Task<bool> PutAsync(string path, Stream data, string? expectedETag, CancellationToken ct)
             => _inner.PutAsync(path, data, expectedETag, ct);
 
-        public Task<ResultBox<IReadOnlyList<string>>> ListAsync(string prefix, CancellationToken ct)
+        public Task<IReadOnlyList<string>> ListAsync(string prefix, CancellationToken ct)
             => _inner.ListAsync(prefix, ct);
 
-        public Task<ResultBox<bool>> DeleteAsync(string path, CancellationToken ct)
+        public Task<bool> DeleteAsync(string path, CancellationToken ct)
             => _inner.DeleteAsync(path, ct);
     }
 

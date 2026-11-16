@@ -1,4 +1,5 @@
 using ResultBoxes;
+using Sekiban.Dcb.Common;
 using Sekiban.Dcb.MultiProjections;
 namespace Sekiban.Dcb.Storage.Checkpoints;
 
@@ -38,7 +39,7 @@ internal sealed class CheckpointMutationCoordinator
 
     /// <summary>Reads the control-plane slot (capable stores only). Callers gate on this BEFORE binding any payload.</summary>
     public Task<ResultBox<CheckpointSlot>> ReadSlotAsync(string projectorName, string projectorVersion, CancellationToken ct = default) =>
-        _cas!.ReadCheckpointSlotAsync(projectorName, projectorVersion, ct);
+        _cas!.ReadCheckpointSlotAsync(projectorName, projectorVersion, ct).ToResultBoxAsync();
 
     /// <summary>Adopts an ACTIVE slot on restore so the first persist CASes on its exact token (stale writers rejected).</summary>
     public void AdoptActive(CheckpointSlot slot)
@@ -66,7 +67,8 @@ internal sealed class CheckpointMutationCoordinator
         if (_cas is null)
         {
             // LEGACY-FALLBACK (non-capable): unconditional upsert (byte-for-byte).
-            return await _store.UpsertFromStreamAsync(request, stream, offloadThreshold, CancellationToken.None);
+            return await _store.UpsertFromStreamAsync(request, stream, offloadThreshold, CancellationToken.None)
+                .ToResultBoxAsync();
         }
 
         // The adopted slot is per (projectorName, projectorVersion). A request that targets a DIFFERENT version (a version
@@ -78,7 +80,8 @@ internal sealed class CheckpointMutationCoordinator
 
         if (!adoptedMatchesRequest)
         {
-            var freshResult = await _cas.ReadCheckpointSlotAsync(request.ProjectorName, request.ProjectorVersion, CancellationToken.None);
+            var freshResult = await _cas.ReadCheckpointSlotAsync(request.ProjectorName, request.ProjectorVersion, CancellationToken.None)
+                .ToResultBoxAsync();
             var freshExpectation = freshResult.IsSuccess && freshResult.GetValue() is { IsActive: true } freshActive
                 ? CheckpointExpectation.FromSlot(freshActive)
                 : CheckpointExpectation.Absent;
@@ -145,6 +148,7 @@ internal sealed class CheckpointMutationCoordinator
         if (_cas is not null)
         {
             var slotResult = await _cas.ReadCheckpointSlotAsync(projectorName, projectorVersion, cancellationToken)
+                .ToResultBoxAsync()
                 .WaitAsync(cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
             if (!slotResult.IsSuccess)
@@ -178,7 +182,7 @@ internal sealed class CheckpointMutationCoordinator
 
         // Non-capable store: legacy delete-based invalidation (byte-for-byte unchanged). LEGACY-FALLBACK (non-capable).
         cancellationToken.ThrowIfCancellationRequested();
-        var deleteResult = await _store.DeleteAsync(projectorName, projectorVersion, cancellationToken);
+        var deleteResult = await _store.DeleteAsync(projectorName, projectorVersion, cancellationToken).ToResultBoxAsync();
         if (!deleteResult.IsSuccess)
         {
             throw new InvalidOperationException(
@@ -199,10 +203,11 @@ internal sealed class CheckpointMutationCoordinator
         if (_cas is null)
         {
             // LEGACY-FALLBACK (non-capable): unconditional upsert (byte-for-byte).
-            return await _store.UpsertFromStreamAsync(request, stream, offloadThreshold, ct);
+            return await _store.UpsertFromStreamAsync(request, stream, offloadThreshold, ct).ToResultBoxAsync();
         }
 
-        var slotResult = await _cas.ReadCheckpointSlotAsync(request.ProjectorName, request.ProjectorVersion, ct);
+        var slotResult = await _cas.ReadCheckpointSlotAsync(request.ProjectorName, request.ProjectorVersion, ct)
+            .ToResultBoxAsync();
         var slot = slotResult.IsSuccess ? slotResult.GetValue() : CheckpointSlot.Absent;
         var outcome = slot.IsTombstoned
             ? await _cas.CommitRebuiltAsync(request, stream, CheckpointExpectation.FromSlot(slot), offloadThreshold, ct)

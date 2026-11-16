@@ -11,6 +11,7 @@ using Sekiban.Dcb.Events;
 using Sekiban.Dcb.ServiceId;
 using Sekiban.Dcb.Storage;
 using Xunit;
+using Sekiban.Dcb.TestSupport;
 
 namespace Sekiban.Dcb.Tests;
 
@@ -29,13 +30,13 @@ public sealed class DynamoDbBatchWriteSnapshotTests
         var (store, options, client) = NewStore(maxTransactionItems: 1);
         options.MaxBatchWriteItems = invalidSize;
 
-        var typed = await store.WriteEventsAsync([CreateTypedEvent("typed-invalid")]);
+        var typed = await store.WriteEventsAsync([CreateTypedEvent("typed-invalid")]).AsResultBoxAsync();
         AssertInvalidBatchWriteOption(typed.GetException(), invalidSize);
         Assert.Empty(client.BatchRequests);
         Assert.Empty(client.TransactionRequests);
 
         client.ClearRequests();
-        var serialized = await store.WriteSerializableEventsAsync([CreateSerializedEvent(["serialized-invalid"])]);
+        var serialized = await store.WriteSerializableEventsAsync([CreateSerializedEvent(["serialized-invalid"])]).AsResultBoxAsync();
         AssertInvalidBatchWriteOption(serialized.GetException(), invalidSize);
         Assert.Empty(client.BatchRequests);
         Assert.Empty(client.TransactionRequests);
@@ -50,7 +51,7 @@ public sealed class DynamoDbBatchWriteSnapshotTests
         options.MaxBatchWriteItems = chunkSize;
 
         var result = await store.WriteSerializableEventsAsync([CreateSerializedEvent(
-            Enumerable.Range(0, 100).Select(index => $"tag-{index}").ToArray())]);
+            Enumerable.Range(0, 100).Select(index => $"tag-{index}").ToArray())]).AsResultBoxAsync();
 
         Assert.True(result.IsSuccess);
         Assert.Equal([1], RequestSizes(client, options.EventsTableName));
@@ -72,7 +73,7 @@ public sealed class DynamoDbBatchWriteSnapshotTests
                 options.MaxBatchWriteItems = 0;
         };
 
-        var result = await store.WriteSerializableEventsAsync(CreateMultiEventBatch());
+        var result = await store.WriteSerializableEventsAsync(CreateMultiEventBatch()).AsResultBoxAsync();
 
         Assert.True(result.IsSuccess);
         Assert.Equal([25, 1], RequestSizes(client, options.EventsTableName));
@@ -91,7 +92,7 @@ public sealed class DynamoDbBatchWriteSnapshotTests
                 options.MaxBatchWriteItems = 26;
         };
 
-        var result = await store.WriteSerializableEventsAsync(CreateMultiEventBatch());
+        var result = await store.WriteSerializableEventsAsync(CreateMultiEventBatch()).AsResultBoxAsync();
 
         Assert.True(result.IsSuccess);
         Assert.Equal([25, 1], RequestSizes(client, options.EventsTableName));
@@ -113,7 +114,7 @@ public sealed class DynamoDbBatchWriteSnapshotTests
         client.BatchWriteFailure = (tableName, _) =>
             tableName == options.TagsTableName ? failure : null;
 
-        var result = await store.WriteSerializableEventsAsync(CreateMultiEventBatch());
+        var result = await store.WriteSerializableEventsAsync(CreateMultiEventBatch()).AsResultBoxAsync();
 
         Assert.False(result.IsSuccess);
         Assert.Same(failure, result.GetException());
@@ -128,12 +129,12 @@ public sealed class DynamoDbBatchWriteSnapshotTests
         var (store, options, client) = NewStore(maxTransactionItems: 1);
         options.MaxBatchWriteItems = 25;
 
-        var first = await store.WriteSerializableEventsAsync([CreateSerializedEvent(["first"]) ]);
+        var first = await store.WriteSerializableEventsAsync([CreateSerializedEvent(["first"]) ]).AsResultBoxAsync();
         Assert.True(first.IsSuccess);
 
         client.ClearRequests();
         options.MaxBatchWriteItems = 10;
-        var second = await store.WriteSerializableEventsAsync(CreateSimpleEventBatch(26));
+        var second = await store.WriteSerializableEventsAsync(CreateSimpleEventBatch(26)).AsResultBoxAsync();
 
         Assert.True(second.IsSuccess);
         Assert.Equal([10, 10, 6], RequestSizes(client, options.EventsTableName));
@@ -146,7 +147,7 @@ public sealed class DynamoDbBatchWriteSnapshotTests
         var (store, options, client) = NewStore(maxTransactionItems: 100);
         options.MaxBatchWriteItems = 0;
 
-        var result = await store.WriteSerializableEventsAsync([CreateSerializedEvent(["transaction"]) ]);
+        var result = await store.WriteSerializableEventsAsync([CreateSerializedEvent(["transaction"]) ]).AsResultBoxAsync();
 
         Assert.True(result.IsSuccess);
         Assert.Empty(client.BatchRequests);
@@ -156,7 +157,7 @@ public sealed class DynamoDbBatchWriteSnapshotTests
         var conditional = await store.AppendIfUniqueAsync(
             new ConditionalAppendRequest(
                 "g69-conditional",
-                CreateTypedEvent("conditional").ToSerializableEvent(DomainType.GetDomainTypes().EventTypes)));
+                CreateTypedEvent("conditional").ToSerializableEvent(DomainType.GetDomainTypes().EventTypes))).AsResultBoxAsync();
 
         Assert.True(
             conditional.IsSuccess,
@@ -189,7 +190,7 @@ public sealed class DynamoDbBatchWriteSnapshotTests
 
         var result = await store.WriteSerializableEventsAsync([
             CreateSerializedEvent(Enumerable.Range(0, 100).Select(index => $"di-tag-{index}").ToArray())
-        ]);
+        ]).AsResultBoxAsync();
 
         AssertInvalidBatchWriteOption(result.GetException(), 0);
         Assert.Empty(client.BatchRequests);
