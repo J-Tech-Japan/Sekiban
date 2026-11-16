@@ -1,6 +1,7 @@
 extern alias WithoutResultFacade;
 
 using Microsoft.Extensions.DependencyInjection;
+using Orleans.Serialization;
 using Orleans.TestingHost;
 using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Common;
@@ -235,12 +236,75 @@ public class GrainExceptionTransportTests : IAsyncLifetime
     [Theory]
     [InlineData(ProbeFailure.CodecLessException, "[ProbeStoreFailureException] codec-less failure")]
     [InlineData(ProbeFailure.CodecLessInnerException, "[InvalidOperationException] outer failure")]
+    [InlineData(ProbeFailure.NestedCodecLessData, "[InvalidOperationException] outer failure")]
+    [InlineData(ProbeFailure.SelfReferencingData, "[InvalidOperationException] refers to itself")]
     public async Task ExceptionWithoutACodec_ArrivesInTheTypeMessageForm(ProbeFailure failure, string expectedMessage)
     {
         var thrown = await Assert.ThrowsAsync<Exception>(() => Probe().FailAsync(failure));
 
         Assert.Equal(typeof(Exception), thrown.GetType());
         Assert.Equal(expectedMessage, thrown.Message);
+    }
+
+    [Fact]
+    public async Task AggregateWithCodecLessData_ArrivesInTheTypeMessageForm()
+    {
+        var thrown = await Assert.ThrowsAsync<Exception>(() => Probe().FailAsync(ProbeFailure.AggregateWithCodecLessData));
+
+        Assert.Equal(typeof(Exception), thrown.GetType());
+        Assert.StartsWith("[AggregateException] aggregate failure", thrown.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task AggregateOfFortySystemExceptions_TravelsUnchanged()
+    {
+        var thrown = await Assert.ThrowsAsync<AggregateException>(
+            () => Probe().FailAsync(ProbeFailure.AggregateOfFortySystemExceptions));
+
+        Assert.Equal(40, thrown.InnerExceptions.Count);
+        Assert.All(thrown.InnerExceptions, inner => Assert.IsType<InvalidOperationException>(inner));
+        Assert.Equal("inner 39", thrown.InnerExceptions[39].Message);
+    }
+
+    [Theory]
+    [InlineData(ProbeFailure.CancellationWithCodecLessInnerException)]
+    [InlineData(ProbeFailure.CancellationWithCodecLessData)]
+    public async Task CancellationWithCodecLessContents_StaysACancellationWithItsMessage(ProbeFailure failure)
+    {
+        var thrown = await Assert.ThrowsAsync<OperationCanceledException>(() => Probe().FailAsync(failure));
+
+        Assert.Equal(typeof(OperationCanceledException), thrown.GetType());
+        Assert.Equal("restore cancelled", thrown.Message);
+        Assert.Null(thrown.InnerException);
+    }
+
+    [Fact]
+    public async Task TransportableFailure_IsLeftAsTheSameInstance()
+    {
+        using var services = new ServiceCollection().AddSerializer().BuildServiceProvider();
+        var failure = new AggregateException(
+            "aggregate failure",
+            Enumerable.Range(0, 40).Select(i => new InvalidOperationException($"inner {i}")));
+
+        var thrown = await Assert.ThrowsAsync<AggregateException>(
+            () => GrainFailureTransport.PrepareAsync(Task.FromException<int>(failure), () => services));
+
+        Assert.Same(failure, thrown);
+    }
+
+    [Fact]
+    public void SelfReferencingFailure_IsJudgedWithoutSerializing()
+    {
+        using var services = new ServiceCollection().AddSerializer().BuildServiceProvider();
+        var failure = new InvalidOperationException("refers to itself");
+        failure.Data["self"] = failure;
+        var holder = new InvalidOperationException("holds a cycle", new Exception("inner"));
+        holder.Data["items"] = new object[] { "text", holder.InnerException! };
+        holder.InnerException!.Data["back"] = holder;
+
+        Assert.False(GrainFailureTransport.CanTravel(failure, services));
+        Assert.False(GrainFailureTransport.CanTravel(holder, services));
+        Assert.True(GrainFailureTransport.CanTravel(new InvalidOperationException("plain"), services));
     }
 
     private IExceptionTransportProbeGrain Probe() => Client.GetGrain<IExceptionTransportProbeGrain>("probe");
@@ -328,7 +392,13 @@ public enum ProbeFailure
     TagHeadExpectationValidation,
     SystemException,
     CodecLessException,
-    CodecLessInnerException
+    CodecLessInnerException,
+    NestedCodecLessData,
+    SelfReferencingData,
+    AggregateWithCodecLessData,
+    AggregateOfFortySystemExceptions,
+    CancellationWithCodecLessInnerException,
+    CancellationWithCodecLessData
 }
 
 /// <summary>A test grain that fails with a chosen exception through the same transport preparation the Sekiban grains use.</summary>
@@ -342,6 +412,19 @@ public sealed class ExceptionTransportProbeGrain : Grain, IExceptionTransportPro
     public Task<int> FailAsync(ProbeFailure failure) =>
         GrainFailureTransport.PrepareAsync(Task.FromException<int>(Create(failure)), () => ServiceProvider);
 
+    private static Exception WithData(Exception exception, string key, object value)
+    {
+        exception.Data[key] = value;
+        return exception;
+    }
+
+    private static Exception SelfReferencing()
+    {
+        var exception = new InvalidOperationException("refers to itself");
+        exception.Data["self"] = exception;
+        return exception;
+    }
+
     private static Exception Create(ProbeFailure failure) => failure switch
     {
         ProbeFailure.ExpectedTagPositionConflict => GrainExceptionTransportTests.ExpectedConflict(),
@@ -353,6 +436,25 @@ public sealed class ExceptionTransportProbeGrain : Grain, IExceptionTransportPro
         ProbeFailure.CodecLessInnerException => new InvalidOperationException(
             "outer failure",
             new ProbeStoreFailureException("codec-less inner failure")),
+        ProbeFailure.NestedCodecLessData => WithData(
+            new InvalidOperationException("outer failure"),
+            "cause",
+            new InvalidOperationException("cause", new ProbeStoreFailureException("codec-less inner failure"))),
+        ProbeFailure.SelfReferencingData => SelfReferencing(),
+        ProbeFailure.AggregateWithCodecLessData => WithData(
+            new AggregateException("aggregate failure", new InvalidOperationException("inner")),
+            "detail",
+            new ProbeStoreFailureException("codec-less data")),
+        ProbeFailure.AggregateOfFortySystemExceptions => new AggregateException(
+            "aggregate failure",
+            Enumerable.Range(0, 40).Select(i => new InvalidOperationException($"inner {i}"))),
+        ProbeFailure.CancellationWithCodecLessInnerException => new OperationCanceledException(
+            "restore cancelled",
+            new ProbeStoreFailureException("codec-less inner failure")),
+        ProbeFailure.CancellationWithCodecLessData => WithData(
+            new OperationCanceledException("restore cancelled"),
+            "detail",
+            new ProbeStoreFailureException("codec-less data")),
         _ => throw new ArgumentOutOfRangeException(nameof(failure))
     };
 }
