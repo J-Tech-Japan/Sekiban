@@ -120,7 +120,8 @@ throw new ValidationException("Enrollment validation failed", errors);
 ### パターン4: 既存リソースの競合
 
 ```csharp
-var exists = await context.TagExistsAsync(tag).UnwrapBox();
+// WithoutResult の TagExistsAsync は Task<bool> を返します（失敗時は例外がそのまま投げられます）
+var exists = await context.TagExistsAsync(tag);
 if (exists)
 {
     throw new ConflictException($"Student with ID {command.StudentId} already exists");

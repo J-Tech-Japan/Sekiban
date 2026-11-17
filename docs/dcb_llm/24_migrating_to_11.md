@@ -50,12 +50,13 @@ Event data, tag data, snapshots and persisted Orleans grain state did not change
   (source compatible, binary incompatible), and a domain registry compiled against an old Sekiban version fails to load
   with `TypeLoadException`.
 - **`ResultBoxes` is no longer a transitive dependency of WithoutResult.** If your WithoutResult application uses
-  `ResultBox` types itself (for example in a domain project), reference the package directly. The DCB templates already
-  do:
+  `ResultBox` types itself (for example in a domain project), reference the package directly:
 
   ```xml
   <PackageReference Include="ResultBoxes" Version="0.4.0" />
   ```
+
+  The WithoutResult and Decider DCB templates do not use `ResultBox` and no longer reference `ResultBoxes`.
 
 ## WithResult users
 

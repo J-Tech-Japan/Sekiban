@@ -1,4 +1,3 @@
-using ResultBoxes;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using NUnit.Framework;
@@ -22,17 +21,16 @@ public class ProjectionErrorTests
     [TestCase(false, false)]
     [TestCase(true, true)]
     [TestCase(false, true)]
-    public async Task RetryableErrors_ResultAndExceptionPathsReturn503(bool catchUp, bool wrapped)
+    public async Task RetryableErrors_MapperAndExceptionHandlerReturn503(bool catchUp, bool wrapped)
     {
         var prefix = catchUp ? MultiProjectionQueryFailClosedMessages.CatchUpInProgressPrefix
             : MultiProjectionQueryFailClosedMessages.RebuildPendingPrefix;
         var error = new Exception((wrapped ? "Transport wrapper: " : "") + prefix + " details");
-        var resultContext = Context();
-        var failedResult = ResultBox.Error<int>(error);
-        await ProjectionErrors.Map(failedResult.GetException(), Results.BadRequest()).ExecuteAsync(resultContext);
+        var mapperContext = Context();
+        await ProjectionErrors.Map(error, Results.BadRequest()).ExecuteAsync(mapperContext);
         var exceptionContext = Context();
         Assert.That(await new RetryableProjectionExceptionHandler().TryHandleAsync(exceptionContext, error, default), Is.True);
-        foreach (var context in new[] { resultContext, exceptionContext })
+        foreach (var context in new[] { mapperContext, exceptionContext })
         {
             Assert.That(context.Response.StatusCode, Is.EqualTo(503));
             Assert.That(context.Response.Headers["Retry-After"].ToString(), Is.EqualTo("2"));
