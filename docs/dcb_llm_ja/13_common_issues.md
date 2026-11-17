@@ -241,7 +241,7 @@ poison イベントのスキップ/隔離は**意図的に既定ではありま�
 永続化された投影 fault のクリアは、グレインの管理インターフェース(`IMultiProjectionGrain`、`GetStatusAsync` と同じ面)における**運用者専用**の操作です。**自動的には決して呼ばれず**、`ISekibanExecutor` にも公開されません。アプリケーション/クエリのコードからは起動できません。
 
 - **まず commit 済みトークンを読む**: **アップグレード済みの serving silo** で、リセット前に `TryGetProjectionFaultAsync()` を呼びます。成功した `ProjectionFaultReadResult` の `HasFault = true` なら `Fault` にプロジェクター名・イベント id・イベント型・位置・メッセージ・初回観測 UTC が入り、そのプロジェクター名・イベント id・位置をそのまま `ResetProjectionFaultAsync` に渡します。`HasFault = false` かつ `Fault = null` は **commit 済み descriptor が無い**ことだけを意味します。トークンを合成せず、失敗クエリ/`Exception.Data` の調査を通常の復旧手順にしないでください（既存 annotation との互換性は残りますが、canonical な運用 API ではありません）。
-- **それ以外の read outcome は「fault なし」にしない**: default interface body は implementer 互換性のための guard に過ぎず、直接呼ばれる旧 fake には明示的な unsupported を返します。旧 serving silo に新 RPC を生やす fallback ではありません。silo を先にアップグレードしてください。読み取りの失敗（タスクの失敗。10.x と WithResult ファサードでは `ResultBox` の error）は committed-state read failure の場合もあります。fault descriptor 書き込みが一時的に失敗している間は、通常クエリは fail-closed のままですが、この read は正しく「*commit 済み* fault なし」と報告します。live だけの識別情報でリセットせず、耐久書き込みを待つ/再試行してください。
+- **それ以外の read outcome は「fault なし」にしない**: default interface body は implementer 互換性のための guard に過ぎず、直接呼ばれる旧 fake には明示的な unsupported を返します。旧 serving silo に新 RPC を生やす fallback ではありません。silo を先にアップグレードしてください。読み取りの失敗（11 ではタスクの失敗、10.x では `ResultBox` の error）は committed-state read failure の場合もあります。fault descriptor 書き込みが一時的に失敗している間は、通常クエリは fail-closed のままですが、この read は正しく「*commit 済み* fault なし」と報告します。live だけの識別情報でリセットせず、耐久書き込みを待つ/再試行してください。
 - **永続 descriptor が権威**: トークンは単一ライター gate 内で現在の*永続* fault と照合されます。古いトークン・並行書き込みで変わった descriptor・プロジェクター不一致・fault 不在は通常のエラーで拒否され、**書き込みも fault クリアも行われません**。同一トークンのレースは高々1回だけ commit します。
 - **派生状態を再構築**: 正しいトークンは descriptor **と**派生チェックポイントを耐久的にクリアし、投影は catch-up で**先頭から再構築**されます。権威イベントは一切削除されません(グレインの派生スナップショット/チェックポイントのみ)。first-query barrier により、再構築が head に到達する前に「健全」応答が漏れることはありません。
 - **クリアは獲得するもの**: 耐久的クリアが commit された後にのみライブアクター fault がクリアされ、新規アクティベーションが要求されます。poison が依然として fold できなければ、再構築時に per-event 境界が fault を**再確立・再永続化**します — リセットはスキップや隔離をしません。恒久的なクリアは同じ位置が正常にリプレイされたときにのみ起こります。
@@ -676,8 +676,8 @@ blocking のままです。re-arm は現在の bounded episode を終了しま�
 (`forceFull: false`) と background gate settlement を開始します。対象クエリの中で
 full replay は実行しません。timer は interleave しますが、全体の同時実行制限で batch が
 skip される可能性があるため N 内の進捗は保証されません。gate が完了すれば成功し、
-未完了なら state/snapshot は失敗し（11 では grain 呼び出しが失敗し、WithResult ファサードでは `ResultBox.Error`
-になります）、scalar/list は `InvalidOperationException` を送出します。
+未完了なら state/snapshot は失敗し（11 ではどの呼び出し側でも grain 呼び出しが失敗します。10.x では
+`ResultBox.Error` でした）、scalar/list は `InvalidOperationException` を送出します。
 メッセージは `MultiProjectionQueryFailClosedMessages.CatchUpInProgressPrefix`
 (`Projection catch-up is in progress:`) で始まり、現在位置・target 位置・処理イベント数を含みます。
 background 完了後のクエリは成功します。待機中に検出した live projection fault も SEK-G14 が優先します。

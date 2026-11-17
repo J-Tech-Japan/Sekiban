@@ -68,10 +68,13 @@ WithResult でドメインを書くための API は変わっていません。�
 WithResult のインターフェイスは、例外ベースのコアのメンバーを明示的に実装し、あなたの箱を一度だけ開きます。
 失敗した箱は中の例外としてコアに届き、コアの失敗は WithResult ファサードが元の例外のまま箱に入れます。
 
-**箱の中のエラーが元の例外型になることがあります。** 10.x で `Exception("[TypeName] message")` に平坦化されていた
-失敗（Orleans の grain メンバーが返していた失敗）は、Orleans がシリアライズできる限り、元の例外型とメッセージの
-まま箱に入ります。[例外の転送](#例外の転送)を参照してください。`[TypeName]` の接頭辞で判定していたコードは、例外型で
-判定するように変えてください。
+**Orleans の grain から届くメッセージに `[TypeName]` の接頭辞が付かなくなることがあります。** 10.x では、箱を返して
+いた grain メンバーの失敗は `Exception("[TypeName] message")` に平坦化されて届きました。11 では、Orleans がシリアライズ
+できる限り、これらのメンバーは例外そのものを送ります（[例外の転送](#例外の転送)）。WithResult のエグゼキューターは
+これらの grain メンバーを公開していません。エグゼキューターが呼ぶのは `ITagConsistentGrain.MakeReservationAsync` だけで、
+その失敗はまとめて `InvalidOperationException("Failed to reserve tags: ...")` として報告されるため、そこに含まれるタグ
+ごとの文言が `[TypeName]` で始まらなくなることがあります。接頭辞に頼った判定はやめてください。grain を直接呼ぶコード
+は、例外を持った失敗したタスクを受け取ります（[Orleans](#orleans)）。
 
 WithResult のコードにも影響しうるソースの変更:
 
@@ -599,23 +602,30 @@ Orleans 10.4.2 がそのままシリアライズできる例外は、System・Mi
 - **Sekiban の例外のコンバーター**を Orleans.Core に追加しました。`[RegisterConverter]` で登録されるので設定は
   不要です。対象は `ExpectedTagPositionConflictException`、`ConditionalAppendInDoubtException`、
   `KeyReuseConflictException`、`TagHeadExpectationValidationException`（いずれも `Sekiban.Dcb.Storage`）と、以前から
-  ある `SekibanProjectionFaultException`（`Sekiban.Dcb.Actors`、記述子と `Data` を含む）です。コンストラクター経由で
-  作り直すので、型・メッセージ・プロパティが届きます。スタックトレースは届きません。
+  ある `SekibanProjectionFaultException`（`Sekiban.Dcb.Actors`、記述子を含む）です。コンストラクター経由で作り直す
+  ので、型・メッセージ・プロパティが届きます。スタックトレースとそれ以外の `Data` は届きません
+  （`SekibanProjectionFaultException` は届いた側で fault の注釈を付け直します）。
 - **以前箱を返していたメンバー**（上の `IMultiProjectionGrain` の 5 つと `ITagConsistentGrain` の 2 つ）では、Orleans
   がシリアライズできる失敗は同じ例外インスタンスのまま届きます。送る前に、`InnerException`、
   `AggregateException.InnerExceptions`、`Data` だけをたどります（各例外は一度だけ、深さ 64 まで、1024 個まで）。
   `Data` のキーと値はすべて、`null`・文字列・プリミティブ・列挙型・`decimal`・`DateTime`・`DateTimeOffset`・
-  `TimeSpan`・`Guid` のいずれかである必要があります。そのうえで、silo のシリアライザーで実際にシリアライズできるかを
-  試します。
+  `TimeSpan`・`Guid` のいずれかである必要があります。ただし上の 5 つのコンバーター対象の型は例外です。サロゲートは
+  自分のフィールドしか運ばないので `Data` は調べません（`Data` が自分自身を参照している
+  `SekibanProjectionFaultException` もコンバーター経由で届きます）。内部例外を調べるのは、サロゲートが内部例外を運ぶ
+  `ConditionalAppendInDoubtException` と `KeyReuseConflictException` だけです。この確認のあとで、silo のシリアライザー
+  で実際にシリアライズできるかを試します。
 - **フォールバック。** 条件を満たさない失敗は、10.x がこれらのメンバーで常に使っていた `Exception("[TypeName] message")`
-  になります。判定は保守的で、`Data` に複雑な値を持つ例外は、Orleans が運べる場合でも平坦化されます。
+  になります。判定は保守的で、Sekiban のコンバーターがない例外のうち、自身または内部例外の `Data` に複雑な値を持つ
+  ものは、Orleans が運べる場合でも平坦化されます。
 - **キャンセルは保たれます。** 運べないキャンセルは、同じメッセージの `OperationCanceledException`（または
   `TaskCanceledException`）になり、内部例外と `Data` は落ちます。
 
 まとめると、コンバーターのある Sekiban の型は型・メッセージ・プロパティを保ち、System の型は型とメッセージを保ち、
 コーデックのない型は `[TypeName] message` の形のままです。**コーデックがあるところでは `[TypeName]` の接頭辞は
-付かなくなりました。** Orleans.WithResult では転送された例外が失敗の箱に入り、Orleans.WithoutResult ではいつもの
-境界情報を付けて送出されます。
+付かなくなりました。** これらの grain メンバーを呼ぶ側は、どちらのファサードを使っていても失敗したタスクを受け取り
+ます。どちらの `OrleansDcbExecutor` もこれらを公開していません。エグゼキューターの経路で呼ばれるのは
+`MakeReservationAsync` だけで、その失敗はまとめて `InvalidOperationException("Failed to reserve tags: ...")` として
+報告されます。
 
 ## MaterializedView
 
@@ -691,48 +701,46 @@ protected async Task<MvCatchUpResult> CompleteCatchUpAsync(IMvApplyHost host, st
     `DurableSubscriptionRunner`、コマンドコンテキストとタグ状態のヘルパー）で箱にするのは、失敗したタスクだけです。
 12. クエリ: [クエリ](#クエリ)を参照してください（`IQueryCommon` だけで箱を返すハンドラーの非サポート、名前ベースの
     経路の `object` のケース、値型のリスト出力）。
-13. `TagConsistentGrain`: アクターが箱にせず送出した例外は、grain の境界で箱にされます。実際にはアクターがそうした
-    例外を送出することはありません。
-14. WithoutResult と Orleans.WithoutResult のシリアライズ済みメンバーは値を返します（[WithoutResult を使っている場合](#withoutresult-を使っている場合)）。
-15. `GeneralTagStateActor`（インメモリの経路のみ）: 最新位置の読み取りでの通信の失敗は「最新位置が不明」になります。
+13. WithoutResult と Orleans.WithoutResult のシリアライズ済みメンバーは値を返します（[WithoutResult を使っている場合](#withoutresult-を使っている場合)）。
+14. `GeneralTagStateActor`（インメモリの経路のみ）: 最新位置の読み取りでの通信の失敗は「最新位置が不明」になります。
     10.x で失敗の箱がそう扱われていたのと同じです。
-16. Orleans の `TagStateGrain` は Try メンバーで最新位置を読みます。アクターが報告した失敗は「最新位置が不明」、grain
+15. Orleans の `TagStateGrain` は Try メンバーで最新位置を読みます。アクターが報告した失敗は「最新位置が不明」、grain
     呼び出しの失敗（通信、タイムアウト）は 10.x と同じく伝わります。
 
 ### Orleans
 
-17. 以前箱を返していた grain メンバーは、本来の例外型とメッセージを保ちます。コーデックがあるところでは
+16. 以前箱を返していた grain メンバーは、本来の例外型とメッセージを保ちます。コーデックがあるところでは
     `[TypeName]` の接頭辞が付きません。
-18. `ITagConsistentGrain.TryGetLatestSortableUniqueIdAsync` を追加しました。
-19. 公開メンバーでは、grain 呼び出しの失敗も grain が報告した失敗も、どちらもタスクの失敗になります。
-20. `NativeProjectionQueryExecutor`: 独自の `IQueryTypes` が `null` を返すと、ResultBoxes の "no exception" エラーでは
+17. `ITagConsistentGrain.TryGetLatestSortableUniqueIdAsync` を追加しました。
+18. 公開メンバーでは、grain 呼び出しの失敗も grain が報告した失敗も、どちらもタスクの失敗になります。
+19. `NativeProjectionQueryExecutor`: 独自の `IQueryTypes` が `null` を返すと、ResultBoxes の "no exception" エラーでは
     なく `InvalidOperationException("Query X completed without a result.")` で失敗します。
-21. サードパーティの `IProjectionActorHost` がスナップショットの書き込み・復元で送出した場合、外側の
+20. サードパーティの `IProjectionActorHost` がスナップショットの書き込み・復元で送出した場合、外側の
     "Persistence failed" ログではなく、ホストが失敗を報告した場合と同じ扱い（警告と失敗した試行）になります。
-22. サンプルとテンプレートの persist・snapshot エンドポイント: grain 呼び出しの失敗（たとえば Orleans のタイムアウト）
+21. サンプルとテンプレートの persist・snapshot エンドポイント: grain 呼び出しの失敗（たとえば Orleans のタイムアウト）
     も、grain が報告した失敗と同じ警告と BadRequest の経路を通るようになりました。10.x では通信の失敗が例外
     ミドルウェアまで届いていました。どちらも同じ失敗したタスクとして届くので、例外型で確実に見分けることはできません。
-23. ResultBox の null 値の癖（null の値を失敗とみなすもの。たとえば null のストリームや、デシリアライズ結果が null の
+22. ResultBox の null 値の癖（null の値を失敗とみなすもの。たとえば null のストリームや、デシリアライズ結果が null の
     ペイロード）はもう再現しません。そこで `null` を返すのは契約違反です。
 
 ### WithoutResult
 
-24. `RegisterProjectorWithCustomSerialization` は、失敗すると元の例外を送出します（10.x は失敗の箱を返し、たいていは
+23. `RegisterProjectorWithCustomSerialization` は、失敗すると元の例外を送出します（10.x は失敗の箱を返し、たいていは
     無視されていました）。
-25. カスタムシリアライズのプロジェクター以外のアセンブリスキャン登録（`RegisterProjector`、イベント、タグ
+24. カスタムシリアライズのプロジェクター以外のアセンブリスキャン登録（`RegisterProjector`、イベント、タグ
     プロジェクター、タグ状態のペイロード、タグ型、クエリ、リストクエリ）は、両方のファサードで
     `TargetInvocationException` ではなく元の例外を表に出します。スキャンしたカスタムシリアライズのプロジェクターの
     登録が失敗した場合は、10.x と同じく黙ってスキップし、スキャンを続けます。
-26. 汎用タグプロジェクターの公開静的 `Project` に `null` のペイロードを渡し、イベントにそのプロジェクターのタググループの
+25. 汎用タグプロジェクターの公開静的 `Project` に `null` のペイロードを渡し、イベントにそのプロジェクターのタググループの
     タグがない場合、`InvalidOperationException("{Projector}.Project produced no payload: the payload passed in was null
     and the event carried no tag of the projector's tag group.")` を同じ境界情報付きで送出します（10.x は ResultBoxes の
     `ResultValueNullException`）。
-27. 汎用タグプロジェクターのスナップショット復元は、ペイロードのデシリアライズで例外が出た項目をスキップします。10.x で
+26. 汎用タグプロジェクターのスナップショット復元は、ペイロードのデシリアライズで例外が出た項目をスキップします。10.x で
     スキップになっていたのは `SimpleTagStatePayloadTypes` だけで、`AotTagStatePayloadTypes` と利用者の
     `ITagStatePayloadTypes` では失敗がそのまま伝わっていました。
-28. 箱専用だった null 結果のガードはなくなりました。null の `Task` や null の値は、これまでどおり
+27. 箱専用だった null 結果のガードはなくなりました。null の `Task` や null の値は、これまでどおり
     `SekibanBoundaryException` になります。
-29. WithoutResult の推移的な参照だけで ResultBox の型を使っていたアプリは、`ResultBoxes` を自分で参照する必要が
+28. WithoutResult の推移的な参照だけで ResultBox の型を使っていたアプリは、`ResultBoxes` を自分で参照する必要が
     あります。
 
 ### リポジトリ内部

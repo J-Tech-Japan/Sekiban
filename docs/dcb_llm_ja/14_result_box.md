@@ -28,9 +28,8 @@ DCB 11 から、`ResultBox` を使うのは **WithResult の表面だけ**です
 `Sekiban.Dcb.WithResult.Testing` の 4 つです。
 
 - **WithResult** はこのページの API のままです。コマンドハンドラーは `Task<ResultBox<EventOrNone>>` を返し、
-  プロジェクターとクエリも箱を返し、`ICommandContext` と `ISekibanExecutor` も箱を返します。失敗の箱には元の例外
-  （型とメッセージ）が入ります。Orleans の grain から返ってきた失敗も、Orleans がその例外をシリアライズできる限り同じ
-  です（[例外の転送](24_migrating_to_11.md#例外の転送)）。
+  プロジェクターとクエリも箱を返し、`ICommandContext` と `ISekibanExecutor` も箱を返します。失敗の箱には Core が
+  送出した例外（型もメッセージも同じ）が入ります。
 - **Core、Core.Model、ストレージプロバイダー、Orleans.Core、MaterializedView は例外ベースです。** これらの契約は
   素の値（`Task<T>`）を返して失敗を送出し、「見つからない」は `null` や `false` などの値で表します。WithResult の
   インターフェイスは、あなたの箱を一度だけ開いてコアのメンバーを実装し、コアの失敗は WithResult ファサードが箱に

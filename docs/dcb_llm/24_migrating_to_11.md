@@ -69,10 +69,13 @@ The WithResult interfaces implement the exception-based core members explicitly 
 box reaches the core as the exception it carried, and the WithResult facade boxes core failures with the original
 exception.
 
-**Error values may now carry the original exception type.** Where 10.x flattened a failure to
-`Exception("[TypeName] message")` (failures returned by Orleans grain members), the failed box now carries the original
-exception type and message wherever Orleans can serialize it. See [Exception transport](#exception-transport). Code that
-matched on the `[TypeName]` prefix must match on the exception type instead.
+**Messages from Orleans grains may lose the `[TypeName]` prefix.** In 10.x, a failure returned by the grain members
+that returned boxes came back flattened to `Exception("[TypeName] message")`. In 11 those members send the exception
+itself wherever Orleans can serialize it (see [Exception transport](#exception-transport)). The WithResult executors do
+not expose these grain members; the executor reaches only `ITagConsistentGrain.MakeReservationAsync`, whose failures are
+reported in the aggregated `InvalidOperationException("Failed to reserve tags: ...")`, so the per-tag text there may no
+longer start with `[TypeName]`. Code that matched on the prefix must stop relying on it; code that calls the grains
+directly gets a faulted task carrying the exception (see [Orleans](#orleans)).
 
 Source breaks that can still reach WithResult code:
 
@@ -595,24 +598,29 @@ codec reaches the caller as `CodecNotFoundException`, and its message is lost. 1
 - **Converters for Sekiban exceptions** in Orleans.Core, registered with `[RegisterConverter]` (no configuration needed):
   `ExpectedTagPositionConflictException`, `ConditionalAppendInDoubtException`, `KeyReuseConflictException`,
   `TagHeadExpectationValidationException` (all `Sekiban.Dcb.Storage`) and, as before, `SekibanProjectionFaultException`
-  (`Sekiban.Dcb.Actors`, with its descriptor and `Data`). They are rebuilt through their constructors, so type, message
-  and properties arrive; stack traces do not travel.
+  (`Sekiban.Dcb.Actors`, with its descriptor). They are rebuilt through their constructors, so type, message and
+  properties arrive; stack traces and other `Data` entries do not travel (a `SekibanProjectionFaultException` re-applies
+  its fault annotations on arrival).
 - **On the members that used to return boxes** (the five `IMultiProjectionGrain` members and the two
   `ITagConsistentGrain` members above), a failure travels as the same exception instance when Orleans can serialize it.
   Before it is sent, only `InnerException`, `AggregateException.InnerExceptions` and `Data` are walked (each exception
   visited once, depth at most 64, at most 1024 exceptions). Every `Data` key and value must be `null`, a string, a
-  primitive, an enum, `decimal`, `DateTime`, `DateTimeOffset`, `TimeSpan` or `Guid`. Only then is the exception
-  serialized with the silo serializer as a test.
+  primitive, an enum, `decimal`, `DateTime`, `DateTimeOffset`, `TimeSpan` or `Guid`. The five converter types above
+  are the exception to this rule: their surrogate carries only its own fields, so their `Data` is not inspected (a
+  `SekibanProjectionFaultException` with a self-referencing `Data` entry still travels through its converter), and their
+  inner exception is checked only for `ConditionalAppendInDoubtException` and `KeyReuseConflictException`, whose
+  surrogates carry it. Only after this walk is the exception serialized with the silo serializer as a test.
 - **Fallback.** A failure that does not pass becomes `Exception("[TypeName] message")`, the form 10.x always used on
-  these members. The check is conservative: an exception with a complex `Data` value is flattened even if Orleans could
-  carry it.
+  these members. The check is conservative: an exception without a Sekiban converter whose `Data` (or an inner
+  exception's `Data`) holds a complex value is flattened even if Orleans could carry it.
 - **Cancellation is preserved.** A cancellation that cannot travel becomes `OperationCanceledException` (or
   `TaskCanceledException`) with the same message, without inner exception or `Data`.
 
 So Sekiban types with a converter keep type, message and properties, System types keep type and message, and types
-without a codec keep the `[TypeName] message` form. **The `[TypeName]` prefix is gone wherever a codec exists.** On
-Orleans.WithResult the failed box carries the transported exception; Orleans.WithoutResult throws it with the usual
-boundary annotations.
+without a codec keep the `[TypeName] message` form. **The `[TypeName]` prefix is gone wherever a codec exists.** A
+caller of these grain members gets the faulted task whichever facade it uses; neither `OrleansDcbExecutor` exposes them.
+On the executor path only `MakeReservationAsync` is reached, and its failures are reported in the aggregated
+`InvalidOperationException("Failed to reserve tags: ...")`.
 
 ## MaterializedView
 
@@ -685,48 +693,46 @@ Everything not listed here keeps its 10.x behaviour, apart from the shape change
     `ColdExporter`, `DurableSubscriptionRunner`, command-context and tag-state helpers).
 12. Queries: see [Queries](#queries) (unsupported `IQueryCommon`-only box handlers, the name-bound `object` case, and
     value-type list outputs).
-13. `TagConsistentGrain`: exceptions the actor would throw instead of box are boxed at the grain boundary; the actor
-    raises none in practice.
-14. The WithoutResult and Orleans.WithoutResult serialized members return values (see
+13. The WithoutResult and Orleans.WithoutResult serialized members return values (see
     [WithoutResult users](#withoutresult-users)).
-15. `GeneralTagStateActor` (in-memory path only): a transport failure while reading the latest position becomes
+14. `GeneralTagStateActor` (in-memory path only): a transport failure while reading the latest position becomes
     "unknown latest", as a failed box always did.
-16. Orleans `TagStateGrain` reads the latest position through the Try member: an actor-reported failure means "unknown
+15. Orleans `TagStateGrain` reads the latest position through the Try member: an actor-reported failure means "unknown
     latest", while a failed grain call (transport, timeout) propagates, as in 10.x.
 
 ### Orleans
 
-17. Formerly boxed grain members keep the real exception type and message; the `[TypeName]` prefix is gone where a codec
+16. Formerly boxed grain members keep the real exception type and message; the `[TypeName]` prefix is gone where a codec
     exists.
-18. `ITagConsistentGrain.TryGetLatestSortableUniqueIdAsync` was added.
-19. Grain-call failures and grain-reported failures both fault the task on the public members.
-20. `NativeProjectionQueryExecutor`: a custom `IQueryTypes` that returns `null` fails with
+17. `ITagConsistentGrain.TryGetLatestSortableUniqueIdAsync` was added.
+18. Grain-call failures and grain-reported failures both fault the task on the public members.
+19. `NativeProjectionQueryExecutor`: a custom `IQueryTypes` that returns `null` fails with
     `InvalidOperationException("Query X completed without a result.")` instead of the ResultBoxes "no exception" error.
-21. A third-party `IProjectionActorHost` whose snapshot write or restore throws is handled like a host-reported failure
+20. A third-party `IProjectionActorHost` whose snapshot write or restore throws is handled like a host-reported failure
     (a warning and a failed attempt) instead of the outer "Persistence failed" log.
-22. Persist and snapshot endpoints in the samples and templates: a grain-call failure (for example an Orleans timeout)
+21. Persist and snapshot endpoints in the samples and templates: a grain-call failure (for example an Orleans timeout)
     now takes the same warning and BadRequest path as a grain-reported failure. 10.x let transport failures reach the
     exception middleware. The two arrive as the same faulted task and cannot be told apart reliably by exception type.
-23. ResultBox null-value quirks (a `null` value treated as a failure, for example a null stream or a null payload from
+22. ResultBox null-value quirks (a `null` value treated as a failure, for example a null stream or a null payload from
     deserialization) are no longer reproduced; returning `null` there is a contract violation.
 
 ### WithoutResult
 
-24. `RegisterProjectorWithCustomSerialization` throws the original exception on failure (10.x returned a failed box,
+23. `RegisterProjectorWithCustomSerialization` throws the original exception on failure (10.x returned a failed box,
     usually ignored).
-25. Assembly-scan registrations other than custom-serialized projectors (`RegisterProjector`, events, tag projectors,
+24. Assembly-scan registrations other than custom-serialized projectors (`RegisterProjector`, events, tag projectors,
     tag-state payloads, tag types, queries, list queries) surface the original exception instead of
     `TargetInvocationException`, in both facades. A scanned custom-serialized projector whose registration fails is
     still skipped silently and the scan continues, as in 10.x.
-26. Generic tag projectors' public static `Project` with a `null` payload and no tag of the projector's tag group throws
+25. Generic tag projectors' public static `Project` with a `null` payload and no tag of the projector's tag group throws
     `InvalidOperationException("{Projector}.Project produced no payload: the payload passed in was null and the event
     carried no tag of the projector's tag group.")` with the same boundary annotations (10.x: ResultBoxes'
     `ResultValueNullException`).
-27. Generic tag projectors' snapshot restore skips any item whose payload deserialization throws. In 10.x only
+26. Generic tag projectors' snapshot restore skips any item whose payload deserialization throws. In 10.x only
     `SimpleTagStatePayloadTypes` led to a skip; `AotTagStatePayloadTypes` and user `ITagStatePayloadTypes` let the
     failure propagate.
-28. The box-only null-result guard case is gone; a null `Task` or null value still gives `SekibanBoundaryException`.
-29. Applications that used ResultBox types only through WithoutResult's transitive reference must reference
+27. The box-only null-result guard case is gone; a null `Task` or null value still gives `SekibanBoundaryException`.
+28. Applications that used ResultBox types only through WithoutResult's transitive reference must reference
     `ResultBoxes` themselves.
 
 ### Repository internals

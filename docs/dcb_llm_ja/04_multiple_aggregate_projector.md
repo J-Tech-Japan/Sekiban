@@ -365,8 +365,8 @@ blocking のままです。re-arm は現在の bounded episode を終了しま�
 (`forceFull: false`) と background gate settlement を開始します。対象クエリの中で
 full replay は実行しません。timer は interleave しますが、全体の同時実行制限で batch が
 skip される可能性があるため N 内の進捗は保証されません。gate が完了すれば成功し、
-未完了なら state/snapshot は失敗し（11 では grain 呼び出しが失敗し、WithResult ファサードでは `ResultBox.Error`
-になります）、scalar/list は `InvalidOperationException` を送出します。
+未完了なら state/snapshot は失敗し（11 ではどの呼び出し側でも grain 呼び出しが失敗します。10.x では
+`ResultBox.Error` でした）、scalar/list は `InvalidOperationException` を送出します。
 メッセージは `MultiProjectionQueryFailClosedMessages.CatchUpInProgressPrefix`
 (`Projection catch-up is in progress:`) で始まり、現在位置・target 位置・処理イベント数を含みます。
 background 完了後のクエリは成功します。待機中に検出した live projection fault も SEK-G14 が優先します。

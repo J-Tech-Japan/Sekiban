@@ -377,7 +377,7 @@ The query observes the activation's in-flight timer catch-up, or kicks a shared 
 restart (`forceFull: false`) and background gate settlement. It never performs the full
 replay inside an eligible query. Timer batches interleave, but global catch-up concurrency
 limits can skip batches, so progress within N is not guaranteed. When the gate settles,
-queries succeed; otherwise state/snapshot fail (since 11 the grain call faults; the WithResult facade returns
+queries succeed; otherwise state/snapshot fail (in 11 the grain call faults for every caller; 10.x returned
 `ResultBox.Error`), while scalar/list queries throw `InvalidOperationException` with `MultiProjectionQueryFailClosedMessages.CatchUpInProgressPrefix`
 (`Projection catch-up is in progress:`), current/target position and events processed.
 A later query succeeds after background completion. Live projection faults take precedence

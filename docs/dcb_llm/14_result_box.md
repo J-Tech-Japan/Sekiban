@@ -29,9 +29,8 @@ From DCB 11, `ResultBox` belongs to the **WithResult surface only**. Four packag
 `Sekiban.Dcb.WithResult.Testing`.
 
 - **WithResult** keeps the API on this page: command handlers return `Task<ResultBox<EventOrNone>>`, projectors and
-  queries return boxes, and `ICommandContext` and `ISekibanExecutor` return boxes. A failed box carries the original
-  exception (type and message), including failures that come back from Orleans grains whenever Orleans can serialize
-  the exception (see [Exception transport](24_migrating_to_11.md#exception-transport)).
+  queries return boxes, and `ICommandContext` and `ISekibanExecutor` return boxes. A failed box carries the exception
+  that Core threw (same type and message).
 - **Core, Core.Model, the storage providers, Orleans.Core and MaterializedView are exception based.** Their contracts
   return plain values (`Task<T>`) and throw; "not found" is a value such as `null` or `false`. The WithResult interfaces
   implement the core members by unwrapping your box once, and the WithResult facade boxes core failures.
