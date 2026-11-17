@@ -365,7 +365,8 @@ blocking のままです。re-arm は現在の bounded episode を終了しま�
 (`forceFull: false`) と background gate settlement を開始します。対象クエリの中で
 full replay は実行しません。timer は interleave しますが、全体の同時実行制限で batch が
 skip される可能性があるため N 内の進捗は保証されません。gate が完了すれば成功し、
-未完了なら state/snapshot は `ResultBox.Error`、scalar/list は `InvalidOperationException` を返します。
+未完了なら state/snapshot は失敗し（11 ではどの呼び出し側でも grain 呼び出しが失敗します。10.x では
+`ResultBox.Error` でした）、scalar/list は `InvalidOperationException` を送出します。
 メッセージは `MultiProjectionQueryFailClosedMessages.CatchUpInProgressPrefix`
 (`Projection catch-up is in progress:`) で始まり、現在位置・target 位置・処理イベント数を含みます。
 background 完了後のクエリは成功します。待機中に検出した live projection fault も SEK-G14 が優先します。
@@ -383,8 +384,9 @@ SEK-G21 の authoritative start position 契約は維持します。background s
 クエリ到着前の場合があり、成功時には通常の projection lag semantics が適用されます。
 受付時点の freshness は保証されません。既存の 30 秒 `waitForCatchUp` helper は変更しません。
 
-定数は grain が生成するメッセージの先頭を表します。transport や ResultBox の wrapper が
-文字列を前置するため、host は `Contains(prefix, StringComparison.Ordinal)` で判定します。
+定数は grain が生成するメッセージの先頭を表します。transport の wrapper（Orleans がシリアライズできない例外に
+11 でも使う `[TypeName] message` の形など）が文字列を前置することがあるため、host は
+`Contains(prefix, StringComparison.Ordinal)` で判定します。
 catch-up が非アクティブで initiation と settlement が進行中でなければ、poll は共有 background
 Ensure を直ちに開始します。Refresh 済みの host は timer の空 batch 閾値を待たずに N 内で
 settle できます。クエリ内で Ensure を inline 実行することはありません。
@@ -394,7 +396,7 @@ ASP.NET Core host の 503 と Retry-After マッピング例（error の取得�
 ```csharp
 using Sekiban.Dcb.Orleans.Grains;
 
-// Map both ResultBox.GetException() and thrown scalar/list query exceptions.
+// Map a thrown exception, or ResultBox.GetException() on the WithResult facade.
 static IResult MapProjectionError(Exception error, HttpResponse response)
 {
     if (error.Message.Contains(MultiProjectionQueryFailClosedMessages.CatchUpInProgressPrefix,

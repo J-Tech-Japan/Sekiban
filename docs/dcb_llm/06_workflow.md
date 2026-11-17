@@ -44,7 +44,8 @@ Source: `src/Sekiban.Dcb/Actors/GeneralSekibanExecutor.cs`.
 - Reservations time out based on `TagConsistentActorOptions.CancellationWindowSeconds`
   (`src/Sekiban.Dcb/Actors/GeneralTagConsistentActor.cs`).
 
-Conflicts return a `ResultBox` error; the executor cancels any held reservations before propagating the exception.
+A conflict fails the command (WithResult: a `ResultBox` error; WithoutResult: the thrown exception); the executor
+cancels any held reservations before propagating the exception.
 
 ## Event Persistence
 

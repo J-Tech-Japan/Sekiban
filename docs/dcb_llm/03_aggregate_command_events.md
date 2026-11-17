@@ -85,7 +85,8 @@ inside the actor according to three distinct states:
   full reservation/confirm/cancel lifecycle, but skips version comparison and does not refresh or adopt a version.
 - An **empty** expected version means "**I expect this tag to be empty**" — a first write. It succeeds only when the tag
   has no committed state; a second, non-overlapping first write against a tag that already has state **conflicts**
-  (surfaced through the existing `ResultBox.Error` channel — there is no new public exception type).
+  (surfaced through the existing failure channel — a `ResultBox.Error` on WithResult, the thrown exception on
+  WithoutResult; there is no new public exception type).
 - A **non-empty** expected version must match the tag's current version exactly. A non-empty expectation against an empty
   tag, or a mismatch, conflicts; an exact match is an ordinary update.
 

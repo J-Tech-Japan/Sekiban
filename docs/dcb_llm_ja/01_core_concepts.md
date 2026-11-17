@@ -18,6 +18,7 @@
 > - [バリューオブジェクト](15_value_object.md)
 > - [デプロイガイド](16_deployment.md)
 > - [マテリアライズドビュー基礎](20_materialized_view.md)
+> - [DCB 11 への移行](24_migrating_to_11.md)
 
 ## DCBとは？
 

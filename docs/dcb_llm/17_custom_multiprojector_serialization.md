@@ -225,5 +225,6 @@ The system will rebuild states from events on first access.
 1. **Compression**: Use Gzip for payloads > 1KB, skip for smaller ones
 2. **Versioning**: Include a version number in your serialized format
 3. **safeWindowThreshold**: Always validate this parameter; it defines serialization scope
-4. **Error handling**: Throw exceptions on serialization failures; the system wraps them in `ResultBox`
+4. **Error handling**: Throw exceptions on serialization failures; Core propagates them as exceptions (since 11), and
+   the WithResult facade returns them as a failed `ResultBox`
 5. **Testing**: Test both serialization round-trips and version upgrades

@@ -232,7 +232,7 @@ downstream の store は再コンパイルなしで従来の list fallback を�
     保持し、caller の cancellation token を Query、BatchGet、retry delay に渡します。
 - capability 選択は fail-closed です。store は optional interface の実装に加え、live-instance descriptor で native
   tagged streaming を宣言する必要があります。`HybridEventStore` は検証済み hot-store stream だけを forward し、それ
-  以外では hot の list API を読まずに unsupported `ResultBox` を返します。
+  以外では hot の list API を読まずに `NotSupportedException` で失敗します（10.x では unsupported の失敗 `ResultBox`）。
 - **任意の tag-state cancellation entry path (SEK-G55)。** 既存の token なし member は変更されません。cancel が必要な
   caller は `ISekibanExecutor.GetTagStateAsync(TagStateId, CancellationToken)`（generic convenience form を含む）、
   `ITagStateActorCommon.GetStateAsync(CancellationToken)`、Core/SQLite の
@@ -304,8 +304,8 @@ runtime principal に必要なのは `CONNECT`、schema の `USAGE`、status tab
 であり、schema や table の owner 権限ではありません。
 
 pre-provisioned schema が存在しない、または互換性がない場合は fail-closed です。table がない場合は
-PostgreSQL SQLSTATE `42P01` を保持した failed `ResultBox`、必須 column がない場合は SQLSTATE `42703` を保持した
-failed `ResultBox` になります。空の成功や false heartbeat には変換しません。expected-sequence CAS、service
+PostgreSQL SQLSTATE `42P01` の `PostgresException`、必須 column がない場合は SQLSTATE `42703` の `PostgresException`
+を送出します（10.x ではどちらもその例外を保持した failed `ResultBox`）。空の成功や false heartbeat には変換しません。expected-sequence CAS、service
 isolation、cancellation、switch/mutation discriminator の列は従来どおり保持され、無効な provisioning mode は
 status operation 開始前に拒否されます。
 将来の status schema version で必須 column が追加された場合、schema owner は upgrade step として
@@ -1092,7 +1092,7 @@ shard 依存 byte を undercount することがあります。Core helper と `
 
 DynamoDB の `BatchWriteItem` fallback は、その fallback operation の開始時だけ `MaxBatchWriteItems` を検証します。
 有効値は `1` から `25` です。無効値の場合は、batch write を dispatch する前に、`MaxBatchWriteItems` と取得した値を示す
-`ArgumentOutOfRangeException` を既存の `ResultBox` error として返します。検証済みの値は operation ごとに一度だけ
+`ArgumentOutOfRangeException` を送出します（10.x では同じ例外を失敗の `ResultBox` として返していました）。検証済みの値は operation ごとに一度だけ
 snapshot され、event put、tag put、rollback delete のすべてで再利用されます。dispatch 中の設定変更は次の operation
 からだけ反映されます。この batch 専用検証は `MaxBatchGetItems`、`MaxRetryAttempts`、transaction/conditional path、
 およびそれらの retry/rollback 挙動を変更しません。`AutoCreateTables = true` の場合、batch 検証より先に table 初期化が

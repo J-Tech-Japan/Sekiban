@@ -17,9 +17,28 @@
 > - [ResultBox](14_result_box.md) (You are here)
 > - [Value Objects](15_value_object.md)
 > - [Deployment Guide](16_deployment.md)
+> - [Migrating to DCB 11](24_migrating_to_11.md)
 
-`ResultBox` (NuGet: ResultBoxes) is the glue that powers command handlers in both Sekiban Pure and DCB. It provides a
-fluent, functional style for composing async validations, state lookups, and event creation.
+`ResultBox` (NuGet: ResultBoxes) is the glue that powers command handlers in Sekiban Pure and on the DCB WithResult
+surface. It provides a fluent, functional style for composing async validations, state lookups, and event creation.
+
+## Where ResultBox lives in DCB 11
+
+From DCB 11, `ResultBox` belongs to the **WithResult surface only**. Four packages depend on `ResultBoxes`:
+`Sekiban.Dcb.WithResult`, `Sekiban.Dcb.WithResult.Model`, `Sekiban.Dcb.Orleans.WithResult` and
+`Sekiban.Dcb.WithResult.Testing`.
+
+- **WithResult** keeps the API on this page: command handlers return `Task<ResultBox<EventOrNone>>`, projectors and
+  queries return boxes, and `ICommandContext` and `ISekibanExecutor` return boxes. A failed box carries the exception
+  that Core threw (same type and message).
+- **Core, Core.Model, the storage providers, Orleans.Core and MaterializedView are exception based.** Their contracts
+  return plain values (`Task<T>`) and throw; "not found" is a value such as `null` or `false`. The WithResult interfaces
+  implement the core members by unwrapping your box once, and the WithResult facade boxes core failures.
+- **WithoutResult is exception based** and does not reference `ResultBoxes`. If a WithoutResult application uses
+  `ResultBox` itself, it must reference the package directly.
+
+In 10.x, Core and the WithoutResult facade used `ResultBox` internally. See [Migrating to DCB 11](24_migrating_to_11.md)
+for the contract changes.
 
 ## Core Concepts
 
@@ -34,7 +53,7 @@ See `internalUsages/Dcb.Domain/Enrollment/EnrollStudentInClassRoomHandler.cs` fo
 ## Error Handling
 
 - Use `ExceptionOrNone.FromException` to propagate business rule violations.
-- The executor converts exceptions into `ResultBox.Error` so APIs can return meaningful messages.
+- The WithResult executor converts exceptions into `ResultBox.Error` so APIs can return meaningful messages.
 - Combine multiple `Verify` steps to keep cross-entity invariants readable.
 
 ## Branching

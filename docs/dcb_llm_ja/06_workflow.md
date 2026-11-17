@@ -42,7 +42,8 @@
 - 未観測タグは `null`（Unspecified）。予約ライフサイクルは維持し、バージョン比較のみスキップ。
 - 予約は `TagConsistentActorOptions.CancellationWindowSeconds` でタイムアウト管理されます。
 
-衝突が起こると例外を返し、成功していた予約はすべてキャンセルされます。
+衝突が起こるとコマンドは失敗し（WithResult では `ResultBox` のエラー、WithoutResult では送出される例外）、成功していた
+予約はすべてキャンセルされます。
 
 ## 永続化
 
