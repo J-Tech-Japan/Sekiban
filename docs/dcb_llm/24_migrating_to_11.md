@@ -75,9 +75,12 @@ exception: it kept its type and descriptor). In 11 those members send the except
 serialize it (see [Exception transport](#exception-transport)). Through `OrleansDcbExecutor` this shows in two places:
 
 - `ICommandContext.TagExistsAsync` and `ICommandContext.GetTagLatestSortableUniqueIdAsync` read
-  `ITagConsistentGrain.GetLatestSortableUniqueIdAsync`. A failure there now reaches your handler's failed box with its
-  real type and message, for example a Sekiban storage exception or an Orleans `TimeoutException`, instead of
-  `Exception("[TypeName] message")`. (WithoutResult throws the same exception with its boundary annotations.)
+  `ITagConsistentGrain.GetLatestSortableUniqueIdAsync`. A failure raised inside the grain now reaches your handler's
+  failed box with its real type and message instead of `Exception("[TypeName] message")`, for example
+  `InvalidOperationException("Actor not initialized")` or a failure while waiting for the actor's lock. (WithoutResult
+  throws the same exception with its boundary annotations.) Call failures such as Orleans timeouts or transport errors
+  are raised on the caller side and behave as in 10.x, and the tag actor's catch-up swallows event-store failures, as
+  in 10.x, so neither changes on this path.
 - Tag reservations call `ITagConsistentGrain.MakeReservationAsync`. Their failures are still folded into
   `InvalidOperationException("Failed to reserve tags: ...")`; only the per-tag text inside it may no longer start with
   `[TypeName]`.

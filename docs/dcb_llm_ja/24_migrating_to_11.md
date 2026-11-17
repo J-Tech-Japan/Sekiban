@@ -74,9 +74,12 @@ WithResult のインターフェイスは、例外ベースのコアのメンバ
 （[例外の転送](#例外の転送)）。`OrleansDcbExecutor` 経由では、次の 2 か所に表れます。
 
 - `ICommandContext.TagExistsAsync` と `ICommandContext.GetTagLatestSortableUniqueIdAsync` は
-  `ITagConsistentGrain.GetLatestSortableUniqueIdAsync` を読みます。ここでの失敗は、`Exception("[TypeName] message")`
-  ではなく本来の型とメッセージのまま（たとえば Sekiban のストレージの例外や Orleans の `TimeoutException`）、
-  ハンドラーの失敗の箱に入ります（WithoutResult では同じ例外が境界情報付きで送出されます）。
+  `ITagConsistentGrain.GetLatestSortableUniqueIdAsync` を読みます。grain の中で起きた失敗は、
+  `Exception("[TypeName] message")` ではなく本来の型とメッセージのまま、ハンドラーの失敗の箱に入ります（たとえば
+  `InvalidOperationException("Actor not initialized")` や、アクターのロック待ちでの失敗。WithoutResult では同じ例外が
+  境界情報付きで送出されます）。Orleans のタイムアウトや通信エラーのような呼び出しの失敗は呼び出し側で発生するため
+  10.x と同じで、イベントストアの失敗はタグアクターの catch-up が 10.x と同じく握りつぶすため、この経路ではどちらも
+  変わりません。
 - タグの予約は `ITagConsistentGrain.MakeReservationAsync` を呼びます。その失敗は引き続き
   `InvalidOperationException("Failed to reserve tags: ...")` にまとめられ、中のタグごとの文言が `[TypeName]` で
   始まらなくなることがあるだけです。
