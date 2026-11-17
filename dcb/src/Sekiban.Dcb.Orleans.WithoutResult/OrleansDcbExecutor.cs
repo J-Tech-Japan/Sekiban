@@ -269,8 +269,8 @@ public class OrleansDcbExecutor : ISekibanExecutor, IConditionalCommandExecutor,
         where TResult : notnull
     {
         var context = new BoundaryContext("ISekibanExecutor.QueryAsync", typeof(TResult).Name);
-        var general = await GuardedUnwrap.AwaitAsync(result.ToQueryResultAsync(_construction.DomainTypes), context);
-        return GuardedUnwrap.Run(() => general.ToTypedResult<TResult>(), context);
+        var general = await BoundaryGuard.AwaitAsync(result.ToQueryResultAsync(_construction.DomainTypes), context);
+        return BoundaryGuard.Run(() => general.ToTypedResult<TResult>(), context);
     }
 
     private async Task<ListQueryResult<TResult>> DeserializeListQueryResultAsync<TResult>(
@@ -278,8 +278,8 @@ public class OrleansDcbExecutor : ISekibanExecutor, IConditionalCommandExecutor,
         where TResult : notnull
     {
         var context = new BoundaryContext("ISekibanExecutor.QueryAsync (list)", typeof(TResult).Name);
-        var listGeneral = await GuardedUnwrap.AwaitAsync(result.ToListQueryResultAsync(_construction.DomainTypes), context);
-        return GuardedUnwrap.Run(() => listGeneral.ToTypedResult<TResult>(), context);
+        var listGeneral = await BoundaryGuard.AwaitAsync(result.ToListQueryResultAsync(_construction.DomainTypes), context);
+        return BoundaryGuard.Run(() => listGeneral.ToTypedResult<TResult>(), context);
     }
 
     public Task<string> GetLatestSortableUniqueIdAsync() =>

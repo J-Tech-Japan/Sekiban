@@ -14,19 +14,14 @@ internal static class PackageArtifactValidator
     // Exactly the packages whose nuspec reaches ResultBoxes, directly or through other packages of
     // this set, in a dependency group (checked per net10.0 / net11.0 group). The list is exact in
     // both directions: a package outside it that reaches ResultBoxes fails, and a listed package
-    // that no longer reaches it fails too, so a slice that removes the dependency shrinks this list
-    // in the same PR. Later slices may only remove names; the final set is the four WithResult
-    // packages: Sekiban.Dcb.Orleans.WithResult, Sekiban.Dcb.WithResult, Sekiban.Dcb.WithResult.Model,
-    // Sekiban.Dcb.WithResult.Testing. Kept in ordinal order.
+    // that no longer reaches it fails too. The list may only shrink; it is now the final set, the four
+    // WithResult packages. Kept in ordinal order.
     internal static readonly string[] ResultBoxesAllowedPackageIds =
     [
         "Sekiban.Dcb.Orleans.WithResult",
-        "Sekiban.Dcb.Orleans.WithoutResult",
         "Sekiban.Dcb.WithResult",
         "Sekiban.Dcb.WithResult.Model",
-        "Sekiban.Dcb.WithResult.Testing",
-        "Sekiban.Dcb.WithoutResult",
-        "Sekiban.Dcb.WithoutResult.Testing"
+        "Sekiban.Dcb.WithResult.Testing"
     ];
 
     // resultBoxesAllowedSubset can only narrow the allowed set (offline harness cases); it never adds a package.

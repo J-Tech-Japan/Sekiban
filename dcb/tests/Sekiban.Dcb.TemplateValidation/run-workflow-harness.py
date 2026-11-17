@@ -839,14 +839,18 @@ def resultboxes_ratchet_cases(f, feed, command):
             print(f'PASS rejects {case}: {reason}', flush=True)
         else:
             raise Failure(case+' unexpectedly passed')
-    target = 'Sekiban.Dcb.Orleans.WithoutResult'
-    via = 'Sekiban.Dcb.WithoutResult'
+    target = 'Sekiban.Dcb.Orleans.WithResult'
+    via = 'Sekiban.Dcb.WithResult'
     assert target in f.resultboxes and via in f.resultboxes
+    # The compiled list is the final set (the four WithResult packages); the exception-based facade is outside it.
+    outside = 'Sekiban.Dcb.WithoutResult'
+    outside_transitive = 'Sekiban.Dcb.Orleans.WithoutResult'
+    assert outside not in f.resultboxes and outside_transitive not in f.resultboxes
     direct = b'<dependency id="ResultBoxes" version="0.4.0" />'
     path = feed/f'{target}.{f.version}.nupkg'
     original = path.read_bytes()
-    # The validator only lets the harness narrow the compiled list. While every package is still
-    # listed, a narrowed list stands in for "this package is not in the allowed set".
+    # The validator only lets the harness narrow the compiled list, so a narrowed list stands in for
+    # "this listed package is not in the allowed set".
     narrowed = ['--resultboxes-allowed-subset', ','.join(id for id in f.resultboxes if id != target)]
     try:
         rewrite(target, direct, b'')
@@ -867,8 +871,24 @@ def resultboxes_ratchet_cases(f, feed, command):
                  also=['-> ResultBoxes) but is outside the ResultBoxes allowed set'])
         rejected('resultboxes-subset-widens-list', 'may only narrow ResultBoxesAllowedPackageIds',
                  ['--resultboxes-allowed-subset', f'{via},Sekiban.Dcb.Unlisted'])
+        rejected('resultboxes-subset-adds-withoutresult', 'may only narrow ResultBoxesAllowedPackageIds',
+                 ['--resultboxes-allowed-subset', f'{via},{outside}'])
     finally:
         path.write_bytes(original)
+    # Against the compiled list itself: the WithoutResult facade must not reach ResultBoxes, directly or through
+    # a WithResult package.
+    for package_id, after, reason in [
+        (outside, direct, f'{outside} reaches ResultBoxes in net10.0 ({outside} -> ResultBoxes) but is outside the ResultBoxes allowed set'),
+        (outside_transitive, f'<dependency id="{via}" version="{f.version}" />'.encode(),
+         f'{outside_transitive} reaches ResultBoxes in net10.0 ({outside_transitive} -> {via} -> ResultBoxes) but is outside the ResultBoxes allowed set'),
+    ]:
+        outside_path = feed/f'{package_id}.{f.version}.nupkg'
+        outside_original = outside_path.read_bytes()
+        try:
+            rewrite(package_id, b'</group>', after+b'</group>')
+            rejected(f'resultboxes-{package_id}-outside-final-set', reason)
+        finally:
+            outside_path.write_bytes(outside_original)
     run(command, f.repo, f.env)
 
 def main():

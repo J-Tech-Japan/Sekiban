@@ -373,6 +373,7 @@ public static class DcbDomainTypesBuilderAssemblyExtensions
         }
 
         var genericMethod = method.MakeGenericMethod(genericType);
-        genericMethod.Invoke(target, parameters);
+        // A registration failure surfaces as the exception the registration threw, not a TargetInvocationException.
+        genericMethod.Invoke(target, BindingFlags.DoNotWrapExceptions, null, parameters, null);
     }
 }

@@ -6,7 +6,7 @@ namespace Sekiban.Dcb.Commands;
 /// <summary>
 ///     NEW, versioned serialized-commit result for the WASM boundary's conditional append. Reports the full outcome
 ///     machine: <see cref="Status" /> is Appended or AlreadyCommittedSameOperation on success (with the durable receipt
-///     fields), while KeyReuseConflict / ConditionNotSupported are surfaced as errors (ResultBox.Error / guarded throw),
+///     fields), while KeyReuseConflict / ConditionNotSupported are surfaced as thrown errors (ResultBox.Error on WithResult),
 ///     never as this result. <see cref="WrittenEvents" /> is the single written event on Appended, and empty on an
 ///     already-committed retry (nothing was written that attempt).
 /// </summary>

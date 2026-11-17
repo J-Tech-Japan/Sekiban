@@ -27,8 +27,8 @@ public class ExecutorBoundaryTests
         Assert.IsType<SekibanValidationException>(thrown);
 
         // ...and the boundary it crossed is now recorded on it.
-        Assert.Equal("ISekibanExecutor.ExecuteAsync", thrown.Data[GuardedUnwrap.OperationDataKey]);
-        Assert.Equal(nameof(CreateStudent), thrown.Data[GuardedUnwrap.TargetDataKey]);
+        Assert.Equal("ISekibanExecutor.ExecuteAsync", thrown.Data[BoundaryGuard.OperationDataKey]);
+        Assert.Equal(nameof(CreateStudent), thrown.Data[BoundaryGuard.TargetDataKey]);
     }
 
     [Fact]
@@ -40,7 +40,7 @@ public class ExecutorBoundaryTests
             () => _executor.ExecuteCommandAsync(_ => throw failure));
 
         Assert.Same(failure, thrown);
-        Assert.Equal("ISekibanExecutor.ExecuteCommandAsync", thrown.Data[GuardedUnwrap.OperationDataKey]);
+        Assert.Equal("ISekibanExecutor.ExecuteCommandAsync", thrown.Data[BoundaryGuard.OperationDataKey]);
     }
 
     [Fact]

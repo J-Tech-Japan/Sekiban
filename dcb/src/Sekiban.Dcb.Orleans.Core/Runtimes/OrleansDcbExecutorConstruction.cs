@@ -62,7 +62,7 @@ internal sealed class OrleansDcbExecutorConstructionInputs
 
 /// <summary>
 ///     Shared validated Orleans dependencies and facade-specific general executor.
-///     The generic result keeps the ResultBox and exception assemblies independent while sharing construction.
+///     The generic result keeps the WithResult and WithoutResult facade assemblies independent while sharing construction.
 /// </summary>
 internal sealed class OrleansDcbExecutorConstruction<TGeneralExecutor>
 {

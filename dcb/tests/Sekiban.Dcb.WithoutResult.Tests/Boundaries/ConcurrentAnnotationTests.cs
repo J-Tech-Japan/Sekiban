@@ -1,4 +1,4 @@
-using ResultBoxes;
+using System.Runtime.ExceptionServices;
 using Sekiban.Dcb.Boundaries;
 using System.Collections;
 using Xunit;
@@ -29,10 +29,9 @@ public class ConcurrentAnnotationTests
     {
         var data = new GatedData();
         var failure = new GatedDataException("event store unreachable", data);
-        var box = ResultBox<bool>.Error(failure);
 
-        var first = RunOnItsOwnThread(() => Assert.Throws<GatedDataException>(() => GuardedUnwrap.Unwrap(box, Inner)));
-        var second = RunOnItsOwnThread(() => Assert.Throws<GatedDataException>(() => GuardedUnwrap.Unwrap(box, Outer)));
+        var first = RunOnItsOwnThread(() => Assert.Throws<GatedDataException>(() => BoundaryGuard.Run(() => Throw<bool>(failure), Inner)));
+        var second = RunOnItsOwnThread(() => Assert.Throws<GatedDataException>(() => BoundaryGuard.Run(() => Throw<bool>(failure), Outer)));
 
         Assert.True(Task.WaitAll([first, second], TimeSpan.FromSeconds(20)), "the annotation deadlocked");
 
@@ -41,13 +40,13 @@ public class ConcurrentAnnotationTests
         Assert.Equal(1, data.TargetWrites);
 
         // And the pair it left describes ONE boundary, not one field from each.
-        var operation = Assert.IsType<string>(failure.Data[GuardedUnwrap.OperationDataKey]);
-        var target = Assert.IsType<string>(failure.Data[GuardedUnwrap.TargetDataKey]);
+        var operation = Assert.IsType<string>(failure.Data[BoundaryGuard.OperationDataKey]);
+        var target = Assert.IsType<string>(failure.Data[BoundaryGuard.TargetDataKey]);
         Assert.Equal($"target-for-{operation.Split('.')[1]}", target);
     }
 
     /// <summary>
-    ///     The same race through the Task path rather than the box path — a faulted Task whose exception instance is
+    ///     The same race through the Task path rather than the synchronous path — a faulted Task whose exception instance is
     ///     shared by every waiter.
     /// </summary>
     [Fact]
@@ -57,11 +56,11 @@ public class ConcurrentAnnotationTests
         var failure = new GatedDataException("the task itself blew up", data);
 
         var first = RunOnItsOwnThread(() => Assert.ThrowsAsync<GatedDataException>(
-                () => GuardedUnwrap.UnwrapAsync(Task.FromException<ResultBox<bool>>(failure), Inner))
+                () => BoundaryGuard.AwaitAsync(Task.FromException<bool>(failure), Inner))
             .GetAwaiter()
             .GetResult());
         var second = RunOnItsOwnThread(() => Assert.ThrowsAsync<GatedDataException>(
-                () => GuardedUnwrap.UnwrapAsync(Task.FromException<ResultBox<bool>>(failure), Outer))
+                () => BoundaryGuard.AwaitAsync(Task.FromException<bool>(failure), Outer))
             .GetAwaiter()
             .GetResult());
 
@@ -78,9 +77,16 @@ public class ConcurrentAnnotationTests
         var failure = new ReadOnlyDataException("cannot annotate me");
 
         var thrown = Assert.Throws<ReadOnlyDataException>(
-            () => GuardedUnwrap.Unwrap(ResultBox<bool>.Error(failure), Inner));
+            () => BoundaryGuard.Run(() => Throw<bool>(failure), Inner));
 
         Assert.Same(failure, thrown);
+    }
+
+    // Rethrows the given instance keeping its stack, the way a core call that failed earlier would surface it.
+    private static T Throw<T>(Exception failure)
+    {
+        ExceptionDispatchInfo.Throw(failure);
+        return default!;
     }
 
     /// <summary>A real thread, not a pool work item: the schedule below must not wait on thread injection.</summary>
@@ -108,7 +114,7 @@ public class ConcurrentAnnotationTests
         {
             var present = _entries.Contains(key);
 
-            if (Equals(key, GuardedUnwrap.OperationDataKey) && Interlocked.Increment(ref _containsCalls) >= 2)
+            if (Equals(key, BoundaryGuard.OperationDataKey) && Interlocked.Increment(ref _containsCalls) >= 2)
             {
                 // A second boundary got as far as the check. Under an atomic annotation this can only happen after
                 // the first one has completely finished — which is precisely what we are testing.
@@ -123,7 +129,7 @@ public class ConcurrentAnnotationTests
             get => _entries[key];
             set
             {
-                if (Equals(key, GuardedUnwrap.OperationDataKey))
+                if (Equals(key, BoundaryGuard.OperationDataKey))
                 {
                     if (Interlocked.Increment(ref _operationWrites) == 1)
                     {
@@ -132,7 +138,7 @@ public class ConcurrentAnnotationTests
                         _secondReaderPassedContains.Wait(TimeSpan.FromSeconds(2));
                     }
                 }
-                else if (Equals(key, GuardedUnwrap.TargetDataKey))
+                else if (Equals(key, BoundaryGuard.TargetDataKey))
                 {
                     Interlocked.Increment(ref _targetWrites);
                 }
