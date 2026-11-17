@@ -38,7 +38,7 @@ builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 
 **Before:**
 ```csharp
-async ([FromBody] CreateStudent command, [FromServices] ISekibanExecutorWithoutResult executor) =>
+async ([FromBody] CreateStudent command, [FromServices] ISekibanExecutor executor) =>
 {
     try
     {
@@ -54,7 +54,7 @@ async ([FromBody] CreateStudent command, [FromServices] ISekibanExecutorWithoutR
 
 **After:**
 ```csharp
-async ([FromBody] CreateStudent command, [FromServices] ISekibanExecutorWithoutResult executor) =>
+async ([FromBody] CreateStudent command, [FromServices] ISekibanExecutor executor) =>
 {
     var execution = await executor.ExecuteAsync(command);
     return Results.Ok(new { ... });
@@ -65,7 +65,7 @@ async ([FromBody] CreateStudent command, [FromServices] ISekibanExecutorWithoutR
 
 **Before:**
 ```csharp
-async (Guid studentId, [FromServices] ISekibanExecutorWithoutResult executor) =>
+async (Guid studentId, [FromServices] ISekibanExecutor executor) =>
 {
     try
     {
@@ -82,7 +82,7 @@ async (Guid studentId, [FromServices] ISekibanExecutorWithoutResult executor) =>
 
 **After:**
 ```csharp
-async (Guid studentId, [FromServices] ISekibanExecutorWithoutResult executor) =>
+async (Guid studentId, [FromServices] ISekibanExecutor executor) =>
 {
     var tag = new StudentTag(studentId);
     TagState state;
@@ -120,7 +120,8 @@ throw new ValidationException("Enrollment validation failed", errors);
 ### パターン4: 既存リソースの競合
 
 ```csharp
-var exists = await context.TagExistsAsync(tag).UnwrapBox();
+// WithoutResult の TagExistsAsync は Task<bool> を返します（失敗時は例外がそのまま投げられます）
+var exists = await context.TagExistsAsync(tag);
 if (exists)
 {
     throw new ConflictException($"Student with ID {command.StudentId} already exists");
