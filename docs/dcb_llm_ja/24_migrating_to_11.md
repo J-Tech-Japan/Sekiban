@@ -68,13 +68,21 @@ WithResult でドメインを書くための API は変わっていません。�
 WithResult のインターフェイスは、例外ベースのコアのメンバーを明示的に実装し、あなたの箱を一度だけ開きます。
 失敗した箱は中の例外としてコアに届き、コアの失敗は WithResult ファサードが元の例外のまま箱に入れます。
 
-**Orleans の grain から届くメッセージに `[TypeName]` の接頭辞が付かなくなることがあります。** 10.x では、箱を返して
-いた grain メンバーの失敗は `Exception("[TypeName] message")` に平坦化されて届きました。11 では、Orleans がシリアライズ
-できる限り、これらのメンバーは例外そのものを送ります（[例外の転送](#例外の転送)）。WithResult のエグゼキューターは
-これらの grain メンバーを公開していません。エグゼキューターが呼ぶのは `ITagConsistentGrain.MakeReservationAsync` だけで、
-その失敗はまとめて `InvalidOperationException("Failed to reserve tags: ...")` として報告されるため、そこに含まれるタグ
-ごとの文言が `[TypeName]` で始まらなくなることがあります。接頭辞に頼った判定はやめてください。grain を直接呼ぶコード
-は、例外を持った失敗したタスクを受け取ります（[Orleans](#orleans)）。
+**失敗の箱に元の例外型が入るようになることがあります。** 10.x では、箱を返していた grain メンバーの失敗は
+`Exception("[TypeName] message")` に平坦化されて届きました（`SekibanProjectionFaultException` だけは例外で、型と記述子を
+保っていました）。11 では、Orleans がシリアライズできる限り、これらのメンバーは例外そのものを送ります
+（[例外の転送](#例外の転送)）。`OrleansDcbExecutor` 経由では、次の 2 か所に表れます。
+
+- `ICommandContext.TagExistsAsync` と `ICommandContext.GetTagLatestSortableUniqueIdAsync` は
+  `ITagConsistentGrain.GetLatestSortableUniqueIdAsync` を読みます。ここでの失敗は、`Exception("[TypeName] message")`
+  ではなく本来の型とメッセージのまま（たとえば Sekiban のストレージの例外や Orleans の `TimeoutException`）、
+  ハンドラーの失敗の箱に入ります（WithoutResult では同じ例外が境界情報付きで送出されます）。
+- タグの予約は `ITagConsistentGrain.MakeReservationAsync` を呼びます。その失敗は引き続き
+  `InvalidOperationException("Failed to reserve tags: ...")` にまとめられ、中のタグごとの文言が `[TypeName]` で
+  始まらなくなることがあるだけです。
+
+`[TypeName]` の接頭辞で判定していたコードは、例外型で判定するか、接頭辞に頼らないように変えてください。grain を直接
+呼ぶコードは、例外を持った失敗したタスクを受け取ります（[Orleans](#orleans)）。
 
 WithResult のコードにも影響しうるソースの変更:
 
@@ -607,15 +615,17 @@ Orleans 10.4.2 がそのままシリアライズできる例外は、System・Mi
   （`SekibanProjectionFaultException` は届いた側で fault の注釈を付け直します）。
 - **以前箱を返していたメンバー**（上の `IMultiProjectionGrain` の 5 つと `ITagConsistentGrain` の 2 つ）では、Orleans
   がシリアライズできる失敗は同じ例外インスタンスのまま届きます。送る前に、`InnerException`、
-  `AggregateException.InnerExceptions`、`Data` だけをたどります（各例外は一度だけ、深さ 64 まで、1024 個まで）。
+  `AggregateException.InnerExceptions`、`Data` だけをたどります。同じ例外インスタンスに 2 度出会った場合（たとえば
+  同じ内部例外を 2 回含む `AggregateException`）、深さが 64 を超えた場合、1024 個を超えた場合は確認が失敗し、下の
+  フォールバックになります。
   `Data` のキーと値はすべて、`null`・文字列・プリミティブ・列挙型・`decimal`・`DateTime`・`DateTimeOffset`・
   `TimeSpan`・`Guid` のいずれかである必要があります。ただし上の 5 つのコンバーター対象の型は例外です。サロゲートは
   自分のフィールドしか運ばないので `Data` は調べません（`Data` が自分自身を参照している
   `SekibanProjectionFaultException` もコンバーター経由で届きます）。内部例外を調べるのは、サロゲートが内部例外を運ぶ
   `ConditionalAppendInDoubtException` と `KeyReuseConflictException` だけです。この確認のあとで、silo のシリアライザー
   で実際にシリアライズできるかを試します。
-- **フォールバック。** 条件を満たさない失敗は、10.x がこれらのメンバーで常に使っていた `Exception("[TypeName] message")`
-  になります。判定は保守的で、Sekiban のコンバーターがない例外のうち、自身または内部例外の `Data` に複雑な値を持つ
+- **フォールバック。** 条件を満たさない失敗は `Exception("[TypeName] message")` になります。10.x がこれらのメンバーで
+  `SekibanProjectionFaultException` 以外のすべての失敗に使っていた形です。判定は保守的で、Sekiban のコンバーターがない例外のうち、自身または内部例外の `Data` に複雑な値を持つ
   ものは、Orleans が運べる場合でも平坦化されます。
 - **キャンセルは保たれます。** 運べないキャンセルは、同じメッセージの `OperationCanceledException`（または
   `TaskCanceledException`）になり、内部例外と `Data` は落ちます。
@@ -623,9 +633,11 @@ Orleans 10.4.2 がそのままシリアライズできる例外は、System・Mi
 まとめると、コンバーターのある Sekiban の型は型・メッセージ・プロパティを保ち、System の型は型とメッセージを保ち、
 コーデックのない型は `[TypeName] message` の形のままです。**コーデックがあるところでは `[TypeName]` の接頭辞は
 付かなくなりました。** これらの grain メンバーを呼ぶ側は、どちらのファサードを使っていても失敗したタスクを受け取り
-ます。どちらの `OrleansDcbExecutor` もこれらを公開していません。エグゼキューターの経路で呼ばれるのは
-`MakeReservationAsync` だけで、その失敗はまとめて `InvalidOperationException("Failed to reserve tags: ...")` として
-報告されます。
+ます。どちらの `OrleansDcbExecutor` も `IMultiProjectionGrain` のこれらのメンバーは公開していません。エグゼキューターの
+経路では、`ICommandContext.TagExistsAsync` と `GetTagLatestSortableUniqueIdAsync` が
+`ITagConsistentGrain.GetLatestSortableUniqueIdAsync` に届き（転送された例外は WithResult では失敗の箱に入り、
+WithoutResult では送出されます）、予約が `MakeReservationAsync` に届きます。予約の失敗は
+`InvalidOperationException("Failed to reserve tags: ...")` にまとめられます。
 
 ## MaterializedView
 

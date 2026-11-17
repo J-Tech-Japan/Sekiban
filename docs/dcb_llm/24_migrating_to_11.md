@@ -69,13 +69,21 @@ The WithResult interfaces implement the exception-based core members explicitly 
 box reaches the core as the exception it carried, and the WithResult facade boxes core failures with the original
 exception.
 
-**Messages from Orleans grains may lose the `[TypeName]` prefix.** In 10.x, a failure returned by the grain members
-that returned boxes came back flattened to `Exception("[TypeName] message")`. In 11 those members send the exception
-itself wherever Orleans can serialize it (see [Exception transport](#exception-transport)). The WithResult executors do
-not expose these grain members; the executor reaches only `ITagConsistentGrain.MakeReservationAsync`, whose failures are
-reported in the aggregated `InvalidOperationException("Failed to reserve tags: ...")`, so the per-tag text there may no
-longer start with `[TypeName]`. Code that matched on the prefix must stop relying on it; code that calls the grains
-directly gets a faulted task carrying the exception (see [Orleans](#orleans)).
+**A failed box may now carry the original exception type.** In 10.x, a failure returned by the grain members that
+returned boxes came back flattened to `Exception("[TypeName] message")` (a `SekibanProjectionFaultException` was the
+exception: it kept its type and descriptor). In 11 those members send the exception itself wherever Orleans can
+serialize it (see [Exception transport](#exception-transport)). Through `OrleansDcbExecutor` this shows in two places:
+
+- `ICommandContext.TagExistsAsync` and `ICommandContext.GetTagLatestSortableUniqueIdAsync` read
+  `ITagConsistentGrain.GetLatestSortableUniqueIdAsync`. A failure there now reaches your handler's failed box with its
+  real type and message, for example a Sekiban storage exception or an Orleans `TimeoutException`, instead of
+  `Exception("[TypeName] message")`. (WithoutResult throws the same exception with its boundary annotations.)
+- Tag reservations call `ITagConsistentGrain.MakeReservationAsync`. Their failures are still folded into
+  `InvalidOperationException("Failed to reserve tags: ...")`; only the per-tag text inside it may no longer start with
+  `[TypeName]`.
+
+Code that matched on the `[TypeName]` prefix must match on the exception type, or stop relying on the prefix. Code
+that calls the grains directly gets a faulted task carrying the exception (see [Orleans](#orleans)).
 
 Source breaks that can still reach WithResult code:
 
@@ -603,24 +611,28 @@ codec reaches the caller as `CodecNotFoundException`, and its message is lost. 1
   its fault annotations on arrival).
 - **On the members that used to return boxes** (the five `IMultiProjectionGrain` members and the two
   `ITagConsistentGrain` members above), a failure travels as the same exception instance when Orleans can serialize it.
-  Before it is sent, only `InnerException`, `AggregateException.InnerExceptions` and `Data` are walked (each exception
-  visited once, depth at most 64, at most 1024 exceptions). Every `Data` key and value must be `null`, a string, a
+  Before it is sent, only `InnerException`, `AggregateException.InnerExceptions` and `Data` are walked. Reaching the
+  same exception instance a second time (for example an `AggregateException` that lists one inner exception twice),
+  going deeper than 64 levels or visiting more than 1024 exceptions makes the check fail, and the failure falls back
+  as described below. Every `Data` key and value must be `null`, a string, a
   primitive, an enum, `decimal`, `DateTime`, `DateTimeOffset`, `TimeSpan` or `Guid`. The five converter types above
   are the exception to this rule: their surrogate carries only its own fields, so their `Data` is not inspected (a
   `SekibanProjectionFaultException` with a self-referencing `Data` entry still travels through its converter), and their
   inner exception is checked only for `ConditionalAppendInDoubtException` and `KeyReuseConflictException`, whose
   surrogates carry it. Only after this walk is the exception serialized with the silo serializer as a test.
-- **Fallback.** A failure that does not pass becomes `Exception("[TypeName] message")`, the form 10.x always used on
-  these members. The check is conservative: an exception without a Sekiban converter whose `Data` (or an inner
+- **Fallback.** A failure that does not pass becomes `Exception("[TypeName] message")`, the form 10.x used on these
+  members for every failure except `SekibanProjectionFaultException`. The check is conservative: an exception without a Sekiban converter whose `Data` (or an inner
   exception's `Data`) holds a complex value is flattened even if Orleans could carry it.
 - **Cancellation is preserved.** A cancellation that cannot travel becomes `OperationCanceledException` (or
   `TaskCanceledException`) with the same message, without inner exception or `Data`.
 
 So Sekiban types with a converter keep type, message and properties, System types keep type and message, and types
 without a codec keep the `[TypeName] message` form. **The `[TypeName]` prefix is gone wherever a codec exists.** A
-caller of these grain members gets the faulted task whichever facade it uses; neither `OrleansDcbExecutor` exposes them.
-On the executor path only `MakeReservationAsync` is reached, and its failures are reported in the aggregated
-`InvalidOperationException("Failed to reserve tags: ...")`.
+caller of these grain members gets the faulted task whichever facade it uses. Neither `OrleansDcbExecutor` exposes the
+`IMultiProjectionGrain` members; on the executor path, `ICommandContext.TagExistsAsync` and
+`GetTagLatestSortableUniqueIdAsync` reach `ITagConsistentGrain.GetLatestSortableUniqueIdAsync` (the transported
+exception arrives in the WithResult failed box, or is thrown by WithoutResult), and reservations reach
+`MakeReservationAsync`, whose failures are folded into `InvalidOperationException("Failed to reserve tags: ...")`.
 
 ## MaterializedView
 
