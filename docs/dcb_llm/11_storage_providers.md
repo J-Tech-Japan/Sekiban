@@ -226,7 +226,8 @@ continue to use the list fallback without recompilation.
     and retry delay operations.
 - Capability selection is fail-closed: a store must implement the optional interface **and** declare native tagged
   streaming through the live-instance descriptor. `HybridEventStore` forwards only a verified hot-store stream and
-  returns an unsupported `ResultBox` without reading its hot list API otherwise.
+  otherwise fails with `NotSupportedException` without reading its hot list API (10.x: an unsupported failed
+  `ResultBox`).
 - **Optional tag-state cancellation entry paths (SEK-G55).** Existing token-less members remain unchanged. Callers
   that need cancellation can use `ISekibanExecutor.GetTagStateAsync(TagStateId, CancellationToken)` (including its
   generic convenience form), `ITagStateActorCommon.GetStateAsync(CancellationToken)`, the Core/SQLite
@@ -273,7 +274,7 @@ by default, for example:
 
 ```csharp
 app.MapGet("/ops/projection-status", async (ISerializedProjectionStatusReader reader) =>
-        Results.Bytes((await reader.ReadSerializedAsync()).GetValue(), "application/json"))
+        Results.Bytes(await reader.ReadSerializedAsync(), "application/json"))
    .RequireAuthorization("ProjectionStatusOperator");
 ```
 
@@ -306,8 +307,9 @@ status DML; they never run `CREATE`, `ALTER`, migration, or repair SQL. The runt
 schema `USAGE`, and the status table's required `SELECT`/`INSERT`/`UPDATE`/`DELETE` privileges, but not schema or
 table ownership.
 
-Missing or incompatible pre-provisioned schema is fail-closed: a missing table remains a failed `ResultBox` with
-PostgreSQL SQLSTATE `42P01`, and a missing required column remains a failed `ResultBox` with SQLSTATE `42703`.
+Missing or incompatible pre-provisioned schema is fail-closed: a missing table throws `PostgresException` with
+PostgreSQL SQLSTATE `42P01`, and a missing required column throws `PostgresException` with SQLSTATE `42703` (in 10.x
+both were failed `ResultBox` values carrying that exception).
 Neither case becomes an empty success or a false heartbeat. Expected-sequence CAS, service isolation, cancellation,
 and the switch/mutation discriminator columns remain unchanged. Invalid provisioning modes are rejected before a
 status operation starts.
@@ -1085,8 +1087,8 @@ Manual `AddSingleton<ExecutorSizeGateOptions>` registration bypasses this guard 
 validation or measurement parity.
 
 The DynamoDB `BatchWriteItem` fallback validates `MaxBatchWriteItems` only when that fallback operation begins; valid
-values are `1` through `25`. An invalid value returns the existing `ResultBox` error with an
-`ArgumentOutOfRangeException` naming `MaxBatchWriteItems` and its captured value before any batch write dispatch. The
+values are `1` through `25`. An invalid value throws an `ArgumentOutOfRangeException` naming `MaxBatchWriteItems` and
+its captured value before any batch write dispatch (in 10.x the same exception arrived in a failed `ResultBox`). The
 validated value is snapshotted once for the operation and reused for event puts, tag puts, and rollback deletes; a
 configuration change during dispatch is observed only by the next operation. This batch-only validation does not alter
 `MaxBatchGetItems`, `MaxRetryAttempts`, transaction or conditional paths, or their retry/rollback behavior. With

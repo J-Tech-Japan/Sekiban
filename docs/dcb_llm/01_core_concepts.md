@@ -18,6 +18,7 @@
 > - [Value Objects](15_value_object.md)
 > - [Deployment Guide](16_deployment.md)
 > - [Materialized View Basics](20_materialized_view.md)
+> - [Migrating to DCB 11](24_migrating_to_11.md)
 
 ## What is DCB?
 

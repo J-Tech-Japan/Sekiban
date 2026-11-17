@@ -377,8 +377,8 @@ The query observes the activation's in-flight timer catch-up, or kicks a shared 
 restart (`forceFull: false`) and background gate settlement. It never performs the full
 replay inside an eligible query. Timer batches interleave, but global catch-up concurrency
 limits can skip batches, so progress within N is not guaranteed. When the gate settles,
-queries succeed; otherwise state/snapshot return `ResultBox.Error`, while scalar/list queries
-throw `InvalidOperationException` with `MultiProjectionQueryFailClosedMessages.CatchUpInProgressPrefix`
+queries succeed; otherwise state/snapshot fail (since 11 the grain call faults; the WithResult facade returns
+`ResultBox.Error`), while scalar/list queries throw `InvalidOperationException` with `MultiProjectionQueryFailClosedMessages.CatchUpInProgressPrefix`
 (`Projection catch-up is in progress:`), current/target position and events processed.
 A later query succeeds after background completion. Live projection faults take precedence
 (SEK-G14), including faults discovered during the wait. The fail-closed query does not
@@ -397,8 +397,9 @@ an authoritative head read before the query arrived, so successful opt-in querie
 ordinary projection lag semantics, rather than guaranteed freshness at admission.
 The existing 30-second `waitForCatchUp` helpers are unchanged.
 
-The constants identify the start of the grain-generated message. Transport or ResultBox
-wrappers may prepend text, so hosts must match with `Contains(prefix, StringComparison.Ordinal)`.
+The constants identify the start of the grain-generated message. Transport wrappers (for example the
+`[TypeName] message` form that 11 still uses for exceptions Orleans cannot serialize) may prepend text, so hosts must
+match with `Contains(prefix, StringComparison.Ordinal)`.
 When catch-up is inactive and no initiation or settlement is in flight, a poll schedules the
 shared background Ensure immediately. An already refreshed host can settle within N without
 waiting for the timer's empty-batch threshold; the query never runs Ensure inline.
@@ -408,7 +409,7 @@ A minimal ASP.NET Core host mapping (adapt the error source to your query surfac
 ```csharp
 using Sekiban.Dcb.Orleans.Grains;
 
-// Map both ResultBox.GetException() and thrown scalar/list query exceptions.
+// Map a thrown exception, or ResultBox.GetException() on the WithResult facade.
 static IResult MapProjectionError(Exception error, HttpResponse response)
 {
     if (error.Message.Contains(MultiProjectionQueryFailClosedMessages.CatchUpInProgressPrefix,

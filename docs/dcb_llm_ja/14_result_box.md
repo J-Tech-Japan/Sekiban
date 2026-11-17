@@ -17,8 +17,29 @@
 > - [ResultBox](14_result_box.md) (現在位置)
 > - [バリューオブジェクト](15_value_object.md)
 > - [デプロイガイド](16_deployment.md)
+> - [DCB 11 への移行](24_migrating_to_11.md)
 
-ResultBoxes ライブラリは DCB のコマンドハンドラーで広く使われている関数型パイプラインです。
+ResultBoxes ライブラリは、Sekiban Pure と DCB の WithResult 側のコマンドハンドラーで使う関数型パイプラインです。
+
+## DCB 11 での ResultBox の位置づけ
+
+DCB 11 から、`ResultBox` を使うのは **WithResult の表面だけ**です。`ResultBoxes` に依存するパッケージは
+`Sekiban.Dcb.WithResult`、`Sekiban.Dcb.WithResult.Model`、`Sekiban.Dcb.Orleans.WithResult`、
+`Sekiban.Dcb.WithResult.Testing` の 4 つです。
+
+- **WithResult** はこのページの API のままです。コマンドハンドラーは `Task<ResultBox<EventOrNone>>` を返し、
+  プロジェクターとクエリも箱を返し、`ICommandContext` と `ISekibanExecutor` も箱を返します。失敗の箱には元の例外
+  （型とメッセージ）が入ります。Orleans の grain から返ってきた失敗も、Orleans がその例外をシリアライズできる限り同じ
+  です（[例外の転送](24_migrating_to_11.md#例外の転送)）。
+- **Core、Core.Model、ストレージプロバイダー、Orleans.Core、MaterializedView は例外ベースです。** これらの契約は
+  素の値（`Task<T>`）を返して失敗を送出し、「見つからない」は `null` や `false` などの値で表します。WithResult の
+  インターフェイスは、あなたの箱を一度だけ開いてコアのメンバーを実装し、コアの失敗は WithResult ファサードが箱に
+  入れます。
+- **WithoutResult は例外ベース**で、`ResultBoxes` を参照しません。WithoutResult のアプリ自身が `ResultBox` を
+  使う場合は、パッケージを直接参照してください。
+
+10.x では、Core と WithoutResult ファサードの内部でも `ResultBox` を使っていました。契約の変更点は
+[DCB 11 への移行](24_migrating_to_11.md)を参照してください。
 
 ## 主要メソッド
 
@@ -33,6 +54,7 @@ ResultBoxes ライブラリは DCB のコマンドハンドラーで広く使わ
 ## エラーハンドリング
 
 ビジネスルール違反は `ExceptionOrNone.FromException` で表現し、`ResultBox` が自動的に例外を伝搬します。
+WithResult のエグゼキューターは例外を `ResultBox.Error` に変換します。
 API 層では `BadRequest` 等に変換できます。
 
 ## 複数値の伝播

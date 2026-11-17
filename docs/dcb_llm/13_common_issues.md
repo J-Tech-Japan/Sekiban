@@ -257,7 +257,8 @@ Poison-event skip/quarantine is deliberately **not** a default: a projection sil
 Clearing a persisted projection fault is an **operator-only** action on the grain admin interface (`IMultiProjectionGrain`, alongside `GetStatusAsync`). It is **never invoked automatically** and is **not** exposed through `ISekibanExecutor` — application/query code cannot trigger it.
 
 - **Read the committed token first.** On an **upgraded serving silo**, call `TryGetProjectionFaultAsync()` before reset. A successful `ProjectionFaultReadResult` with `HasFault = true` carries `Fault` (projector name, event id, event type, position, message, and first-observed UTC); use its projector name, event id, and position verbatim for `ResetProjectionFaultAsync`. `HasFault = false` and `Fault = null` means only that **no committed descriptor** exists. Do not synthesise a token or make a failed query/`Exception.Data` inspection the normal recovery flow (the legacy annotations remain compatible, but are no longer the canonical operator API).
-- **Treat the other read outcomes as errors, never as no-fault.** The default interface body is only an implementer-compatibility guard: a direct old fake returns explicit unsupported. It does **not** make an old serving silo expose the new RPC; upgrade the silo first. A `ResultBox` error can instead be a committed-state read failure. During a transient fault-descriptor write outage, ordinary queries still fail closed while this read correctly reports no *committed* fault — wait for/retry the durable write rather than attempting a reset with a live-only identity.
+- **Treat the other read outcomes as errors, never as no-fault.** The default interface body is only an implementer-compatibility guard: a direct old fake returns explicit unsupported. It does **not** make an old serving silo expose the new RPC; upgrade the silo first. A failed read (a faulted task; a `ResultBox` error in 10.x and on the WithResult facade) can
+instead be a committed-state read failure. During a transient fault-descriptor write outage, ordinary queries still fail closed while this read correctly reports no *committed* fault — wait for/retry the durable write rather than attempting a reset with a live-only identity.
 - **The persisted descriptor is the authority.** The token is compared against the current *persisted* fault inside the single-writer gate. A stale token, a descriptor changed by a concurrent write, a wrong projector, or no fault present is rejected with a normal error and **no write and no fault clear**. A same-token race commits at most once.
 - **Derived state is rebuilt.** A correct token durably clears the descriptor **and** the derived projection checkpoint, so the projection **rebuilds from the beginning** by catch-up. This does not delete any authoritative events — only the grain's derived snapshot/checkpoint. The first-query barrier prevents any early "healthy" answer before the rebuild reaches the head.
 - **The clear is earned, not assumed.** Only after the durable clear commits is the live actor fault cleared and a fresh activation requested. If the poison still cannot be folded, the per-event boundary **re-establishes and re-persists** the fault on rebuild — the reset never skips or quarantines. A permanent clear happens only when the same position replays successfully.
@@ -267,7 +268,7 @@ Clearing a persisted projection fault is an **operator-only** action on the grai
   - If the **external invalidation fails**, the descriptor clear is skipped: descriptor, live fault and the external snapshot are all retained — nothing changed. Retry the same token once the store recovers.
   - If the external invalidation **succeeds but the descriptor clear fails**, the external snapshot is already gone but the descriptor and live fault are retained, so every query stays rejected (fail-closed). This is coherent: a later rebuild regenerates the snapshot, and the retained descriptor keeps the projection rejecting queries until you retry the same token, which then completes the clear. A deleted-but-not-yet-regenerated snapshot is harmless — it is derived-only, and no authoritative events are ever deleted.
   - No **in-flight upsert can race the delete**: **every** external snapshot mutation goes through one activation-local coordinator — all three upsert paths (normal persist, streaming persist, version rewrite) **and every delete**, including the public `DeleteExternalStateAsync` admin call and the reset's own invalidation. No direct-to-store bypass remains. So the delete waits for any parked/in-flight upsert to finish before it deletes, and no upsert runs concurrently with it. On top of that, the coordinator **rejects any upsert while a live or committed fault exists**, so a faulted projection persists no derived state and no stale upsert can recreate what the reset removes. Catch-up runs on an interleaving grain timer, so this coordinator — not just non-reentrancy — is what makes the ordering hold. (A durable epoch/tombstone would only be needed for a hypothetical multi-writer or cross-silo persister, which the current model does not have.)
-  - The fault rejection is an **explicit failure, not a silent success**: a blocked upsert returns a `ResultBox.Error` carrying a stable `ExternalPersistenceBlockedByFaultException`, never a success carrying `false`. This matters because callers that inspect only `IsSuccess` would otherwise mistake a rejection for a completed save — so normal and streaming persistence never report "saved" or advance any persisted metadata after a rejection, and a version rewrite keeps `updated = false` and performs no projector-version write.
+  - The fault rejection is an **explicit failure, not a silent success**: a blocked upsert is reported as a failed attempt carrying a stable `ExternalPersistenceBlockedByFaultException` (a `ResultBox.Error` in 10.x), never a success carrying `false`. This matters because callers that inspect only the success flag would otherwise mistake a rejection for a completed save — so normal and streaming persistence never report "saved" or advance any persisted metadata after a rejection, and a version rewrite keeps `updated = false` and performs no projector-version write.
 
 ## Conditional (unique-key) append: in-doubt, key-reuse, and the Cosmos tag-repair gate
 
@@ -428,8 +429,8 @@ had committed state passed.
 
 **How G19 closes the single-activation race.** In the actor lock and after catch-up, an empty expected version means
 "expect the tag to be empty",
-so a second non-overlapping first write **conflicts** through the existing `ResultBox.Error` channel (no new public
-exception type). SEK-G30 subsequently separated an unobserved tag (`null`, Unspecified: reserve without comparison) from
+so a second non-overlapping first write **conflicts** through the existing failure channel (a `ResultBox.Error` on
+WithResult, the thrown exception on WithoutResult; no new public exception type). SEK-G30 subsequently separated an unobserved tag (`null`, Unspecified: reserve without comparison) from
 an observed-empty tag (`""`, AssertEmpty); non-empty versions remain ExactMatch. See
 [Three-state reservation semantics](03_aggregate_command_events.md#three-state-reservation-semantics-sek-g19--sek-g30-10110).
 
@@ -753,8 +754,8 @@ The query observes the activation's in-flight timer catch-up, or kicks a shared 
 restart (`forceFull: false`) and background gate settlement. It never performs the full
 replay inside an eligible query. Timer batches interleave, but global catch-up concurrency
 limits can skip batches, so progress within N is not guaranteed. When the gate settles,
-queries succeed; otherwise state/snapshot return `ResultBox.Error`, while scalar/list queries
-throw `InvalidOperationException` with `MultiProjectionQueryFailClosedMessages.CatchUpInProgressPrefix`
+queries succeed; otherwise state/snapshot fail (since 11 the grain call faults; the WithResult facade returns
+`ResultBox.Error`), while scalar/list queries throw `InvalidOperationException` with `MultiProjectionQueryFailClosedMessages.CatchUpInProgressPrefix`
 (`Projection catch-up is in progress:`), current/target position and events processed.
 A later query succeeds after background completion. Live projection faults take precedence
 (SEK-G14), including faults discovered during the wait. The fail-closed query does not
@@ -773,8 +774,9 @@ an authoritative head read before the query arrived, so successful opt-in querie
 ordinary projection lag semantics, rather than guaranteed freshness at admission.
 The existing 30-second `waitForCatchUp` helpers are unchanged.
 
-The constants identify the start of the grain-generated message. Transport or ResultBox
-wrappers may prepend text, so hosts must match with `Contains(prefix, StringComparison.Ordinal)`.
+The constants identify the start of the grain-generated message. Transport wrappers (for example the
+`[TypeName] message` form that 11 still uses for exceptions Orleans cannot serialize) may prepend text, so hosts must
+match with `Contains(prefix, StringComparison.Ordinal)`.
 When catch-up is inactive and no initiation or settlement is in flight, a poll schedules the
 shared background Ensure immediately. An already refreshed host can settle within N without
 waiting for the timer's empty-batch threshold; the query never runs Ensure inline.
@@ -784,7 +786,7 @@ A minimal ASP.NET Core host mapping (adapt the error source to your query surfac
 ```csharp
 using Sekiban.Dcb.Orleans.Grains;
 
-// Map both ResultBox.GetException() and thrown scalar/list query exceptions.
+// Map a thrown exception, or ResultBox.GetException() on the WithResult facade.
 static IResult MapProjectionError(Exception error, HttpResponse response)
 {
     if (error.Message.Contains(MultiProjectionQueryFailClosedMessages.CatchUpInProgressPrefix,

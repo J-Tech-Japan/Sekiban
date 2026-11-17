@@ -241,7 +241,7 @@ poison イベントのスキップ/隔離は**意図的に既定ではありま�
 永続化された投影 fault のクリアは、グレインの管理インターフェース(`IMultiProjectionGrain`、`GetStatusAsync` と同じ面)における**運用者専用**の操作です。**自動的には決して呼ばれず**、`ISekibanExecutor` にも公開されません。アプリケーション/クエリのコードからは起動できません。
 
 - **まず commit 済みトークンを読む**: **アップグレード済みの serving silo** で、リセット前に `TryGetProjectionFaultAsync()` を呼びます。成功した `ProjectionFaultReadResult` の `HasFault = true` なら `Fault` にプロジェクター名・イベント id・イベント型・位置・メッセージ・初回観測 UTC が入り、そのプロジェクター名・イベント id・位置をそのまま `ResetProjectionFaultAsync` に渡します。`HasFault = false` かつ `Fault = null` は **commit 済み descriptor が無い**ことだけを意味します。トークンを合成せず、失敗クエリ/`Exception.Data` の調査を通常の復旧手順にしないでください（既存 annotation との互換性は残りますが、canonical な運用 API ではありません）。
-- **それ以外の read outcome は「fault なし」にしない**: default interface body は implementer 互換性のための guard に過ぎず、直接呼ばれる旧 fake には明示的な unsupported を返します。旧 serving silo に新 RPC を生やす fallback ではありません。silo を先にアップグレードしてください。`ResultBox` の error は committed-state read failure の場合もあります。fault descriptor 書き込みが一時的に失敗している間は、通常クエリは fail-closed のままですが、この read は正しく「*commit 済み* fault なし」と報告します。live だけの識別情報でリセットせず、耐久書き込みを待つ/再試行してください。
+- **それ以外の read outcome は「fault なし」にしない**: default interface body は implementer 互換性のための guard に過ぎず、直接呼ばれる旧 fake には明示的な unsupported を返します。旧 serving silo に新 RPC を生やす fallback ではありません。silo を先にアップグレードしてください。読み取りの失敗（タスクの失敗。10.x と WithResult ファサードでは `ResultBox` の error）は committed-state read failure の場合もあります。fault descriptor 書き込みが一時的に失敗している間は、通常クエリは fail-closed のままですが、この read は正しく「*commit 済み* fault なし」と報告します。live だけの識別情報でリセットせず、耐久書き込みを待つ/再試行してください。
 - **永続 descriptor が権威**: トークンは単一ライター gate 内で現在の*永続* fault と照合されます。古いトークン・並行書き込みで変わった descriptor・プロジェクター不一致・fault 不在は通常のエラーで拒否され、**書き込みも fault クリアも行われません**。同一トークンのレースは高々1回だけ commit します。
 - **派生状態を再構築**: 正しいトークンは descriptor **と**派生チェックポイントを耐久的にクリアし、投影は catch-up で**先頭から再構築**されます。権威イベントは一切削除されません(グレインの派生スナップショット/チェックポイントのみ)。first-query barrier により、再構築が head に到達する前に「健全」応答が漏れることはありません。
 - **クリアは獲得するもの**: 耐久的クリアが commit された後にのみライブアクター fault がクリアされ、新規アクティベーションが要求されます。poison が依然として fold できなければ、再構築時に per-event 境界が fault を**再確立・再永続化**します — リセットはスキップや隔離をしません。恒久的なクリアは同じ位置が正常にリプレイされたときにのみ起こります。
@@ -251,7 +251,7 @@ poison イベントのスキップ/隔離は**意図的に既定ではありま�
   - **外部無効化が失敗**した場合、descriptor クリアはスキップされ、descriptor・ライブ fault・外部スナップショットはすべて保持されます(何も変わらない)。ストア回復後に同じトークンで再試行してください。
   - 外部無効化が**成功したが descriptor クリアが失敗**した場合、外部スナップショットは既に消えていますが descriptor とライブ fault は保持され、全クエリは拒否のまま(fail-closed)です。これは整合的です: 後続の rebuild がスナップショットを再生成し、保持された descriptor が再試行まで projection を拒否状態に保ちます。削除されて未再生成のスナップショットは無害です(派生専用であり、権威イベントは決して削除されません)。
   - **進行中の upsert が delete と競合することはありません**: **すべての**外部スナップショット変更が1つのアクティベーションローカル coordinator を通ります — 3つの upsert パス（通常 persist・streaming persist・version rewrite）**とすべての delete**、すなわち公開 admin API の `DeleteExternalStateAsync` とリセット自身の invalidation を含みます。ストアへの直接バイパスは残っていません。そのため delete は park 中/進行中の upsert 完了を待ってから削除し、delete と並行して upsert が走ることはありません。さらに coordinator は **live または committed の fault 存在時に upsert を拒否**するため、faulted な projection は派生状態を永続化せず、stale upsert がリセットの削除対象を再生成することもありません。catch-up は interleaving のグレインタイマー上で走るため、この順序を保証するのは非リエントランシではなくこの coordinator です。(耐久的な epoch/tombstone は、現行モデルにはない multi-writer や cross-silo の永続化でのみ必要になります。)
-  - fault による拒否は **暗黙の成功ではなく明示的な失敗**です: ブロックされた upsert は、成功値 `false` ではなく、安定した `ExternalPersistenceBlockedByFaultException` を保持する `ResultBox.Error` を返します。これは重要で、`IsSuccess` だけを見る呼び出し側が拒否を「保存完了」と誤認しないためです — 通常 persist と streaming persist は拒否後に「保存済み」を報告せず永続化メタデータも進めず、version rewrite は `updated = false` を維持し projector-version の書き込みを一切行いません。
+  - fault による拒否は **暗黙の成功ではなく明示的な失敗**です: ブロックされた upsert は、成功値 `false` ではなく、安定した `ExternalPersistenceBlockedByFaultException` を保持する失敗した試行として報告されます（10.x では `ResultBox.Error`）。これは重要で、成功フラグだけを見る呼び出し側が拒否を「保存完了」と誤認しないためです — 通常 persist と streaming persist は拒否後に「保存済み」を報告せず永続化メタデータも進めず、version rewrite は `updated = false` を維持し projector-version の書き込みを一切行いません。
 
 ## 条件付き（ユニークキー）追記: in-doubt・キー再利用・Cosmos タグ修復ゲート
 
@@ -393,8 +393,8 @@ G18 + G19 + G20 です。
 通過していました。
 
 **G19 による単一活性化内の競合の解決**。予約はアクターロック内・catch-up 後に行われ、空の期待バージョンは「タグが空であることを期待する」
-を意味します。そのため、2つ目の非オーバーラップな初回書き込みは既存の `ResultBox.Error` チャネルで**衝突**します
-（新しい公開例外型なし）。その後 SEK-G30 は、未観測タグ（`null`、Unspecified: 比較なしで予約）と、正常に空を観測した
+を意味します。そのため、2つ目の非オーバーラップな初回書き込みは既存の失敗の経路で**衝突**します
+（WithResult では `ResultBox.Error`、WithoutResult では送出される例外。新しい公開例外型なし）。その後 SEK-G30 は、未観測タグ（`null`、Unspecified: 比較なしで予約）と、正常に空を観測した
 タグ（`""`、AssertEmpty）を区別しました。非空バージョンは引き続き ExactMatch です。
 [3状態の予約セマンティクス](03_aggregate_command_events.md#3状態の予約セマンティクス-sek-g19--sek-g30-10110)参照。
 
@@ -676,7 +676,8 @@ blocking のままです。re-arm は現在の bounded episode を終了しま�
 (`forceFull: false`) と background gate settlement を開始します。対象クエリの中で
 full replay は実行しません。timer は interleave しますが、全体の同時実行制限で batch が
 skip される可能性があるため N 内の進捗は保証されません。gate が完了すれば成功し、
-未完了なら state/snapshot は `ResultBox.Error`、scalar/list は `InvalidOperationException` を返します。
+未完了なら state/snapshot は失敗し（11 では grain 呼び出しが失敗し、WithResult ファサードでは `ResultBox.Error`
+になります）、scalar/list は `InvalidOperationException` を送出します。
 メッセージは `MultiProjectionQueryFailClosedMessages.CatchUpInProgressPrefix`
 (`Projection catch-up is in progress:`) で始まり、現在位置・target 位置・処理イベント数を含みます。
 background 完了後のクエリは成功します。待機中に検出した live projection fault も SEK-G14 が優先します。
@@ -694,8 +695,9 @@ SEK-G21 の authoritative start position 契約は維持します。background s
 クエリ到着前の場合があり、成功時には通常の projection lag semantics が適用されます。
 受付時点の freshness は保証されません。既存の 30 秒 `waitForCatchUp` helper は変更しません。
 
-定数は grain が生成するメッセージの先頭を表します。transport や ResultBox の wrapper が
-文字列を前置するため、host は `Contains(prefix, StringComparison.Ordinal)` で判定します。
+定数は grain が生成するメッセージの先頭を表します。transport の wrapper（Orleans がシリアライズできない例外に
+11 でも使う `[TypeName] message` の形など）が文字列を前置することがあるため、host は
+`Contains(prefix, StringComparison.Ordinal)` で判定します。
 catch-up が非アクティブで initiation と settlement が進行中でなければ、poll は共有 background
 Ensure を直ちに開始します。Refresh 済みの host は timer の空 batch 閾値を待たずに N 内で
 settle できます。クエリ内で Ensure を inline 実行することはありません。
@@ -705,7 +707,7 @@ ASP.NET Core host の 503 と Retry-After マッピング例（error の取得�
 ```csharp
 using Sekiban.Dcb.Orleans.Grains;
 
-// Map both ResultBox.GetException() and thrown scalar/list query exceptions.
+// Map a thrown exception, or ResultBox.GetException() on the WithResult facade.
 static IResult MapProjectionError(Exception error, HttpResponse response)
 {
     if (error.Message.Contains(MultiProjectionQueryFailClosedMessages.CatchUpInProgressPrefix,
