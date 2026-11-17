@@ -259,9 +259,21 @@ public static class DcbDomainTypesBuilderAssemblyExtensions
 
         foreach (var type in customProjectors)
         {
+            // Resolving the generic registration (MakeGenericMethod) is outside the catch: a type that breaks the
+            // self-type constraint fails the scan with its ArgumentException, as in 10.x.
+            var registration = ResolveGenericRegistration(
+                builder.MultiProjectorTypes,
+                "RegisterProjectorWithCustomSerialization",
+                type,
+                0);
+            if (registration is null)
+            {
+                continue;
+            }
+
             try
             {
-                InvokeGenericRegistration(builder.MultiProjectorTypes, "RegisterProjectorWithCustomSerialization", type, 0, null);
+                registration.Invoke(builder.MultiProjectorTypes, BindingFlags.DoNotWrapExceptions, null, null, null);
             }
             catch (Exception)
             {
@@ -366,21 +378,22 @@ public static class DcbDomainTypesBuilderAssemblyExtensions
         int parameterCount,
         object?[]? parameters)
     {
-        var method = target.GetType()
+        var genericMethod = ResolveGenericRegistration(target, methodName, genericType, parameterCount);
+        // A registration failure surfaces as the exception the registration threw, not a TargetInvocationException.
+        genericMethod?.Invoke(target, BindingFlags.DoNotWrapExceptions, null, parameters, null);
+    }
+
+    private static MethodInfo? ResolveGenericRegistration(
+        object target,
+        string methodName,
+        Type genericType,
+        int parameterCount) =>
+        target.GetType()
             .GetMethods()
             .FirstOrDefault(m =>
                 m.Name == methodName &&
                 m.IsGenericMethod &&
                 m.GetGenericArguments().Length == 1 &&
-                m.GetParameters().Length == parameterCount);
-
-        if (method == null)
-        {
-            return;
-        }
-
-        var genericMethod = method.MakeGenericMethod(genericType);
-        // A registration failure surfaces as the exception the registration threw, not a TargetInvocationException.
-        genericMethod.Invoke(target, BindingFlags.DoNotWrapExceptions, null, parameters, null);
-    }
+                m.GetParameters().Length == parameterCount)
+            ?.MakeGenericMethod(genericType);
 }

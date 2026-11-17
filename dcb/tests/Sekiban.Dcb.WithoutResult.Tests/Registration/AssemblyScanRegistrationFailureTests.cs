@@ -49,6 +49,21 @@ namespace Sekiban.Dcb.WithoutResult.Tests.Registration
             Assert.Equal("3.0", domainTypes.MultiProjectorTypes.GetProjectorVersion(HealthyPlainProjector.MultiProjectorName));
         }
 
+        /// <summary>
+        ///     Only the registration's own failure is skipped. A scanned type that matches the custom-serialization
+        ///     filter but breaks the self-type constraint fails to resolve the generic registration, and that
+        ///     ArgumentException escapes the scan, as in 10.x.
+        /// </summary>
+        [Fact]
+        public void ScannedCustomSerializedProjector_BreakingTheSelfTypeConstraint_FailsTheScan()
+        {
+            Assert.Throws<ArgumentException>(() =>
+                DcbDomainTypesExtensions.Simple(builder =>
+                    builder.AddMultiProjectorsFromNamespace(
+                        typeof(ScanFailure.Constraint.DerivedCustomProjector).Assembly,
+                        typeof(ScanFailure.Constraint.DerivedCustomProjector).Namespace!)));
+        }
+
         [Fact]
         public void DirectCustomSerializedRegistration_WhoseNameGetterThrows_SurfacesThatException()
         {
@@ -148,4 +163,35 @@ namespace Sekiban.Dcb.WithoutResult.Tests.Registration.ScanFailure.Custom
 
         public static HealthyPlainProjector GenerateInitialPayload() => new();
     }
+}
+
+namespace Sekiban.Dcb.WithoutResult.Tests.Registration.ScanFailure.Constraint
+{
+    public record BaseCustomProjector : IMultiProjectorWithCustomSerialization<BaseCustomProjector>
+    {
+        public static string MultiProjectorName => "scan-failure-constraint-base";
+        public static string MultiProjectorVersion => "1.0";
+
+        public static BaseCustomProjector Project(
+            BaseCustomProjector payload,
+            Event ev,
+            List<ITag> tags,
+            DcbDomainTypes domainTypes,
+            SortableUniqueId safeWindowThreshold) => payload;
+
+        public static BaseCustomProjector GenerateInitialPayload() => new();
+
+        public static SerializationResult Serialize(
+            DcbDomainTypes domainTypes,
+            string safeWindowThreshold,
+            BaseCustomProjector payload) => throw new NotSupportedException();
+
+        public static BaseCustomProjector Deserialize(
+            DcbDomainTypes domainTypes,
+            string safeWindowThreshold,
+            ReadOnlySpan<byte> data) => throw new NotSupportedException();
+    }
+
+    /// <summary>Implements the interface only through its base, so it is not its own TSelf.</summary>
+    public record DerivedCustomProjector : BaseCustomProjector;
 }
