@@ -155,7 +155,7 @@ public record
         if (relevantTags.Count == 0)
         {
             // No tags of the specified group, skip this event
-            return payload;
+            return payload ?? throw GenericTagProjectGuard.NoPayload("GenericIntTagMultiProjector", ev);
         }
 
         // Get affected IDs from the passed tags for fallback

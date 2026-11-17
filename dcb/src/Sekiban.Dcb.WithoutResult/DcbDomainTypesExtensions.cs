@@ -259,7 +259,15 @@ public static class DcbDomainTypesBuilderAssemblyExtensions
 
         foreach (var type in customProjectors)
         {
-            InvokeGenericRegistration(builder.MultiProjectorTypes, "RegisterProjectorWithCustomSerialization", type, 0, null);
+            try
+            {
+                InvokeGenericRegistration(builder.MultiProjectorTypes, "RegisterProjectorWithCustomSerialization", type, 0, null);
+            }
+            catch (Exception)
+            {
+                // As in 10.x: the scan discarded the registration's failed result and went on with the next type.
+                // A direct RegisterProjectorWithCustomSerialization call still throws.
+            }
         }
 
         var customSet = customProjectors.ToHashSet();

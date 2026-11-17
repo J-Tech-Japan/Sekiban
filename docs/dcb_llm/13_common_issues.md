@@ -154,21 +154,23 @@ If your workload cannot tolerate that window at all — money-sensitive workflow
 
 **And a third thing, found while fixing it, which nobody had reported**: the same `UnwrapBox()` was *silently swallowing* failures at value-typed boundaries. That is a correctness defect of our own, unrelated to the reporter's stale state, and it is described below.
 
-**Cause**: the WithoutResult packages are a facade over the `ResultBox`-native core: internally every operation returns a `ResultBox<T>`, and at the edge the box is opened. Opening it used to be `UnwrapBox()`, whose behaviour depends on the shape of `T`:
+**Cause (10.x history)**: in 10.x the WithoutResult packages were a facade over a `ResultBox`-native core: internally every operation returned a `ResultBox<T>`, and at the edge the box was opened. Before 10.3.0, opening it was `UnwrapBox()`, whose behaviour depended on the shape of `T`:
 
-| shape of the box | what the caller used to get |
+| shape of the box (10.x before 10.3.0) | what the caller got |
 |---|---|
 | failed, `T` is a reference type (e.g. `TagState`) | the carried exception, rethrown — correct |
 | failed, `T` is a **value type** (e.g. `bool`, `int`) | `default` — **the failure was silently swallowed** |
 | no box at all (an internal path returned `null`) | `NullReferenceException`, no message, no operation name |
 
-Row 3 is what issue #1045 hit. Row 2 is the one nobody hit yet, and it is worse, because it changed answers rather than just messages. `ICommandContext.TagExistsAsync` returns `bool`, so an event store that could not be reached came back as `false` — indistinguishable from "no, that tag does not exist" — and a command handler guarding on it would go on to create the entity it had just been told, wrongly, was absent.
+Row 3 is what issue #1045 hit. Row 2 is the one nobody hit, and it was worse, because it changed answers rather than just messages. `ICommandContext.TagExistsAsync` returns `bool`, so an event store that could not be reached came back as `false` — indistinguishable from "no, that tag does not exist" — and a command handler guarding on it would go on to create the entity it had just been told, wrongly, was absent.
 
-**Fixed in 10.3.0**. Every WithoutResult boundary now opens the box under one policy:
+**Fixed in 10.3.0** by opening every box under one guarded policy (rethrow the carried failure as itself, at reference- and value-typed boundaries alike).
 
-- **A failure the box carries is rethrown as itself** — same exception, same type, same stack — whether `T` is a reference type or a value type. Your `catch (SekibanValidationException)` and `catch (OperationCanceledException)` keep working exactly as before; cancellation still carries its original `CancellationToken`. What is new is that value-typed boundaries throw it instead of swallowing it.
+**Since 11.0** there is no box below the WithoutResult surface: the core throws, and every WithoutResult boundary runs the core call under one policy:
+
+- **A failure is rethrown as itself** — same exception, same type, same stack — at reference- and value-typed boundaries alike. Your `catch (SekibanValidationException)` and `catch (OperationCanceledException)` keep working; cancellation still carries its original `CancellationToken`.
 - **The boundary is recorded on the exception**, not wrapped around it: `ex.Data["Sekiban.Boundary.Operation"]` (e.g. `ICommandContext.TagExistsAsync`) and `ex.Data["Sekiban.Boundary.Target"]` (e.g. the tag, the command type). The exception type is untouched.
-- **When there is no failure to rethrow**, you get a `SekibanBoundaryException` (namespace `Sekiban.Dcb.Boundaries`) naming the operation, instead of a bare `NullReferenceException`. This means an internal path returned something it should not have — please report it, with the message, which now tells us where to look.
+- **When there is no failure to rethrow** — a call produced a null `Task` or a null result — you get a `SekibanBoundaryException` (namespace `Sekiban.Dcb.Boundaries`) naming the operation, instead of a bare `NullReferenceException`. This means an internal path returned something it should not have — please report it, with the message, which tells us where to look.
 
 **What to do if you see `SekibanBoundaryException`**: it is not a domain error and there is nothing to retry. It says a Sekiban internal returned no result. Open an issue with the message — `Operation` and `Target` are on the exception.
 

@@ -118,6 +118,16 @@ internal static class BoundaryGuard
     }
 
     /// <summary>
+    ///     Records the boundary on a failure the boundary itself is about to throw, and returns it for the throw.
+    /// </summary>
+    internal static TException Annotated<TException>(TException failure, BoundaryContext context)
+        where TException : Exception
+    {
+        Annotate(failure, context);
+        return failure;
+    }
+
+    /// <summary>
     ///     Records the boundary on the exception without changing what it is.
     ///     Two properties matter, and neither is free:
     ///     <list type="bullet">
