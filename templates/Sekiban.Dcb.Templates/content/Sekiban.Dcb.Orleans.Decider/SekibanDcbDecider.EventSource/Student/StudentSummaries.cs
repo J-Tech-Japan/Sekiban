@@ -1,6 +1,5 @@
 using Dcb.ImmutableModels.Events.Enrollment;
 using Dcb.ImmutableModels.Events.Student;
-using ResultBoxes;
 using Sekiban.Dcb;
 using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Events;
@@ -19,9 +18,10 @@ public record StudentSummaries(Dictionary<Guid, StudentSummaries.Item> Students)
     public static string MultiProjectorVersion => "1.0.0";
 
     /// <summary>
-    ///     Internal ResultBox-based implementation
+    ///     Applies one event to the summaries and returns the next state.
+    ///     Unknown events leave the summaries unchanged.
     /// </summary>
-    private static ResultBox<StudentSummaries> ProjectInternal(StudentSummaries payload, Event ev, List<ITag> tags, DcbDomainTypes domainTypes, SortableUniqueId safeWindowThreshold)
+    public static StudentSummaries Project(StudentSummaries payload, Event ev, List<ITag> tags, DcbDomainTypes domainTypes, SortableUniqueId safeWindowThreshold)
     {
         var next = new Dictionary<Guid, Item>(payload.Students);
         switch (ev.Payload)
@@ -56,16 +56,7 @@ public record StudentSummaries(Dictionary<Guid, StudentSummaries.Item> Students)
                 }
                 break;
         }
-        return ResultBox.FromValue(new StudentSummaries(next));
-    }
-
-    /// <summary>
-    ///     Public exception-based API for WithoutResult package
-    /// </summary>
-    public static StudentSummaries Project(StudentSummaries payload, Event ev, List<ITag> tags, DcbDomainTypes domainTypes, SortableUniqueId safeWindowThreshold)
-    {
-        var result = ProjectInternal(payload, ev, tags, domainTypes, safeWindowThreshold);
-        return result.UnwrapBox();
+        return new StudentSummaries(next);
     }
 
     public static StudentSummaries GenerateInitialPayload() => new(new Dictionary<Guid, Item>());

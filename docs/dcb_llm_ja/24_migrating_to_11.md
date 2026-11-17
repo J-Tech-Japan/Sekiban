@@ -50,12 +50,13 @@ Orleans.Core、MaterializedView、WithoutResult 系のパッケージは例外�
   の C# 拡張メンバーに移りました（ソースは互換、バイナリは非互換）。古い Sekiban に対してコンパイルされたドメインの
   レジストリは `TypeLoadException` で読み込めません。
 - **WithoutResult は `ResultBoxes` を推移的に持ち込まなくなりました。** WithoutResult のアプリ自身（ドメイン
-  プロジェクトなど）が `ResultBox` の型を使っているなら、パッケージを直接参照してください。DCB のテンプレートは
-  すでにそうしています。
+  プロジェクトなど）が `ResultBox` の型を使っているなら、パッケージを直接参照してください。
 
   ```xml
   <PackageReference Include="ResultBoxes" Version="0.4.0" />
   ```
+
+  DCB の WithoutResult と Decider のテンプレートは `ResultBox` を使っておらず、`ResultBoxes` も参照していません。
 
 ## WithResult を使っている場合
 
