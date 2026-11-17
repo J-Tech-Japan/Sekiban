@@ -1,5 +1,4 @@
 using Dcb.Domain.WithoutResult.Weather;
-using ResultBoxes;
 using Sekiban.Dcb;
 using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Domains;
