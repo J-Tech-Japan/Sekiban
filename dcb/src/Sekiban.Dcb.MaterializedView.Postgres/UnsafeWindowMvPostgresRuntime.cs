@@ -514,7 +514,6 @@ public sealed class UnsafeWindowMvStreamApplier<TRow> where TRow : class, new()
                             connection,
                             transaction,
                             projectionKey,
-                            safeDict,
                             ct)
                         .ConfigureAwait(false);
                     return;
@@ -554,19 +553,20 @@ public sealed class UnsafeWindowMvStreamApplier<TRow> where TRow : class, new()
         NpgsqlConnection connection,
         IDbTransaction transaction,
         string projectionKey,
-        IDictionary<string, object> safeDict,
         CancellationToken ct)
     {
-        var businessCols = _projector.Schema.Columns.Select(c => c.Name).ToList();
-        var businessValueParams = string.Join(", ", businessCols.Select(c => "@" + c));
+        var businessCols = string.Join(", ", _projector.Schema.Columns.Select(c => c.Name));
 
-        // Copy safe's business columns + SUID + event_version verbatim; set
-        // _safe_due_at = NOW() so the promoter picks this key up on the very
-        // next tick and rebuilds it with a full-history replay.
+        // Copy safe's business columns + SUID + event_version verbatim inside
+        // the database, so values never round-trip through .NET types (JSONB,
+        // DATE, ... would otherwise come back as CLR types that bind as a
+        // different SQL type). _safe_due_at = NOW() so the promoter picks this
+        // key up on the very next tick and rebuilds it with a full-history
+        // replay.
         var sql = $"""
             INSERT INTO {_resolver.UnsafeTable}
                 ({UnsafeWindowMvColumns.ProjectionKey},
-                 {string.Join(", ", businessCols)},
+                 {businessCols},
                  {UnsafeWindowMvColumns.IsDeleted},
                  {UnsafeWindowMvColumns.LastSortableUniqueId},
                  {UnsafeWindowMvColumns.LastEventVersion},
@@ -574,33 +574,25 @@ public sealed class UnsafeWindowMvStreamApplier<TRow> where TRow : class, new()
                  {UnsafeWindowMvColumns.UnsafeSince},
                  {UnsafeWindowMvColumns.SafeDueAt},
                  {UnsafeWindowMvColumns.NeedsRebuild})
-            VALUES (@__projectionKey, {businessValueParams}, @__isDeleted, @__suid, @__eventVersion, NOW(), NOW(), NOW(), TRUE)
+            SELECT {UnsafeWindowMvColumns.ProjectionKey},
+                   {businessCols},
+                   {UnsafeWindowMvColumns.IsDeleted},
+                   {UnsafeWindowMvColumns.LastSortableUniqueId},
+                   {UnsafeWindowMvColumns.LastEventVersion},
+                   NOW(), NOW(), NOW(), TRUE
+            FROM {_resolver.SafeTable}
+            WHERE {UnsafeWindowMvColumns.ProjectionKey} = @__projectionKey
             ON CONFLICT ({UnsafeWindowMvColumns.ProjectionKey}) DO UPDATE SET
                 {UnsafeWindowMvColumns.NeedsRebuild} = TRUE;
             """;
 
-        var parameters = new DynamicParameters();
-        parameters.Add("__projectionKey", projectionKey);
-        parameters.Add("__isDeleted", safeDict[UnsafeWindowMvColumns.IsDeleted]);
-        parameters.Add("__suid", safeDict[UnsafeWindowMvColumns.LastSortableUniqueId]);
-        parameters.Add("__eventVersion", Convert.ToInt64(safeDict[UnsafeWindowMvColumns.LastEventVersion]));
-        foreach (var column in _projector.Schema.Columns)
-        {
-            parameters.Add(column.Name, safeDict.TryGetValue(column.Name, out var v) ? ToDapperParameterValue(v) : null);
-        }
-
-        await connection.ExecuteAsync(new CommandDefinition(sql, parameters, transaction: transaction, cancellationToken: ct))
+        await connection.ExecuteAsync(new CommandDefinition(
+                sql,
+                new { __projectionKey = projectionKey },
+                transaction: transaction,
+                cancellationToken: ct))
             .ConfigureAwait(false);
     }
-
-    // Npgsql reads DATE / TIME columns as DateOnly / TimeOnly, which Dapper
-    // cannot bind as parameters. Convert them back to the types Dapper maps.
-    private static object? ToDapperParameterValue(object? value) => value switch
-    {
-        DateOnly date => date.ToDateTime(TimeOnly.MinValue),
-        TimeOnly time => time.ToTimeSpan(),
-        _ => value
-    };
 
     private async Task UpsertUnsafeAsync(
         NpgsqlConnection connection,

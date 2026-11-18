@@ -155,6 +155,31 @@ internal static class UnsafeWindowMvSqlServerTypes
 
     public static string Translate(string declaredType) =>
         UnsafeWindowMvLogicalTypes.Translate(declaredType, Map);
+
+    // An untyped null is sent by SqlClient as NVARCHAR, which SQL Server cannot
+    // implicitly convert to the binary family (error 257). Bind a null value
+    // for a binary column as a typed binary null instead.
+    public static void AddBusinessValue(DynamicParameters parameters, UnsafeWindowMvColumn column, object? value)
+    {
+        if (value is null && IsBinary(column.SqlType))
+        {
+            parameters.Add(column.Name, null, DbType.Binary);
+            return;
+        }
+        parameters.Add(column.Name, value);
+    }
+
+    private static bool IsBinary(string declaredType)
+    {
+        var translated = Translate(declaredType).TrimStart();
+        return StartsWithKeyword(translated, "VARBINARY")
+            || StartsWithKeyword(translated, "BINARY")
+            || StartsWithKeyword(translated, "IMAGE");
+    }
+
+    private static bool StartsWithKeyword(string type, string keyword) =>
+        type.StartsWith(keyword, StringComparison.OrdinalIgnoreCase)
+        && (type.Length == keyword.Length || !(char.IsLetterOrDigit(type[keyword.Length]) || type[keyword.Length] == '_'));
 }
 
 internal static class UnsafeWindowMvSqlServerDdl
@@ -471,7 +496,7 @@ public sealed class UnsafeWindowMvSqlServerStreamApplier<TRow> where TRow : clas
         parameters.Add("__eventVersion", Convert.ToInt64(safeDict[UnsafeWindowMvReservedColumns.LastEventVersion]));
         foreach (var column in _projector.Schema.Columns)
         {
-            parameters.Add(column.Name, safeDict.TryGetValue(column.Name, out var v) ? v : null);
+            UnsafeWindowMvSqlServerTypes.AddBusinessValue(parameters, column, safeDict.TryGetValue(column.Name, out var v) ? v : null);
         }
 
         // SQL Server upsert: UPDATE (HOLDLOCK) then INSERT when no row was
@@ -524,7 +549,7 @@ public sealed class UnsafeWindowMvSqlServerStreamApplier<TRow> where TRow : clas
         parameters.Add("__safeDueAt", safeDueAt);
         foreach (var column in _projector.Schema.Columns)
         {
-            parameters.Add(column.Name, column.Getter(row));
+            UnsafeWindowMvSqlServerTypes.AddBusinessValue(parameters, column, column.Getter(row));
         }
 
         var businessUpdates = string.Join(", ", businessCols.Select(c => $"{c} = @{c}"));
@@ -601,7 +626,7 @@ public sealed class UnsafeWindowMvSqlServerStreamApplier<TRow> where TRow : clas
             {
                 value = null;
             }
-            parameters.Add(column.Name, value);
+            UnsafeWindowMvSqlServerTypes.AddBusinessValue(parameters, column, value);
         }
 
         var businessUpdates = string.Join(", ", businessCols.Select(c => $"{c} = @{c}"));
@@ -898,7 +923,7 @@ public sealed class UnsafeWindowMvSqlServerPromoter<TRow> : IUnsafeWindowMvPromo
 
         foreach (var column in _projector.Schema.Columns)
         {
-            parameters.Add(column.Name, row is null ? null : column.Getter(row));
+            UnsafeWindowMvSqlServerTypes.AddBusinessValue(parameters, column, row is null ? null : column.Getter(row));
         }
 
         var businessUpdates = string.Join(", ", businessCols.Select(c => $"{c} = @{c}"));
