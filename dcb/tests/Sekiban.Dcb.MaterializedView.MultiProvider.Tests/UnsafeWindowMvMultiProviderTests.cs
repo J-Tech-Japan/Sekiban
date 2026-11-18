@@ -9,6 +9,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using MySqlConnector;
 using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Domains;
+using Sekiban.Dcb.Events;
 using Sekiban.Dcb.Testing;
 using Sekiban.Dcb.MaterializedView;
 using Sekiban.Dcb.MaterializedView.MySql;
@@ -73,6 +74,7 @@ internal interface IUnsafeWindowTestHarness : IAsyncDisposable
     string CurrentLiveView { get; }
     Task<DbConnection> OpenConnectionAsync();
     Task ResetTablesAsync();
+    Task ApplyEventDirectlyAsync(Event ev, CancellationToken ct);
 }
 
 internal static class UnsafeWindowMultiProviderAssertions
@@ -243,6 +245,16 @@ internal sealed class SqlServerUnsafeWindowHarness : IUnsafeWindowTestHarness
         await _initializer.InitializeAsync(CancellationToken.None);
     }
 
+    public async Task ApplyEventDirectlyAsync(Event ev, CancellationToken ct)
+    {
+        await using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync(ct);
+        await using var transaction = await connection.BeginTransactionAsync(ct);
+        await new UnsafeWindowMvSqlServerStreamApplier<WeatherForecastUnsafeRow>(_resolver, _projector)
+            .ApplyEventAsync(connection, transaction, ev, ct);
+        await transaction.CommitAsync(ct);
+    }
+
     public ValueTask DisposeAsync() => ValueTask.CompletedTask;
 }
 
@@ -290,6 +302,16 @@ internal sealed class MySqlUnsafeWindowHarness : IUnsafeWindowTestHarness
         await _initializer.InitializeAsync(CancellationToken.None);
     }
 
+    public async Task ApplyEventDirectlyAsync(Event ev, CancellationToken ct)
+    {
+        await using var connection = new MySqlConnection(_connectionString);
+        await connection.OpenAsync(ct);
+        await using var transaction = await connection.BeginTransactionAsync(ct);
+        await new UnsafeWindowMvMySqlStreamApplier<WeatherForecastUnsafeRow>(_resolver, _projector)
+            .ApplyEventAsync(connection, transaction, ev, ct);
+        await transaction.CommitAsync(ct);
+    }
+
     public ValueTask DisposeAsync() => ValueTask.CompletedTask;
 }
 
@@ -335,6 +357,16 @@ internal sealed class SqliteUnsafeWindowHarness : IUnsafeWindowTestHarness
             DROP TABLE IF EXISTS {_resolver.SafeTable};
             """);
         await _initializer.InitializeAsync(CancellationToken.None);
+    }
+
+    public async Task ApplyEventDirectlyAsync(Event ev, CancellationToken ct)
+    {
+        await using var connection = new SqliteConnection(_connectionString);
+        await connection.OpenAsync(ct);
+        await using var transaction = await connection.BeginTransactionAsync(ct);
+        await new UnsafeWindowMvSqliteStreamApplier<WeatherForecastUnsafeRow>(_resolver, _projector)
+            .ApplyEventAsync(connection, transaction, ev, ct);
+        await transaction.CommitAsync(ct);
     }
 
     public ValueTask DisposeAsync() => ValueTask.CompletedTask;

@@ -586,12 +586,21 @@ public sealed class UnsafeWindowMvStreamApplier<TRow> where TRow : class, new()
         parameters.Add("__eventVersion", Convert.ToInt64(safeDict[UnsafeWindowMvColumns.LastEventVersion]));
         foreach (var column in _projector.Schema.Columns)
         {
-            parameters.Add(column.Name, safeDict.TryGetValue(column.Name, out var v) ? (v ?? DBNull.Value) : DBNull.Value);
+            parameters.Add(column.Name, safeDict.TryGetValue(column.Name, out var v) ? ToDapperParameterValue(v) : null);
         }
 
         await connection.ExecuteAsync(new CommandDefinition(sql, parameters, transaction: transaction, cancellationToken: ct))
             .ConfigureAwait(false);
     }
+
+    // Npgsql reads DATE / TIME columns as DateOnly / TimeOnly, which Dapper
+    // cannot bind as parameters. Convert them back to the types Dapper maps.
+    private static object? ToDapperParameterValue(object? value) => value switch
+    {
+        DateOnly date => date.ToDateTime(TimeOnly.MinValue),
+        TimeOnly time => time.ToTimeSpan(),
+        _ => value
+    };
 
     private async Task UpsertUnsafeAsync(
         NpgsqlConnection connection,
@@ -639,7 +648,7 @@ public sealed class UnsafeWindowMvStreamApplier<TRow> where TRow : class, new()
 
         foreach (var column in _projector.Schema.Columns)
         {
-            parameters.Add(column.Name, column.Getter(row) ?? DBNull.Value);
+            parameters.Add(column.Name, column.Getter(row));
         }
 
         await connection.ExecuteAsync(new CommandDefinition(sql, parameters, transaction: transaction, cancellationToken: ct))
@@ -716,7 +725,7 @@ public sealed class UnsafeWindowMvStreamApplier<TRow> where TRow : class, new()
             {
                 value = null;
             }
-            parameters.Add(column.Name, value ?? DBNull.Value);
+            parameters.Add(column.Name, value);
         }
 
         await connection.ExecuteAsync(new CommandDefinition(sql, parameters, transaction: transaction, cancellationToken: ct))
@@ -948,7 +957,7 @@ public sealed class UnsafeWindowMvPromoter<TRow> where TRow : class, new()
 
         foreach (var column in _projector.Schema.Columns)
         {
-            parameters.Add(column.Name, row is null ? DBNull.Value : (column.Getter(row) ?? DBNull.Value));
+            parameters.Add(column.Name, row is null ? null : column.Getter(row));
         }
 
         await connection.ExecuteAsync(new CommandDefinition(sql, parameters, transaction: transaction, cancellationToken: ct))

@@ -469,7 +469,7 @@ public sealed class UnsafeWindowMvSqliteStreamApplier<TRow> where TRow : class, 
         parameters.Add("__eventVersion", Convert.ToInt64(safeDict[UnsafeWindowMvReservedColumns.LastEventVersion]));
         foreach (var column in _projector.Schema.Columns)
         {
-            parameters.Add(column.Name, safeDict.TryGetValue(column.Name, out var v) ? (v ?? DBNull.Value) : DBNull.Value);
+            parameters.Add(column.Name, safeDict.TryGetValue(column.Name, out var v) ? v : null);
         }
 
         await connection.ExecuteAsync(new CommandDefinition(sql, parameters, transaction: transaction, cancellationToken: ct))
@@ -523,7 +523,7 @@ public sealed class UnsafeWindowMvSqliteStreamApplier<TRow> where TRow : class, 
 
         foreach (var column in _projector.Schema.Columns)
         {
-            parameters.Add(column.Name, column.Getter(row) ?? DBNull.Value);
+            parameters.Add(column.Name, column.Getter(row));
         }
 
         await connection.ExecuteAsync(new CommandDefinition(sql, parameters, transaction: transaction, cancellationToken: ct))
@@ -593,7 +593,7 @@ public sealed class UnsafeWindowMvSqliteStreamApplier<TRow> where TRow : class, 
             {
                 value = null;
             }
-            parameters.Add(column.Name, value ?? DBNull.Value);
+            parameters.Add(column.Name, value);
         }
 
         await connection.ExecuteAsync(new CommandDefinition(sql, parameters, transaction: transaction, cancellationToken: ct))
@@ -885,7 +885,7 @@ public sealed class UnsafeWindowMvSqlitePromoter<TRow> : IUnsafeWindowMvPromoter
 
         foreach (var column in _projector.Schema.Columns)
         {
-            parameters.Add(column.Name, row is null ? DBNull.Value : (column.Getter(row) ?? DBNull.Value));
+            parameters.Add(column.Name, row is null ? null : column.Getter(row));
         }
 
         await connection.ExecuteAsync(new CommandDefinition(sql, parameters, transaction: transaction, cancellationToken: ct))

@@ -471,7 +471,7 @@ public sealed class UnsafeWindowMvSqlServerStreamApplier<TRow> where TRow : clas
         parameters.Add("__eventVersion", Convert.ToInt64(safeDict[UnsafeWindowMvReservedColumns.LastEventVersion]));
         foreach (var column in _projector.Schema.Columns)
         {
-            parameters.Add(column.Name, safeDict.TryGetValue(column.Name, out var v) ? (v ?? DBNull.Value) : DBNull.Value);
+            parameters.Add(column.Name, safeDict.TryGetValue(column.Name, out var v) ? v : null);
         }
 
         // SQL Server upsert: UPDATE (HOLDLOCK) then INSERT when no row was
@@ -524,7 +524,7 @@ public sealed class UnsafeWindowMvSqlServerStreamApplier<TRow> where TRow : clas
         parameters.Add("__safeDueAt", safeDueAt);
         foreach (var column in _projector.Schema.Columns)
         {
-            parameters.Add(column.Name, column.Getter(row) ?? DBNull.Value);
+            parameters.Add(column.Name, column.Getter(row));
         }
 
         var businessUpdates = string.Join(", ", businessCols.Select(c => $"{c} = @{c}"));
@@ -601,7 +601,7 @@ public sealed class UnsafeWindowMvSqlServerStreamApplier<TRow> where TRow : clas
             {
                 value = null;
             }
-            parameters.Add(column.Name, value ?? DBNull.Value);
+            parameters.Add(column.Name, value);
         }
 
         var businessUpdates = string.Join(", ", businessCols.Select(c => $"{c} = @{c}"));
@@ -898,7 +898,7 @@ public sealed class UnsafeWindowMvSqlServerPromoter<TRow> : IUnsafeWindowMvPromo
 
         foreach (var column in _projector.Schema.Columns)
         {
-            parameters.Add(column.Name, row is null ? DBNull.Value : (column.Getter(row) ?? DBNull.Value));
+            parameters.Add(column.Name, row is null ? null : column.Getter(row));
         }
 
         var businessUpdates = string.Join(", ", businessCols.Select(c => $"{c} = @{c}"));
