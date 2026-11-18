@@ -187,6 +187,28 @@ public class DynamoDbCheckpointGenerationCasTests
     }
 
     [Fact]
+    public async Task RepeatedPersists_WithReturnedToken_AllCommit_AndAdvanceRevision()
+    {
+        // Regression: every conditional write after the first one carried an ExpressionAttributeNames entry (#u) its
+        // expressions did not use, which real DynamoDB / DynamoDB Local / LocalStack reject with a ValidationException.
+        var store = NewStore(NewClient());
+        var create = await store.ConditionalUpsertAsync(Req(1), Payload("a"), CheckpointExpectation.Absent, 1_000_000);
+        Assert.Equal(CheckpointCasStatus.Committed, create.Status);
+        var slot = await ReadAsync(store);
+
+        for (var eventsProcessed = 2; eventsProcessed <= 4; eventsProcessed++)
+        {
+            var persist = await store.ConditionalUpsertAsync(
+                Req(eventsProcessed), Payload($"p{eventsProcessed}"), CheckpointExpectation.FromSlot(slot), 1_000_000);
+            Assert.Equal(CheckpointCasStatus.Committed, persist.Status);
+            var next = await ReadAsync(store);
+            Assert.Equal(long.Parse(slot.Revision!) + 1, long.Parse(next.Revision!));
+            Assert.Equal(eventsProcessed, next.Record!.EventsProcessed);
+            slot = next;
+        }
+    }
+
+    [Fact]
     public async Task PreG20Item_MissingControlAttributes_ReadsAsGeneration0_Active()
     {
         var store = NewStore(NewClient());
@@ -245,6 +267,7 @@ public class DynamoDbCheckpointGenerationCasTests
         {
             lock (_gate)
             {
+                RejectUnusedExpressionAttributes(req.ExpressionAttributeNames, req.ExpressionAttributeValues, req.ConditionExpression);
                 var key = KeyOf(req.Item);
                 _items.TryGetValue(key, out var existing);
                 if (!EvaluateCondition(req.ConditionExpression, existing, req.ExpressionAttributeNames, req.ExpressionAttributeValues))
@@ -262,6 +285,8 @@ public class DynamoDbCheckpointGenerationCasTests
         {
             lock (_gate)
             {
+                RejectUnusedExpressionAttributes(
+                    req.ExpressionAttributeNames, req.ExpressionAttributeValues, req.ConditionExpression, req.UpdateExpression);
                 var key = (req.Key["pk"].S, req.Key["sk"].S);
                 _items.TryGetValue(key, out var existing);
                 if (existing is null)
@@ -288,6 +313,37 @@ public class DynamoDbCheckpointGenerationCasTests
                 }
                 if (PostWriteFaults.Count > 0) throw PostWriteFaults.Dequeue(); // lost response AFTER a committed update
                 return new UpdateItemResponse();
+            }
+        }
+
+        // Mirrors the real service: every ExpressionAttributeNames / ExpressionAttributeValues key must be referenced by
+        // one of the request's expressions, otherwise the request fails with a ValidationException.
+        private static void RejectUnusedExpressionAttributes(
+            Dictionary<string, string>? names,
+            Dictionary<string, AttributeValue>? values,
+            params string?[] expressions)
+        {
+            var text = string.Join(" ", expressions.Where(e => !string.IsNullOrEmpty(e)));
+            var tokens = System.Text.RegularExpressions.Regex.Matches(text, @"[#:][A-Za-z0-9_]+")
+                .Select(m => m.Value)
+                .ToHashSet(StringComparer.Ordinal);
+            var unusedNames = (names?.Keys ?? Enumerable.Empty<string>()).Where(k => !tokens.Contains(k)).ToList();
+            if (unusedNames.Count > 0)
+            {
+                throw new Amazon.Runtime.AmazonServiceException(
+                    $"Value provided in ExpressionAttributeNames unused in expressions: keys: {{{string.Join(", ", unusedNames)}}}")
+                {
+                    ErrorCode = "ValidationException"
+                };
+            }
+            var unusedValues = (values?.Keys ?? Enumerable.Empty<string>()).Where(k => !tokens.Contains(k)).ToList();
+            if (unusedValues.Count > 0)
+            {
+                throw new Amazon.Runtime.AmazonServiceException(
+                    $"Value provided in ExpressionAttributeValues unused in expressions: keys: {{{string.Join(", ", unusedValues)}}}")
+                {
+                    ErrorCode = "ValidationException"
+                };
             }
         }
 
