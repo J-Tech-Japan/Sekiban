@@ -188,6 +188,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
     // Event delivery statistics (debug/no-op selectable)
     private readonly Sekiban.Dcb.MultiProjections.IMultiProjectionEventStatistics _eventStats;
+    private readonly bool _eventStatsEnabled;
 
     // Event batching
     private readonly List<SerializableEvent> _eventBuffer = new();
@@ -439,6 +440,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 _firstQueryGate.Arm();
             });
         _eventStats = eventStats ?? new Sekiban.Dcb.MultiProjections.NoOpMultiProjectionEventStatistics();
+        _eventStatsEnabled = _eventStats is not NoOpMultiProjectionEventStatistics;
         _injectedActorOptions = actorOptions;
         _tempFileSnapshotManager = tempFileSnapshotManager;
         _logger = logger ?? NullLogger<MultiProjectionGrain>.Instance;
@@ -798,7 +800,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     /// </summary>
     private void RecordEventDeliveries(IEnumerable<SerializableEvent> events, bool fromStream)
     {
-        if (_eventStats is NoOpMultiProjectionEventStatistics) return;
+        if (!_eventStatsEnabled) return;
         try
         {
             var deliveries = events.Select(e => new Event(
@@ -5379,7 +5381,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                         {
                             if (!IsCurrentCatchUpBatch(run, host)) return;
                             fetchedCount++;
-                            RecordEventDeliveries([ev], fromStream: false);
+                            if (_eventStatsEnabled) RecordEventDeliveries([ev], fromStream: false);
                             lastFetchedSortableUniqueId = ev.SortableUniqueIdValue;
                             UpdateTargetPosition(ev.SortableUniqueIdValue);
                             MarkProjectionStatusDirty(ev.SortableUniqueIdValue);
