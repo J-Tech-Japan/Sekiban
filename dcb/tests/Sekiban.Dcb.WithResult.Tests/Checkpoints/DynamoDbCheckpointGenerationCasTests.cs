@@ -208,6 +208,32 @@ public class DynamoDbCheckpointGenerationCasTests
         }
     }
 
+    [Theory]
+    [InlineData("#g = :eg", "#g,#u", ":eg")]
+    [InlineData("#g = :eg", "#g", ":eg,:zz")]
+    [InlineData("#g = :eg", "", ":eg")]
+    [InlineData("#g = :eg", "#g", "")]
+    public async Task FakeDynamoDb_RejectsUnusedOrMissingExpressionAttributes(string condition, string names, string values)
+    {
+        var client = NewClient();
+        var request = new PutItemRequest
+        {
+            TableName = "states",
+            Item = new Dictionary<string, AttributeValue>
+            {
+                ["pk"] = new AttributeValue { S = "p" },
+                ["sk"] = new AttributeValue { S = "s" }
+            },
+            ConditionExpression = condition,
+            ExpressionAttributeNames = names.Split(',', StringSplitOptions.RemoveEmptyEntries)
+                .ToDictionary(n => n, _ => "generation"),
+            ExpressionAttributeValues = values.Split(',', StringSplitOptions.RemoveEmptyEntries)
+                .ToDictionary(v => v, _ => new AttributeValue { N = "0" })
+        };
+        var ex = await Assert.ThrowsAsync<Amazon.Runtime.AmazonServiceException>(() => client.PutItemAsync(request));
+        Assert.Equal("ValidationException", ex.ErrorCode);
+    }
+
     [Fact]
     public async Task PreG20Item_MissingControlAttributes_ReadsAsGeneration0_Active()
     {
@@ -317,7 +343,8 @@ public class DynamoDbCheckpointGenerationCasTests
         }
 
         // Mirrors the real service: every ExpressionAttributeNames / ExpressionAttributeValues key must be referenced by
-        // one of the request's expressions, otherwise the request fails with a ValidationException.
+        // one of the request's expressions, and every #name / :value an expression references must be supplied;
+        // otherwise the request fails with a ValidationException.
         private static void RejectUnusedExpressionAttributes(
             Dictionary<string, string>? names,
             Dictionary<string, AttributeValue>? values,
@@ -341,6 +368,20 @@ public class DynamoDbCheckpointGenerationCasTests
             {
                 throw new Amazon.Runtime.AmazonServiceException(
                     $"Value provided in ExpressionAttributeValues unused in expressions: keys: {{{string.Join(", ", unusedValues)}}}")
+                {
+                    ErrorCode = "ValidationException"
+                };
+            }
+            // The reverse direction: every #name / :value an expression references must be supplied.
+            var missing = tokens
+                .Where(t => t.StartsWith('#')
+                    ? names is null || !names.ContainsKey(t)
+                    : values is null || !values.ContainsKey(t))
+                .ToList();
+            if (missing.Count > 0)
+            {
+                throw new Amazon.Runtime.AmazonServiceException(
+                    $"Invalid expression: An expression attribute name or value used in an expression is not defined: {string.Join(", ", missing)}")
                 {
                     ErrorCode = "ValidationException"
                 };
