@@ -5,6 +5,9 @@ namespace Sekiban.Dcb.MultiProjections;
 
 /// <summary>
 /// Debug implementation that records detailed delivery statistics in-memory.
+/// Development-time diagnostic only: it keeps every delivered event id in memory for the lifetime of the
+/// projection grain activation, so it grows without bound. Register <see cref="NoOpMultiProjectionEventStatistics" />
+/// in production.
 /// </summary>
 public class RecordingMultiProjectionEventStatistics : IMultiProjectionEventStatistics
 {
