@@ -156,20 +156,32 @@ internal static class UnsafeWindowMvSqlServerTypes
     public static string Translate(string declaredType) =>
         UnsafeWindowMvLogicalTypes.Translate(declaredType, Map);
 
-    // An untyped null is sent by SqlClient as NVARCHAR, which SQL Server cannot
-    // implicitly convert to the binary family (error 257). Bind a null value
-    // for a binary column as a typed binary null instead.
+    private static readonly HashSet<string> BinaryTypeNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "VARBINARY", "BINARY", "IMAGE"
+    };
+
+    private static readonly HashSet<string> TemporalTypeNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "DATE", "DATETIME", "SMALLDATETIME", "DATETIME2", "DATETIMEOFFSET", "TIME"
+    };
+
     public static void AddBusinessValue(DynamicParameters parameters, UnsafeWindowMvColumn column, object? value)
     {
-        if (value is null && IsBinary(column.SqlType))
+        // An untyped null is sent by SqlClient as NVARCHAR, which SQL Server
+        // cannot implicitly convert to the binary family (error 257). Bind a
+        // null value for a binary column as a typed binary null instead.
+        if (value is null && IsTypeIn(column.SqlType, BinaryTypeNames))
         {
             parameters.Add(column.Name, null, DbType.Binary);
             return;
         }
         // Dapper binds DateTime as DbType.DateTime (SQL Server DATETIME:
-        // 1753-01-01 onwards, ~3 ms precision). DATETIME2 converts to DATE,
-        // DATETIME, DATETIME2 and DATETIMEOFFSET columns without loss.
-        if (value is DateTime)
+        // 1753-01-01 onwards, ~3 ms precision). For temporal columns bind
+        // DATETIME2, which converts to every temporal type without loss.
+        // Other columns keep the default binding (its implicit conversion,
+        // e.g. to NVARCHAR, is formatted differently).
+        if (value is DateTime && IsTypeIn(column.SqlType, TemporalTypeNames))
         {
             parameters.Add(column.Name, value, DbType.DateTime2);
             return;
@@ -177,17 +189,56 @@ internal static class UnsafeWindowMvSqlServerTypes
         parameters.Add(column.Name, value);
     }
 
-    private static bool IsBinary(string declaredType)
-    {
-        var translated = Translate(declaredType).TrimStart();
-        return StartsWithKeyword(translated, "VARBINARY")
-            || StartsWithKeyword(translated, "BINARY")
-            || StartsWithKeyword(translated, "IMAGE");
-    }
+    private static bool IsTypeIn(string declaredType, HashSet<string> typeNames) =>
+        LeadingTypeName(Translate(declaredType)) is { } name && typeNames.Contains(name);
 
-    private static bool StartsWithKeyword(string type, string keyword) =>
-        type.StartsWith(keyword, StringComparison.OrdinalIgnoreCase)
-        && (type.Length == keyword.Length || !(char.IsLetterOrDigit(type[keyword.Length]) || type[keyword.Length] == '_'));
+    // Returns the base type name of a column declaration, accepting the forms
+    // T-SQL allows: bare (VARBINARY(MAX)), bracketed ([VARBINARY](MAX)),
+    // double-quoted ("varbinary"), and schema-qualified (sys.[varbinary]).
+    // The last identifier of a dotted name is the type name.
+    internal static string? LeadingTypeName(string declaredType)
+    {
+        var text = declaredType.TrimStart();
+        string? last = null;
+        var i = 0;
+        while (i < text.Length)
+        {
+            string part;
+            if (text[i] is '[' or '"')
+            {
+                var close = text[i] == '[' ? ']' : '"';
+                var end = text.IndexOf(close, i + 1);
+                if (end < 0)
+                {
+                    return null;
+                }
+                part = text[(i + 1)..end];
+                i = end + 1;
+            }
+            else
+            {
+                var start = i;
+                while (i < text.Length && (char.IsLetterOrDigit(text[i]) || text[i] == '_'))
+                {
+                    i++;
+                }
+                if (i == start)
+                {
+                    break;
+                }
+                part = text[start..i];
+            }
+
+            last = part.Trim();
+            if (i < text.Length && text[i] == '.')
+            {
+                i++;
+                continue;
+            }
+            break;
+        }
+        return string.IsNullOrEmpty(last) ? null : last;
+    }
 }
 
 internal static class UnsafeWindowMvSqlServerDdl

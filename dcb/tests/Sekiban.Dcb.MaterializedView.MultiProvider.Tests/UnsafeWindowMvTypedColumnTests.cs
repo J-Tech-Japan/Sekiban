@@ -82,6 +82,32 @@ public sealed class UnsafeWindowMvSqlServerTypedColumnTests(SqlServerMvFixture f
                 payload => payload)),
             summary: "Precise",
             assertPayload: value => Assert.Equal(SubMillisecondTimestamp, Assert.IsType<DateTime>(value)));
+
+    [SkippableFact]
+    public Task NullBracketedVarbinaryColumn_IsAppliedOnEveryWritePath() =>
+        UnsafeWindowTypedColumnAssertions.AssertAsync(
+            fixture,
+            new SqlServerPayloadHarness(fixture.ConnectionStringForTests, fixture, new PayloadUnsafeWindowMv(
+                "UwmvPayloadBracketBinary",
+                "[VARBINARY](MAX) NULL",
+                summary => summary is null ? null : Encoding.UTF8.GetBytes(summary),
+                payload => payload)),
+            summary: null,
+            assertPayload: Assert.Null);
+
+    [SkippableFact]
+    public Task DateTimeIntoNvarchar19Column_KeepsTheDefaultConversion() =>
+        UnsafeWindowTypedColumnAssertions.AssertAsync(
+            fixture,
+            new SqlServerPayloadHarness(fixture.ConnectionStringForTests, fixture, new PayloadUnsafeWindowMv(
+                "UwmvPayloadNvarchar19",
+                "NVARCHAR(19) NULL",
+                summary => summary is null ? null : new DateTime(2026, 11, 17, 1, 2, 3, DateTimeKind.Unspecified),
+                payload => payload)),
+            summary: "AsText",
+            // SQL Server's default DATETIME -> NVARCHAR conversion (style 0, us_english), as before this PR;
+            // a DATETIME2-bound value would be stored as "2026-11-17 01:02:03" instead.
+            assertPayload: value => Assert.Equal("Nov 17 2026  1:02AM", Assert.IsType<string>(value)));
 }
 
 [Collection(nameof(PostgresMvCollection))]
