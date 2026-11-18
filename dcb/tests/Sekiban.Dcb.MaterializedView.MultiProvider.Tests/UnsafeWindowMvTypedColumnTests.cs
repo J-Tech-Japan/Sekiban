@@ -21,13 +21,15 @@ namespace Sekiban.Dcb.MaterializedView.MultiProvider.Tests;
 // tombstone):
 //   * SQL Server: a null value for a nullable VARBINARY(MAX) column must be
 //     bound as a binary null (an untyped null is NVARCHAR, error 257).
+//   * SQL Server: DATE before 1753 and DATETIME2 with sub-millisecond
+//     precision must not be narrowed to DATETIME.
 //   * Postgres: a populated JSONB column must survive the reorder mirror
 //     (safe -> unsafe) copy; the value is read back from Npgsql as a string
 //     and must not be re-bound as text (text -> jsonb is not assignable).
 // ============================================================================
 
 [Collection(nameof(SqlServerMvCollection))]
-public sealed class UnsafeWindowMvSqlServerBinaryColumnTests(SqlServerMvFixture fixture)
+public sealed class UnsafeWindowMvSqlServerTypedColumnTests(SqlServerMvFixture fixture)
 {
     [SkippableFact]
     public Task NullVarbinaryColumn_IsAppliedOnEveryWritePath() =>
@@ -52,6 +54,34 @@ public sealed class UnsafeWindowMvSqlServerBinaryColumnTests(SqlServerMvFixture 
                 payload => payload)),
             summary: "Cloudy",
             assertPayload: value => Assert.Equal(Encoding.UTF8.GetBytes("Cloudy"), Assert.IsType<byte[]>(value)));
+
+    private static readonly DateTime PreDatetimeRangeDate = new(1600, 1, 2, 0, 0, 0, DateTimeKind.Unspecified);
+    private static readonly DateTime SubMillisecondTimestamp =
+        new DateTime(2026, 11, 17, 1, 2, 3, DateTimeKind.Unspecified).AddTicks(1_234_567);
+
+    [SkippableFact]
+    public Task DateColumnBefore1753_IsAppliedOnEveryWritePath() =>
+        UnsafeWindowTypedColumnAssertions.AssertAsync(
+            fixture,
+            new SqlServerPayloadHarness(fixture.ConnectionStringForTests, fixture, new PayloadUnsafeWindowMv(
+                "UwmvPayloadDate",
+                "DATE NULL",
+                summary => summary is null ? null : PreDatetimeRangeDate,
+                payload => payload)),
+            summary: "Old",
+            assertPayload: value => Assert.Equal(PreDatetimeRangeDate, Assert.IsType<DateTime>(value)));
+
+    [SkippableFact]
+    public Task Datetime2ColumnWithSubMillisecondPrecision_IsAppliedOnEveryWritePath() =>
+        UnsafeWindowTypedColumnAssertions.AssertAsync(
+            fixture,
+            new SqlServerPayloadHarness(fixture.ConnectionStringForTests, fixture, new PayloadUnsafeWindowMv(
+                "UwmvPayloadDatetime2",
+                "DATETIME2(7) NULL",
+                summary => summary is null ? null : SubMillisecondTimestamp,
+                payload => payload)),
+            summary: "Precise",
+            assertPayload: value => Assert.Equal(SubMillisecondTimestamp, Assert.IsType<DateTime>(value)));
 }
 
 [Collection(nameof(PostgresMvCollection))]

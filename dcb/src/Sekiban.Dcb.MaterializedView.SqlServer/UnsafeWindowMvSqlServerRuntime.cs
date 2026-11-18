@@ -166,6 +166,14 @@ internal static class UnsafeWindowMvSqlServerTypes
             parameters.Add(column.Name, null, DbType.Binary);
             return;
         }
+        // Dapper binds DateTime as DbType.DateTime (SQL Server DATETIME:
+        // 1753-01-01 onwards, ~3 ms precision). DATETIME2 converts to DATE,
+        // DATETIME, DATETIME2 and DATETIMEOFFSET columns without loss.
+        if (value is DateTime)
+        {
+            parameters.Add(column.Name, value, DbType.DateTime2);
+            return;
+        }
         parameters.Add(column.Name, value);
     }
 
@@ -445,7 +453,6 @@ public sealed class UnsafeWindowMvSqlServerStreamApplier<TRow> where TRow : clas
                             connection,
                             transaction,
                             projectionKey,
-                            safeDict,
                             ct)
                         .ConfigureAwait(false);
                     return;
@@ -485,24 +492,16 @@ public sealed class UnsafeWindowMvSqlServerStreamApplier<TRow> where TRow : clas
         SqlConnection connection,
         IDbTransaction transaction,
         string projectionKey,
-        IDictionary<string, object> safeDict,
         CancellationToken ct)
     {
-        var businessCols = _projector.Schema.Columns.Select(c => c.Name).ToList();
-        var parameters = new DynamicParameters();
-        parameters.Add("__projectionKey", projectionKey);
-        parameters.Add("__isDeleted", safeDict[UnsafeWindowMvReservedColumns.IsDeleted]);
-        parameters.Add("__suid", safeDict[UnsafeWindowMvReservedColumns.LastSortableUniqueId]);
-        parameters.Add("__eventVersion", Convert.ToInt64(safeDict[UnsafeWindowMvReservedColumns.LastEventVersion]));
-        foreach (var column in _projector.Schema.Columns)
-        {
-            UnsafeWindowMvSqlServerTypes.AddBusinessValue(parameters, column, safeDict.TryGetValue(column.Name, out var v) ? v : null);
-        }
+        var businessCols = string.Join(", ", _projector.Schema.Columns.Select(c => c.Name));
 
         // SQL Server upsert: UPDATE (HOLDLOCK) then INSERT when no row was
         // updated. HOLDLOCK keeps the key range locked for the branch, so a
-        // concurrent caller cannot race an INSERT into the same key.
-        var businessValueParams = string.Join(", ", businessCols.Select(c => "@" + c));
+        // concurrent caller cannot race an INSERT into the same key. The safe
+        // row (already locked by the caller) is copied inside the database so
+        // values never round-trip through .NET types (DATE / DATETIME2 would
+        // otherwise come back as DateTime and lose range or precision).
         var sql = $"""
             UPDATE {_resolver.UnsafeTable} WITH (UPDLOCK, HOLDLOCK)
             SET {UnsafeWindowMvReservedColumns.NeedsRebuild} = 1
@@ -512,7 +511,7 @@ public sealed class UnsafeWindowMvSqlServerStreamApplier<TRow> where TRow : clas
             BEGIN
                 INSERT INTO {_resolver.UnsafeTable}
                     ({UnsafeWindowMvReservedColumns.ProjectionKey},
-                     {string.Join(", ", businessCols)},
+                     {businessCols},
                      {UnsafeWindowMvReservedColumns.IsDeleted},
                      {UnsafeWindowMvReservedColumns.LastSortableUniqueId},
                      {UnsafeWindowMvReservedColumns.LastEventVersion},
@@ -520,11 +519,22 @@ public sealed class UnsafeWindowMvSqlServerStreamApplier<TRow> where TRow : clas
                      {UnsafeWindowMvReservedColumns.UnsafeSince},
                      {UnsafeWindowMvReservedColumns.SafeDueAt},
                      {UnsafeWindowMvReservedColumns.NeedsRebuild})
-                VALUES (@__projectionKey, {businessValueParams}, @__isDeleted, @__suid, @__eventVersion, SYSUTCDATETIME(), SYSUTCDATETIME(), SYSUTCDATETIME(), 1);
+                SELECT {UnsafeWindowMvReservedColumns.ProjectionKey},
+                       {businessCols},
+                       {UnsafeWindowMvReservedColumns.IsDeleted},
+                       {UnsafeWindowMvReservedColumns.LastSortableUniqueId},
+                       {UnsafeWindowMvReservedColumns.LastEventVersion},
+                       SYSUTCDATETIME(), SYSUTCDATETIME(), SYSUTCDATETIME(), 1
+                FROM {_resolver.SafeTable}
+                WHERE {UnsafeWindowMvReservedColumns.ProjectionKey} = @__projectionKey;
             END;
             """;
 
-        await connection.ExecuteAsync(new CommandDefinition(sql, parameters, transaction: transaction, cancellationToken: ct))
+        await connection.ExecuteAsync(new CommandDefinition(
+                sql,
+                new { __projectionKey = projectionKey },
+                transaction: transaction,
+                cancellationToken: ct))
             .ConfigureAwait(false);
     }
 
