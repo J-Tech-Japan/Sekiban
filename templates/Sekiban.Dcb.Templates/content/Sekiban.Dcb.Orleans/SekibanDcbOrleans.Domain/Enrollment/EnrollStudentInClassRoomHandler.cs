@@ -3,6 +3,7 @@ using Dcb.Domain.Student;
 using ResultBoxes;
 using Sekiban.Dcb.Commands;
 using Sekiban.Dcb.Events;
+using Sekiban.Dcb.Tags;
 namespace Dcb.Domain.Enrollment;
 
 public class EnrollStudentInClassRoomHandler : ICommandHandler<EnrollStudentInClassRoom>
@@ -11,6 +12,11 @@ public class EnrollStudentInClassRoomHandler : ICommandHandler<EnrollStudentInCl
         ResultBox
             .Start
             .Remap(_ => new StudentTag(command.StudentId))
+            .Combine(studentTag => context.TagExistsAsync(studentTag))
+            .Verify((_, studentExists) => !studentExists
+                ? ExceptionOrNone.FromException(new ApplicationException("Student does not exist"))
+                : ExceptionOrNone.None)
+            .Remap((studentTag, _) => studentTag)
             .Combine(context.GetStateAsync<StudentState, StudentProjector>)
             .Verify((_, studentState) => studentState.Payload.GetRemaining() <= 0 ?
                 ExceptionOrNone.FromException(new ApplicationException("Student has reached maximum class count")) :
@@ -22,6 +28,8 @@ public class EnrollStudentInClassRoomHandler : ICommandHandler<EnrollStudentInCl
             .Combine((_, classRoomTag) => context.GetStateAsync<ClassRoomProjector>(classRoomTag))
             .Verify((_, _, classRoomState) => classRoomState.Payload switch
             {
+                EmptyTagStatePayload =>
+                    ExceptionOrNone.FromException(new ApplicationException("ClassRoom does not exist")),
                 AvailableClassRoomState availableState when availableState.GetRemaining() <= 0 =>
                     ExceptionOrNone.FromException(new ApplicationException("ClassRoom is full")),
                 AvailableClassRoomState availableState when availableState.EnrolledStudentIds.Contains(

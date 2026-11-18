@@ -2,6 +2,7 @@ using Dcb.Domain.WithoutResult.ClassRoom;
 using Dcb.Domain.WithoutResult.Student;
 using Sekiban.Dcb.Commands;
 using Sekiban.Dcb.Events;
+using Sekiban.Dcb.Tags;
 namespace Dcb.Domain.WithoutResult.Enrollment;
 
 public class DropStudentFromClassRoomHandler : ICommandHandler<DropStudentFromClassRoom>
@@ -11,6 +12,11 @@ public class DropStudentFromClassRoomHandler : ICommandHandler<DropStudentFromCl
         ICommandContext context)
     {
         var studentTag = new StudentTag(command.StudentId);
+        if (!await context.TagExistsAsync(studentTag))
+        {
+            throw new ApplicationException("Student does not exist");
+        }
+
         var studentState = await context.GetStateAsync<StudentState, StudentProjector>(studentTag);
 
         if (!studentState.Payload.EnrolledClassRoomIds.Contains(command.ClassRoomId))
@@ -23,6 +29,7 @@ public class DropStudentFromClassRoomHandler : ICommandHandler<DropStudentFromCl
 
         var isEnrolled = classRoomState.Payload switch
         {
+            EmptyTagStatePayload => throw new ApplicationException("ClassRoom does not exist"),
             AvailableClassRoomState available => available.EnrolledStudentIds.Contains(command.StudentId),
             FilledClassRoomState filled => filled.EnrolledStudentIds.Contains(command.StudentId),
             _ => false

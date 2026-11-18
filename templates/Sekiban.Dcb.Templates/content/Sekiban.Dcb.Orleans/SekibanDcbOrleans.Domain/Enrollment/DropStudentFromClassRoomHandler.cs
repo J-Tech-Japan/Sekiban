@@ -11,6 +11,11 @@ public class DropStudentFromClassRoomHandler : ICommandHandler<DropStudentFromCl
         ResultBox
             .Start
             .Remap(_ => new StudentTag(command.StudentId))
+            .Combine(studentTag => context.TagExistsAsync(studentTag))
+            .Verify((_, studentExists) => !studentExists
+                ? ExceptionOrNone.FromException(new ApplicationException("Student does not exist"))
+                : ExceptionOrNone.None)
+            .Remap((studentTag, _) => studentTag)
             .Combine(studentTag => context.GetStateAsync<StudentState, StudentProjector>(studentTag))
             .Verify((_, studentState) => !studentState.Payload.EnrolledClassRoomIds.Contains(command.ClassRoomId)
                 ? ExceptionOrNone.FromException(new ApplicationException("Student is not enrolled in this classroom"))
@@ -18,7 +23,7 @@ public class DropStudentFromClassRoomHandler : ICommandHandler<DropStudentFromCl
             .Remap((studentTag, studentState) => new ClassRoomTag(command.ClassRoomId))
             .Combine(context.TagExistsAsync)
             .Verify((_, classRoomExistsResult) => !classRoomExistsResult
-                ? ExceptionOrNone.FromException(new ApplicationException("ClassRoom not found"))
+                ? ExceptionOrNone.FromException(new ApplicationException("ClassRoom does not exist"))
                 : ExceptionOrNone.None)
             .Conveyor((classRoomTag, _) => EventOrNone.EventWithTags(
                 new StudentDroppedFromClassRoom(command.StudentId, command.ClassRoomId),

@@ -6,6 +6,7 @@ using Dcb.ImmutableModels.States.Student;
 using Dcb.ImmutableModels.Tags;
 using Sekiban.Dcb.Commands;
 using Sekiban.Dcb.Events;
+using Sekiban.Dcb.Tags;
 using StudentDeciders = Dcb.ImmutableModels.States.Student.Deciders;
 using ClassRoomDeciders = Dcb.ImmutableModels.States.ClassRoom.Deciders;
 namespace Dcb.EventSource.Enrollment;
@@ -17,6 +18,11 @@ public class DropStudentFromClassRoomHandler : ICommandHandler<DropStudentFromCl
         ICommandContext context)
     {
         var studentTag = new StudentTag(command.StudentId);
+        if (!await context.TagExistsAsync(studentTag))
+        {
+            throw new ApplicationException("Student does not exist");
+        }
+
         var studentState = await context.GetStateAsync<StudentState, StudentProjector>(studentTag);
 
         // Use Decider.Validate for Student (explicit namespace)
@@ -28,6 +34,8 @@ public class DropStudentFromClassRoomHandler : ICommandHandler<DropStudentFromCl
         // Use Decider.Validate for ClassRoom (explicit namespace)
         switch (classRoomState.Payload)
         {
+            case EmptyTagStatePayload:
+                throw new ApplicationException("ClassRoom does not exist");
             case AvailableClassRoomState available:
                 ClassRoomDeciders.StudentDroppedFromClassRoomDecider.Validate(available, command.StudentId);
                 break;
