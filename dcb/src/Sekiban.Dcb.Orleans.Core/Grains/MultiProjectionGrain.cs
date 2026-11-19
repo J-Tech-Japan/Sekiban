@@ -188,6 +188,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
     // Event delivery statistics (debug/no-op selectable)
     private readonly Sekiban.Dcb.MultiProjections.IMultiProjectionEventStatistics _eventStats;
+    private readonly bool _eventStatsEnabled;
 
     // Event batching
     private readonly List<SerializableEvent> _eventBuffer = new();
@@ -439,6 +440,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 _firstQueryGate.Arm();
             });
         _eventStats = eventStats ?? new Sekiban.Dcb.MultiProjections.NoOpMultiProjectionEventStatistics();
+        _eventStatsEnabled = _eventStats is not NoOpMultiProjectionEventStatistics;
         _injectedActorOptions = actorOptions;
         _tempFileSnapshotManager = tempFileSnapshotManager;
         _logger = logger ?? NullLogger<MultiProjectionGrain>.Instance;
@@ -789,6 +791,43 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         {
             await Task.Delay(checkInterval);
         }
+    }
+
+    /// <summary>
+    ///     Feed the event delivery statistics. Development-time diagnostic only: it never throws and never
+    ///     affects projection results. The statistics only read event ids, so the serialized events are wrapped
+    ///     without deserializing their payloads.
+    /// </summary>
+    private void RecordEventDeliveries(IEnumerable<SerializableEvent> events, bool fromStream)
+    {
+        if (!_eventStatsEnabled) return;
+        try
+        {
+            var deliveries = events.Select(e => new Event(
+                DeliveryStatisticsPayload.Instance,
+                e.SortableUniqueIdValue,
+                e.EventPayloadName,
+                e.Id,
+                e.EventMetadata,
+                e.Tags));
+            if (fromStream)
+            {
+                _eventStats.RecordStreamBatch(deliveries);
+            }
+            else
+            {
+                _eventStats.RecordCatchUpBatch(deliveries);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "[{ProjectorName}] Failed to record event delivery statistics", GetProjectorName());
+        }
+    }
+
+    private sealed class DeliveryStatisticsPayload : IEventPayload
+    {
+        public static readonly DeliveryStatisticsPayload Instance = new();
     }
 
     /// <summary>
@@ -1333,6 +1372,10 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         {
             throw new InvalidOperationException("Projection host not initialized");
         }
+
+        // Track event deliveries as well for events coming from the EventStore catch-up
+        // so that delivery statistics include both stream and catch-up paths.
+        RecordEventDeliveries(events, fromStream: false);
 
         // Filter out already processed events to prevent double counting
         var newEvents = events.Where(e => !_processedEventIds.Contains(e.Id)).ToList();
@@ -5168,6 +5211,8 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         }
 
         UpdateTargetPosition(events[^1].SortableUniqueIdValue);
+        // Track catch-up deliveries as fetched (before dedupe) for the event statistics.
+        RecordEventDeliveries(events, fromStream: false);
         // The registry cursor is the last event fetched, including events filtered out before projector application.
         // It is intentionally distinct from the applied-event count and checkpoint cursor.
         MarkProjectionStatusDirty(events[^1].SortableUniqueIdValue);
@@ -5336,6 +5381,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                         {
                             if (!IsCurrentCatchUpBatch(run, host)) return;
                             fetchedCount++;
+                            if (_eventStatsEnabled) RecordEventDeliveries([ev], fromStream: false);
                             lastFetchedSortableUniqueId = ev.SortableUniqueIdValue;
                             UpdateTargetPosition(ev.SortableUniqueIdValue);
                             MarkProjectionStatusDirty(ev.SortableUniqueIdValue);
@@ -6359,6 +6405,9 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         var list = events as IList<SerializableEvent> ?? events.ToList();
         if (list.Count == 0) return;
 
+        // Track stream deliveries as they arrive (before dedupe) for the event statistics.
+        RecordEventDeliveries(list, fromStream: true);
+
         if (_catchUpProgress.IsActive)
         {
             EnqueuePendingStreamEvents(list, _catchUpProgress.CurrentPosition);
@@ -6376,9 +6425,6 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 _eventBuffer.Add(ev);
             }
         }
-        // Do not record deliveries here to avoid double-counting.
-        // Delivery statistics are recorded after successful processing
-        // inside ProcessEventBatch.
 
         // Schedule a near-immediate flush to avoid long lag before first timer tick
         if (_immediateFlushTimer == null)

@@ -155,6 +155,90 @@ internal static class UnsafeWindowMvSqlServerTypes
 
     public static string Translate(string declaredType) =>
         UnsafeWindowMvLogicalTypes.Translate(declaredType, Map);
+
+    private static readonly HashSet<string> BinaryTypeNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "VARBINARY", "BINARY", "IMAGE"
+    };
+
+    private static readonly HashSet<string> TemporalTypeNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "DATE", "DATETIME", "SMALLDATETIME", "DATETIME2", "DATETIMEOFFSET", "TIME"
+    };
+
+    public static void AddBusinessValue(DynamicParameters parameters, UnsafeWindowMvColumn column, object? value)
+    {
+        // An untyped null is sent by SqlClient as NVARCHAR, which SQL Server
+        // cannot implicitly convert to the binary family (error 257). Bind a
+        // null value for a binary column as a typed binary null instead.
+        if (value is null && IsTypeIn(column.SqlType, BinaryTypeNames))
+        {
+            parameters.Add(column.Name, null, DbType.Binary);
+            return;
+        }
+        // Dapper binds DateTime as DbType.DateTime (SQL Server DATETIME:
+        // 1753-01-01 onwards, ~3 ms precision). For temporal columns bind
+        // DATETIME2, which converts to every temporal type without loss.
+        // Other columns keep the default binding (its implicit conversion,
+        // e.g. to NVARCHAR, is formatted differently).
+        if (value is DateTime && IsTypeIn(column.SqlType, TemporalTypeNames))
+        {
+            parameters.Add(column.Name, value, DbType.DateTime2);
+            return;
+        }
+        parameters.Add(column.Name, value);
+    }
+
+    private static bool IsTypeIn(string declaredType, HashSet<string> typeNames) =>
+        LeadingTypeName(Translate(declaredType)) is { } name && typeNames.Contains(name);
+
+    // Returns the base type name of a column declaration, accepting the forms
+    // T-SQL allows: bare (VARBINARY(MAX)), bracketed ([VARBINARY](MAX)),
+    // double-quoted ("varbinary"), and schema-qualified (sys.[varbinary]).
+    // The last identifier of a dotted name is the type name.
+    internal static string? LeadingTypeName(string declaredType)
+    {
+        var text = declaredType.TrimStart();
+        string? last = null;
+        var i = 0;
+        while (i < text.Length)
+        {
+            string part;
+            if (text[i] is '[' or '"')
+            {
+                var close = text[i] == '[' ? ']' : '"';
+                var end = text.IndexOf(close, i + 1);
+                if (end < 0)
+                {
+                    return null;
+                }
+                part = text[(i + 1)..end];
+                i = end + 1;
+            }
+            else
+            {
+                var start = i;
+                while (i < text.Length && (char.IsLetterOrDigit(text[i]) || text[i] == '_'))
+                {
+                    i++;
+                }
+                if (i == start)
+                {
+                    break;
+                }
+                part = text[start..i];
+            }
+
+            last = part.Trim();
+            if (i < text.Length && text[i] == '.')
+            {
+                i++;
+                continue;
+            }
+            break;
+        }
+        return string.IsNullOrEmpty(last) ? null : last;
+    }
 }
 
 internal static class UnsafeWindowMvSqlServerDdl
@@ -420,7 +504,6 @@ public sealed class UnsafeWindowMvSqlServerStreamApplier<TRow> where TRow : clas
                             connection,
                             transaction,
                             projectionKey,
-                            safeDict,
                             ct)
                         .ConfigureAwait(false);
                     return;
@@ -460,24 +543,16 @@ public sealed class UnsafeWindowMvSqlServerStreamApplier<TRow> where TRow : clas
         SqlConnection connection,
         IDbTransaction transaction,
         string projectionKey,
-        IDictionary<string, object> safeDict,
         CancellationToken ct)
     {
-        var businessCols = _projector.Schema.Columns.Select(c => c.Name).ToList();
-        var parameters = new DynamicParameters();
-        parameters.Add("__projectionKey", projectionKey);
-        parameters.Add("__isDeleted", safeDict[UnsafeWindowMvReservedColumns.IsDeleted]);
-        parameters.Add("__suid", safeDict[UnsafeWindowMvReservedColumns.LastSortableUniqueId]);
-        parameters.Add("__eventVersion", Convert.ToInt64(safeDict[UnsafeWindowMvReservedColumns.LastEventVersion]));
-        foreach (var column in _projector.Schema.Columns)
-        {
-            parameters.Add(column.Name, safeDict.TryGetValue(column.Name, out var v) ? (v ?? DBNull.Value) : DBNull.Value);
-        }
+        var businessCols = string.Join(", ", _projector.Schema.Columns.Select(c => c.Name));
 
         // SQL Server upsert: UPDATE (HOLDLOCK) then INSERT when no row was
         // updated. HOLDLOCK keeps the key range locked for the branch, so a
-        // concurrent caller cannot race an INSERT into the same key.
-        var businessValueParams = string.Join(", ", businessCols.Select(c => "@" + c));
+        // concurrent caller cannot race an INSERT into the same key. The safe
+        // row (already locked by the caller) is copied inside the database so
+        // values never round-trip through .NET types (DATE / DATETIME2 would
+        // otherwise come back as DateTime and lose range or precision).
         var sql = $"""
             UPDATE {_resolver.UnsafeTable} WITH (UPDLOCK, HOLDLOCK)
             SET {UnsafeWindowMvReservedColumns.NeedsRebuild} = 1
@@ -487,7 +562,7 @@ public sealed class UnsafeWindowMvSqlServerStreamApplier<TRow> where TRow : clas
             BEGIN
                 INSERT INTO {_resolver.UnsafeTable}
                     ({UnsafeWindowMvReservedColumns.ProjectionKey},
-                     {string.Join(", ", businessCols)},
+                     {businessCols},
                      {UnsafeWindowMvReservedColumns.IsDeleted},
                      {UnsafeWindowMvReservedColumns.LastSortableUniqueId},
                      {UnsafeWindowMvReservedColumns.LastEventVersion},
@@ -495,11 +570,22 @@ public sealed class UnsafeWindowMvSqlServerStreamApplier<TRow> where TRow : clas
                      {UnsafeWindowMvReservedColumns.UnsafeSince},
                      {UnsafeWindowMvReservedColumns.SafeDueAt},
                      {UnsafeWindowMvReservedColumns.NeedsRebuild})
-                VALUES (@__projectionKey, {businessValueParams}, @__isDeleted, @__suid, @__eventVersion, SYSUTCDATETIME(), SYSUTCDATETIME(), SYSUTCDATETIME(), 1);
+                SELECT {UnsafeWindowMvReservedColumns.ProjectionKey},
+                       {businessCols},
+                       {UnsafeWindowMvReservedColumns.IsDeleted},
+                       {UnsafeWindowMvReservedColumns.LastSortableUniqueId},
+                       {UnsafeWindowMvReservedColumns.LastEventVersion},
+                       SYSUTCDATETIME(), SYSUTCDATETIME(), SYSUTCDATETIME(), 1
+                FROM {_resolver.SafeTable}
+                WHERE {UnsafeWindowMvReservedColumns.ProjectionKey} = @__projectionKey;
             END;
             """;
 
-        await connection.ExecuteAsync(new CommandDefinition(sql, parameters, transaction: transaction, cancellationToken: ct))
+        await connection.ExecuteAsync(new CommandDefinition(
+                sql,
+                new { __projectionKey = projectionKey },
+                transaction: transaction,
+                cancellationToken: ct))
             .ConfigureAwait(false);
     }
 
@@ -524,7 +610,7 @@ public sealed class UnsafeWindowMvSqlServerStreamApplier<TRow> where TRow : clas
         parameters.Add("__safeDueAt", safeDueAt);
         foreach (var column in _projector.Schema.Columns)
         {
-            parameters.Add(column.Name, column.Getter(row) ?? DBNull.Value);
+            UnsafeWindowMvSqlServerTypes.AddBusinessValue(parameters, column, column.Getter(row));
         }
 
         var businessUpdates = string.Join(", ", businessCols.Select(c => $"{c} = @{c}"));
@@ -601,7 +687,7 @@ public sealed class UnsafeWindowMvSqlServerStreamApplier<TRow> where TRow : clas
             {
                 value = null;
             }
-            parameters.Add(column.Name, value ?? DBNull.Value);
+            UnsafeWindowMvSqlServerTypes.AddBusinessValue(parameters, column, value);
         }
 
         var businessUpdates = string.Join(", ", businessCols.Select(c => $"{c} = @{c}"));
@@ -898,7 +984,7 @@ public sealed class UnsafeWindowMvSqlServerPromoter<TRow> : IUnsafeWindowMvPromo
 
         foreach (var column in _projector.Schema.Columns)
         {
-            parameters.Add(column.Name, row is null ? DBNull.Value : (column.Getter(row) ?? DBNull.Value));
+            UnsafeWindowMvSqlServerTypes.AddBusinessValue(parameters, column, row is null ? null : column.Getter(row));
         }
 
         var businessUpdates = string.Join(", ", businessCols.Select(c => $"{c} = @{c}"));

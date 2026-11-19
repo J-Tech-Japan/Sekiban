@@ -451,6 +451,15 @@ public partial class DynamoMultiProjectionStateStore :
         ["#u"] = "updatedAt"
     };
 
+    // DynamoDB rejects ExpressionAttributeNames entries that no expression references, so the conditional PutItem
+    // requests (which only use the exact-token ConditionExpression) must not carry #u.
+    private static readonly Dictionary<string, string> ExactTokenNames = new()
+    {
+        ["#g"] = "generation",
+        ["#r"] = "revision",
+        ["#l"] = "lifecycle"
+    };
+
     private static Dictionary<string, AttributeValue> ExactTokenValues(long generation, long revision, int lifecycle) => new()
     {
         [":eg"] = new AttributeValue { N = generation.ToString(System.Globalization.CultureInfo.InvariantCulture) },
@@ -551,7 +560,7 @@ public partial class DynamoMultiProjectionStateStore :
                     TableName = _context.ProjectionStatesTableName,
                     Item = doc.ToAttributeValues(),
                     ConditionExpression = "#g = :eg AND #r = :er AND #l = :el",
-                    ExpressionAttributeNames = ControlNames,
+                    ExpressionAttributeNames = ExactTokenNames,
                     ExpressionAttributeValues = ExactTokenValues(expectation.ExpectedGeneration, expectedRevision, (int)CheckpointLifecycle.Active)
                 }, cancellationToken).ConfigureAwait(false);
                 return CheckpointCasOutcome.Committed(await RefetchAsync(payload.ProjectorName, payload.ProjectorVersion, cancellationToken));
@@ -654,7 +663,7 @@ public partial class DynamoMultiProjectionStateStore :
                     TableName = _context.ProjectionStatesTableName,
                     Item = doc.ToAttributeValues(),
                     ConditionExpression = "#g = :eg AND #r = :er AND #l = :el",
-                    ExpressionAttributeNames = ControlNames,
+                    ExpressionAttributeNames = ExactTokenNames,
                     ExpressionAttributeValues = ExactTokenValues(expectation.ExpectedGeneration, expectedRevision, (int)CheckpointLifecycle.Tombstoned)
                 }, cancellationToken).ConfigureAwait(false);
                 return CheckpointCasOutcome.Committed(await RefetchAsync(payload.ProjectorName, payload.ProjectorVersion, cancellationToken));
