@@ -4,6 +4,8 @@ using System.Text;
 using System.Text.Json;
 using Npgsql;
 
+namespace Dcb.Cli;
+
 /// <summary>
 ///     Connection identity for the local cache, and its non-secret description.
 ///     - The cache folder name is an HMAC-SHA256 (key stored in the cache root) of everything that can change the

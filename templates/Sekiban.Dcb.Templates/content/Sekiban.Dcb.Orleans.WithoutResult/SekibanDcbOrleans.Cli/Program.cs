@@ -1,3 +1,4 @@
+using Dcb.Cli;
 using Sekiban.Dcb.ServiceId;
 using System.CommandLine;
 using System.CommandLine.Parsing;
@@ -2096,7 +2097,7 @@ static void DeleteSyncTempFiles(string cacheFolder)
 static List<string> GetCacheFolders(string cacheDir)
 {
     var cacheRoot = GetCacheRoot(cacheDir);
-    var cacheFolderPattern = new Regex("^(postgres|cosmos|sqlite)-[0-9a-f]{16}$");
+    var cacheFolderPattern = new Regex("^(postgres|cosmos|sqlite)-[0-9a-f]{16}$", RegexOptions.None, TimeSpan.FromSeconds(1));
     return Directory.Exists(cacheRoot)
         ? Directory.GetDirectories(cacheRoot).Where(dir => cacheFolderPattern.IsMatch(Path.GetFileName(dir))).ToList()
         : [];
@@ -2131,13 +2132,13 @@ static List<CacheFile> FindCacheFiles(string cacheDir)
 // Legacy <root>/events.db (older CLI versions): a cache only when cache-sync wrote metadata to it (read-only check).
 // IsCache is false for any other file; Error is set when the file or its metadata cannot be read.
 static (bool IsCache, string? Error) GetCacheSyncStatus(string path) =>
-    QueryCacheMeta(path, "Key = 'remoteEndpoint' OR Key LIKE '%:remoteEndpoint'");
+    QueryCacheMeta(path, "remoteEndpoint", "%:remoteEndpoint");
 
 // A cache folder file is complete only when a successful cache-sync of this CLI wrote the completion marker.
 static (bool IsComplete, string? Error) GetCacheCompletionStatus(string path) =>
-    QueryCacheMeta(path, $"Key = '{CacheCompletionKey}'");
+    QueryCacheMeta(path, CacheCompletionKey, null);
 
-static (bool Found, string? Error) QueryCacheMeta(string path, string keyCondition)
+static (bool Found, string? Error) QueryCacheMeta(string path, string key, string? keyLikePattern)
 {
     try
     {
@@ -2149,7 +2150,9 @@ static (bool Found, string? Error) QueryCacheMeta(string path, string keyConditi
         using var connection = new SqliteConnection(connectionString);
         connection.Open();
         using var command = connection.CreateCommand();
-        command.CommandText = $"SELECT COUNT(*) FROM dcb_meta WHERE {keyCondition}";
+        command.CommandText = "SELECT COUNT(*) FROM dcb_meta WHERE Key = $key OR ($pattern IS NOT NULL AND Key LIKE $pattern)";
+        command.Parameters.AddWithValue("$key", key);
+        command.Parameters.AddWithValue("$pattern", (object?)keyLikePattern ?? DBNull.Value);
         return (Convert.ToInt64(command.ExecuteScalar()) > 0, null);
     }
     catch (SqliteException ex)
@@ -2370,12 +2373,3 @@ static Task<int> ClearCacheAsync(string cacheDir, bool assumeYes)
     }
     return Task.FromResult(0);
 }
-
-// A cache file found under the cache root; IsLegacy for the old <root>/events.db location.
-readonly record struct CacheFile(string Path, bool IsLegacy);
-
-// The resolved store a command talks to. For sqlite, ConnectionString is the database file path.
-readonly record struct ConnectionTarget(string DatabaseType, string ConnectionString, string CosmosDatabaseName);
-
-// Expected command failure: the message is printed to stderr and the CLI exits with code 1.
-sealed class CliException(string message) : Exception(message);
