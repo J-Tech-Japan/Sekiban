@@ -1,1 +1,1 @@
-readonly record struct CacheOptions(SimpleCacheMode Mode, string CacheDir);
+readonly record struct CacheOptions(SimpleCacheMode Mode, string CacheDir, string CachePath);

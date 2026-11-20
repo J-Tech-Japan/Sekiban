@@ -1,8 +1,10 @@
 using Sekiban.Dcb.ServiceId;
-using Microsoft.Extensions.DependencyInjection.Extensions;
 using System.CommandLine;
 using System.CommandLine.Parsing;
+using System.Data.Common;
 using System.Reflection;
+using System.Security.Cryptography;
+using System.Text;
 using Dcb.Domain.WithoutResult;
 using Microsoft.Azure.Cosmos;
 using Microsoft.EntityFrameworkCore;
@@ -20,6 +22,7 @@ using System.Text.Encodings.Web;
 
 // This identity partitions all data; it must match the API and stay stable.
 const string defaultServiceId = "sekiban-app";
+const string UnparsableConnection = "(unparsable connection string)";
 
 // Build configuration from environment variables and user secrets
 var configuration = new ConfigurationBuilder()
@@ -41,6 +44,10 @@ User secrets configuration example (dotnet user-secrets set):
             "Database": "cosmos",
             "CosmosConnectionString": "AccountEndpoint=...",
             "CosmosDatabase": "SekibanDcbStaging"
+        },
+        "local": {
+            "Database": "sqlite",
+            "SqlitePath": "../SekibanDcbOrleans.ApiService/events.db"
         }
     },
     "DefaultProfile": "dev"
@@ -50,12 +57,14 @@ Usage:
   dotnet run -- status --profile dev
   dotnet run -- build -f --profile stg
   dotnet run -- profiles
+
+Exit codes: 0 = success, 1 = failure (the error is written to stderr).
 */
 
 // Create the root command
 var rootCommand = new RootCommand("Sekiban DCB CLI - Manage projections, tags, and events");
 
-// Profile option (shared across commands)
+// Profile option (shared across commands). -P is the profile; -p is always a projector name.
 var profileOption = new Option<string?>("--profile", "-P")
 {
     Description = "Profile name defined in user secrets (e.g., dev, stg, prod)"
@@ -64,7 +73,7 @@ var profileOption = new Option<string?>("--profile", "-P")
 // Database type option (shared across commands)
 var databaseOption = new Option<string?>("--database", "-d")
 {
-    Description = "Database type: postgres or cosmos (defaults to Sekiban:Database config or DATABASE_TYPE env var)"
+    Description = "Database type: postgres, cosmos or sqlite (defaults to Sekiban:Database config or DATABASE_TYPE env var)"
 };
 
 // Connection string option for Postgres
@@ -83,6 +92,12 @@ var cosmosConnectionStringOption = new Option<string?>("--cosmos-connection-stri
 var cosmosDatabaseNameOption = new Option<string?>("--cosmos-database")
 {
     Description = "Cosmos DB database name (defaults to CosmosDb:DatabaseName config or 'SekibanDcb')"
+};
+
+// SQLite database file option
+var sqlitePathOption = new Option<string?>("--sqlite-path")
+{
+    Description = "SQLite event store file used with --database sqlite (defaults to Sekiban:SqlitePath config or SQLITE_PATH env var)"
 };
 
 // Min events option
@@ -123,91 +138,80 @@ var cacheModeOption = new Option<string?>("--cache-mode")
 // Cache directory option
 var cacheDirOption = new Option<string>("--cache-dir", "-C")
 {
-    Description = "Directory for local SQLite cache",
+    Description = "Directory for local SQLite cache (one cache per connection is kept below it)",
     DefaultValueFactory = _ => configuration["CACHE_DIR"] ?? "./cache"
 };
 
-// Build command
-var buildCommand = new Command("build", "Build multi projection states")
+// Confirmation skip option for destructive commands
+var yesOption = new Option<bool>("--yes", "-y")
 {
-    profileOption,
-    databaseOption,
-    connectionStringOption,
-    cosmosConnectionStringOption,
-    cosmosDatabaseNameOption,
-    cacheModeOption,
-    cacheDirOption,
-    minEventsOption,
-    projectorNameOption,
-    forceRebuildOption,
-    verboseOption
+    Description = "Skip the confirmation prompt (required when stdin is not interactive)"
 };
 
-buildCommand.SetAction(async (parseResult, cancellationToken) =>
+Command WithConnectionOptions(Command command)
 {
-    var profile = parseResult.GetValue(profileOption);
-    var database = parseResult.GetValue(databaseOption);
-    var connectionString = parseResult.GetValue(connectionStringOption);
-    var cosmosConnectionString = parseResult.GetValue(cosmosConnectionStringOption);
-    var cosmosDatabaseName = parseResult.GetValue(cosmosDatabaseNameOption);
-    var cacheMode = parseResult.GetValue(cacheModeOption);
-    var cacheDir = parseResult.GetValue(cacheDirOption);
-    var minEvents = parseResult.GetValue(minEventsOption);
-    var projectorName = parseResult.GetValue(projectorNameOption);
-    var forceRebuild = parseResult.GetValue(forceRebuildOption);
-    var verbose = parseResult.GetValue(verboseOption);
+    command.Add(profileOption);
+    command.Add(databaseOption);
+    command.Add(connectionStringOption);
+    command.Add(cosmosConnectionStringOption);
+    command.Add(cosmosDatabaseNameOption);
+    command.Add(sqlitePathOption);
+    return command;
+}
 
-    var profileConfig = ResolveProfile(configuration, profile);
-    if (profileConfig == null) return;
+ConnectionTarget ResolveConnection(ParseResult parseResult)
+{
+    var profileConfig = ResolveProfile(configuration, parseResult.GetValue(profileOption));
+    var databaseType = ResolveDatabaseType(profileConfig, parseResult.GetValue(databaseOption));
+    var connectionString = ResolveConnectionString(
+        profileConfig,
+        databaseType,
+        parseResult.GetValue(connectionStringOption),
+        parseResult.GetValue(cosmosConnectionStringOption),
+        parseResult.GetValue(sqlitePathOption));
+    var cosmosDatabaseName = ResolveCosmosDatabaseName(profileConfig, parseResult.GetValue(cosmosDatabaseNameOption));
+    return new ConnectionTarget(databaseType, connectionString, cosmosDatabaseName);
+}
 
-    var resolvedDatabase = ResolveDatabaseType(profileConfig, database);
-    var resolvedConnectionString = ResolveConnectionString(profileConfig, resolvedDatabase, connectionString, cosmosConnectionString);
-    var resolvedCosmosDatabaseName = ResolveCosmosDatabaseName(profileConfig, cosmosDatabaseName);
-    var cacheOptions = BuildCacheOptions(cacheMode, cacheDir);
+// Build command
+var buildCommand = WithConnectionOptions(new Command("build", "Build multi projection states"));
+buildCommand.Add(cacheModeOption);
+buildCommand.Add(cacheDirOption);
+buildCommand.Add(minEventsOption);
+buildCommand.Add(projectorNameOption);
+buildCommand.Add(forceRebuildOption);
+buildCommand.Add(verboseOption);
 
-    await BuildProjectionStatesAsync(resolvedConnectionString, resolvedDatabase, resolvedCosmosDatabaseName, minEvents, projectorName, forceRebuild, verbose, cacheOptions);
-});
+buildCommand.SetAction((parseResult, cancellationToken) => RunAsync(async () =>
+{
+    var target = ResolveConnection(parseResult);
+    var cacheOptions = BuildCacheOptions(parseResult.GetValue(cacheModeOption), parseResult.GetValue(cacheDirOption), target);
+
+    return await BuildProjectionStatesAsync(
+        target,
+        parseResult.GetValue(minEventsOption),
+        parseResult.GetValue(projectorNameOption),
+        parseResult.GetValue(forceRebuildOption),
+        parseResult.GetValue(verboseOption),
+        cacheOptions);
+}));
 
 // List command
 var listCommand = new Command("list", "List all registered projectors");
 
-listCommand.SetAction(async (parseResult, cancellationToken) =>
-{
-    await ListProjectorsAsync();
-});
+listCommand.SetAction((parseResult, cancellationToken) => RunAsync(ListProjectorsAsync));
 
 // Status command
-var statusCommand = new Command("status", "Show status of all projection states")
+var statusCommand = WithConnectionOptions(new Command("status", "Show status of all projection states"));
+statusCommand.Add(cacheModeOption);
+statusCommand.Add(cacheDirOption);
+
+statusCommand.SetAction((parseResult, cancellationToken) => RunAsync(async () =>
 {
-    profileOption,
-    databaseOption,
-    connectionStringOption,
-    cosmosConnectionStringOption,
-    cosmosDatabaseNameOption,
-    cacheModeOption,
-    cacheDirOption
-};
-
-statusCommand.SetAction(async (parseResult, cancellationToken) =>
-{
-    var profile = parseResult.GetValue(profileOption);
-    var database = parseResult.GetValue(databaseOption);
-    var connectionString = parseResult.GetValue(connectionStringOption);
-    var cosmosConnectionString = parseResult.GetValue(cosmosConnectionStringOption);
-    var cosmosDatabaseName = parseResult.GetValue(cosmosDatabaseNameOption);
-    var cacheMode = parseResult.GetValue(cacheModeOption);
-    var cacheDir = parseResult.GetValue(cacheDirOption);
-
-    var profileConfig = ResolveProfile(configuration, profile);
-    if (profileConfig == null) return;
-
-    var resolvedDatabase = ResolveDatabaseType(profileConfig, database);
-    var resolvedConnectionString = ResolveConnectionString(profileConfig, resolvedDatabase, connectionString, cosmosConnectionString);
-    var resolvedCosmosDatabaseName = ResolveCosmosDatabaseName(profileConfig, cosmosDatabaseName);
-    var cacheOptions = BuildCacheOptions(cacheMode, cacheDir);
-
-    await ShowStatusAsync(resolvedConnectionString, resolvedDatabase, resolvedCosmosDatabaseName, cacheOptions);
-});
+    var target = ResolveConnection(parseResult);
+    var cacheOptions = BuildCacheOptions(parseResult.GetValue(cacheModeOption), parseResult.GetValue(cacheDirOption), target);
+    return await ShowStatusAsync(target, cacheOptions);
+}));
 
 // Save command - export state JSON to file for debugging
 var outputDirOption = new Option<string?>("--output-dir", "-o")
@@ -216,66 +220,31 @@ var outputDirOption = new Option<string?>("--output-dir", "-o")
     DefaultValueFactory = _ => configuration["OUTPUT_DIR"] ?? "./output"
 };
 
-var saveCommand = new Command("save", "Save projection state JSON to files for debugging")
+var saveCommand = WithConnectionOptions(new Command("save", "Save projection state JSON to files for debugging"));
+saveCommand.Add(projectorNameOption);
+saveCommand.Add(outputDirOption);
+
+saveCommand.SetAction((parseResult, cancellationToken) => RunAsync(async () =>
 {
-    profileOption,
-    databaseOption,
-    connectionStringOption,
-    cosmosConnectionStringOption,
-    cosmosDatabaseNameOption,
-    projectorNameOption,
-    outputDirOption
-};
-
-saveCommand.SetAction(async (parseResult, cancellationToken) =>
-{
-    var profile = parseResult.GetValue(profileOption);
-    var database = parseResult.GetValue(databaseOption);
-    var connectionString = parseResult.GetValue(connectionStringOption);
-    var cosmosConnectionString = parseResult.GetValue(cosmosConnectionStringOption);
-    var cosmosDatabaseName = parseResult.GetValue(cosmosDatabaseNameOption);
-    var projectorName = parseResult.GetValue(projectorNameOption);
-    var outputDir = parseResult.GetValue(outputDirOption) ?? "./output";
-
-    var profileConfig = ResolveProfile(configuration, profile);
-    if (profileConfig == null) return;
-
-    var resolvedDatabase = ResolveDatabaseType(profileConfig, database);
-    var resolvedConnectionString = ResolveConnectionString(profileConfig, resolvedDatabase, connectionString, cosmosConnectionString);
-    var resolvedCosmosDatabaseName = ResolveCosmosDatabaseName(profileConfig, cosmosDatabaseName);
-
-    await SaveStateJsonAsync(resolvedConnectionString, resolvedDatabase, resolvedCosmosDatabaseName, projectorName, outputDir);
-});
+    var target = ResolveConnection(parseResult);
+    return await SaveStateJsonAsync(
+        target,
+        parseResult.GetValue(projectorNameOption),
+        parseResult.GetValue(outputDirOption) ?? "./output");
+}));
 
 // Delete command - delete projection states
-var deleteCommand = new Command("delete", "Delete projection states")
+var deleteCommand = WithConnectionOptions(new Command("delete", "Delete projection states"));
+deleteCommand.Add(projectorNameOption);
+deleteCommand.Add(yesOption);
+
+deleteCommand.SetAction((parseResult, cancellationToken) => RunAsync(async () =>
 {
-    profileOption,
-    databaseOption,
-    connectionStringOption,
-    cosmosConnectionStringOption,
-    cosmosDatabaseNameOption,
-    projectorNameOption
-};
-
-deleteCommand.SetAction(async (parseResult, cancellationToken) =>
-{
-    var profile = parseResult.GetValue(profileOption);
-    var database = parseResult.GetValue(databaseOption);
-    var connectionString = parseResult.GetValue(connectionStringOption);
-    var cosmosConnectionString = parseResult.GetValue(cosmosConnectionStringOption);
-    var cosmosDatabaseName = parseResult.GetValue(cosmosDatabaseNameOption);
-    var projectorName = parseResult.GetValue(projectorNameOption);
-
-    var profileConfig = ResolveProfile(configuration, profile);
-    if (profileConfig == null) return;
-
-    var resolvedDatabase = ResolveDatabaseType(profileConfig, database);
-    var resolvedConnectionString = ResolveConnectionString(profileConfig, resolvedDatabase, connectionString, cosmosConnectionString);
-    var resolvedCosmosDatabaseName = ResolveCosmosDatabaseName(profileConfig, cosmosDatabaseName);
-
-    await DeleteStateAsync(resolvedConnectionString, resolvedDatabase, resolvedCosmosDatabaseName, projectorName);
-});
+    var assumeYes = parseResult.GetValue(yesOption);
+    EnsureConfirmationPossible(assumeYes);
+    var target = ResolveConnection(parseResult);
+    return await DeleteStateAsync(target, parseResult.GetValue(projectorNameOption), assumeYes);
+}));
 
 // Tag-events command - fetch events for a specific tag
 var tagOption = new Option<string>("--tag", "-t")
@@ -284,113 +253,55 @@ var tagOption = new Option<string>("--tag", "-t")
     Required = true
 };
 
-var tagEventsCommand = new Command("tag-events", "Fetch and save all events for a specific tag")
+var tagEventsCommand = WithConnectionOptions(new Command("tag-events", "Fetch and save all events for a specific tag"));
+tagEventsCommand.Add(cacheModeOption);
+tagEventsCommand.Add(cacheDirOption);
+tagEventsCommand.Add(tagOption);
+tagEventsCommand.Add(outputDirOption);
+
+tagEventsCommand.SetAction((parseResult, cancellationToken) => RunAsync(async () =>
 {
-    profileOption,
-    databaseOption,
-    connectionStringOption,
-    cosmosConnectionStringOption,
-    cosmosDatabaseNameOption,
-    cacheModeOption,
-    cacheDirOption,
-    tagOption,
-    outputDirOption
-};
-
-tagEventsCommand.SetAction(async (parseResult, cancellationToken) =>
-{
-    var profile = parseResult.GetValue(profileOption);
-    var database = parseResult.GetValue(databaseOption);
-    var connectionString = parseResult.GetValue(connectionStringOption);
-    var cosmosConnectionString = parseResult.GetValue(cosmosConnectionStringOption);
-    var cosmosDatabaseName = parseResult.GetValue(cosmosDatabaseNameOption);
-    var cacheMode = parseResult.GetValue(cacheModeOption);
-    var cacheDir = parseResult.GetValue(cacheDirOption);
-    var tag = parseResult.GetValue(tagOption) ?? "";
-    var outputDir = parseResult.GetValue(outputDirOption) ?? "./output";
-
-    var profileConfig = ResolveProfile(configuration, profile);
-    if (profileConfig == null) return;
-
-    var resolvedDatabase = ResolveDatabaseType(profileConfig, database);
-    var resolvedConnectionString = ResolveConnectionString(profileConfig, resolvedDatabase, connectionString, cosmosConnectionString);
-    var resolvedCosmosDatabaseName = ResolveCosmosDatabaseName(profileConfig, cosmosDatabaseName);
-    var cacheOptions = BuildCacheOptions(cacheMode, cacheDir);
-
-    await FetchTagEventsAsync(resolvedConnectionString, resolvedDatabase, resolvedCosmosDatabaseName, tag, outputDir, cacheOptions);
-});
+    var target = ResolveConnection(parseResult);
+    var cacheOptions = BuildCacheOptions(parseResult.GetValue(cacheModeOption), parseResult.GetValue(cacheDirOption), target);
+    return await FetchTagEventsAsync(
+        target,
+        parseResult.GetValue(tagOption) ?? "",
+        parseResult.GetValue(outputDirOption) ?? "./output",
+        cacheOptions);
+}));
 
 // Projection command - display current projection state
-var projectionCommand = new Command("projection", "Display the current state of a projection")
+var projectionCommand = WithConnectionOptions(new Command("projection", "Display the current state of a projection"));
+projectionCommand.Add(projectorNameOption);
+
+projectionCommand.SetAction((parseResult, cancellationToken) => RunAsync(async () =>
 {
-    profileOption,
-    databaseOption,
-    connectionStringOption,
-    cosmosConnectionStringOption,
-    cosmosDatabaseNameOption,
-    projectorNameOption
-};
+    var target = ResolveConnection(parseResult);
+    return await ShowProjectionAsync(target, parseResult.GetValue(projectorNameOption));
+}));
 
-projectionCommand.SetAction(async (parseResult, cancellationToken) =>
-{
-    var profile = parseResult.GetValue(profileOption);
-    var database = parseResult.GetValue(databaseOption);
-    var connectionString = parseResult.GetValue(connectionStringOption);
-    var cosmosConnectionString = parseResult.GetValue(cosmosConnectionStringOption);
-    var cosmosDatabaseName = parseResult.GetValue(cosmosDatabaseNameOption);
-    var projectorName = parseResult.GetValue(projectorNameOption);
-
-    var profileConfig = ResolveProfile(configuration, profile);
-    if (profileConfig == null) return;
-
-    var resolvedDatabase = ResolveDatabaseType(profileConfig, database);
-    var resolvedConnectionString = ResolveConnectionString(profileConfig, resolvedDatabase, connectionString, cosmosConnectionString);
-    var resolvedCosmosDatabaseName = ResolveCosmosDatabaseName(profileConfig, cosmosDatabaseName);
-
-    await ShowProjectionAsync(resolvedConnectionString, resolvedDatabase, resolvedCosmosDatabaseName, projectorName);
-});
-
-// Tag-state command - project events for a tag using a specific projector
-var tagProjectorOption = new Option<string?>("--projector", "-P")
+// Tag-state command - project events for a tag using a specific tag projector
+var tagProjectorOption = new Option<string?>("--projector", "-p")
 {
     Description = "Tag projector name to use for projection. Auto-detects if not specified (e.g., 'UserMonthlyReservation' tag uses 'UserMonthlyReservationProjector')"
 };
 
-var tagStateCommand = new Command("tag-state", "Project and display the current state for a specific tag")
+var tagStateCommand = WithConnectionOptions(new Command("tag-state", "Project and display the current state for a specific tag"));
+tagStateCommand.Add(cacheModeOption);
+tagStateCommand.Add(cacheDirOption);
+tagStateCommand.Add(tagOption);
+tagStateCommand.Add(tagProjectorOption);
+
+tagStateCommand.SetAction((parseResult, cancellationToken) => RunAsync(async () =>
 {
-    profileOption,
-    databaseOption,
-    connectionStringOption,
-    cosmosConnectionStringOption,
-    cosmosDatabaseNameOption,
-    cacheModeOption,
-    cacheDirOption,
-    tagOption,
-    tagProjectorOption
-};
-
-tagStateCommand.SetAction(async (parseResult, cancellationToken) =>
-{
-    var profile = parseResult.GetValue(profileOption);
-    var database = parseResult.GetValue(databaseOption);
-    var connectionString = parseResult.GetValue(connectionStringOption);
-    var cosmosConnectionString = parseResult.GetValue(cosmosConnectionStringOption);
-    var cosmosDatabaseName = parseResult.GetValue(cosmosDatabaseNameOption);
-    var cacheMode = parseResult.GetValue(cacheModeOption);
-    var cacheDir = parseResult.GetValue(cacheDirOption);
-    var tag = parseResult.GetValue(tagOption) ?? "";
-    var tagProjector = parseResult.GetValue(tagProjectorOption) ?? "";
-
-    var profileConfig = ResolveProfile(configuration, profile);
-    if (profileConfig == null) return;
-
-    var resolvedDatabase = ResolveDatabaseType(profileConfig, database);
-    var resolvedConnectionString = ResolveConnectionString(profileConfig, resolvedDatabase, connectionString, cosmosConnectionString);
-    var resolvedCosmosDatabaseName = ResolveCosmosDatabaseName(profileConfig, cosmosDatabaseName);
-    var cacheOptions = BuildCacheOptions(cacheMode, cacheDir);
-
-    await ShowTagStateAsync(resolvedConnectionString, resolvedDatabase, resolvedCosmosDatabaseName, tag, tagProjector, cacheOptions);
-});
+    var target = ResolveConnection(parseResult);
+    var cacheOptions = BuildCacheOptions(parseResult.GetValue(cacheModeOption), parseResult.GetValue(cacheDirOption), target);
+    return await ShowTagStateAsync(
+        target,
+        parseResult.GetValue(tagOption) ?? "",
+        parseResult.GetValue(tagProjectorOption) ?? "",
+        cacheOptions);
+}));
 
 // Tag-list command - list all tags in the event store
 var tagGroupOption = new Option<string?>("--tag-group", "-g")
@@ -398,41 +309,22 @@ var tagGroupOption = new Option<string?>("--tag-group", "-g")
     Description = "Filter by tag group name (e.g., 'WeatherForecast')"
 };
 
-var tagListCommand = new Command("tag-list", "List all tags in the event store and export to JSON")
+var tagListCommand = WithConnectionOptions(new Command("tag-list", "List all tags in the event store and export to JSON"));
+tagListCommand.Add(cacheModeOption);
+tagListCommand.Add(cacheDirOption);
+tagListCommand.Add(tagGroupOption);
+tagListCommand.Add(outputDirOption);
+
+tagListCommand.SetAction((parseResult, cancellationToken) => RunAsync(async () =>
 {
-    profileOption,
-    databaseOption,
-    connectionStringOption,
-    cosmosConnectionStringOption,
-    cosmosDatabaseNameOption,
-    cacheModeOption,
-    cacheDirOption,
-    tagGroupOption,
-    outputDirOption
-};
-
-tagListCommand.SetAction(async (parseResult, cancellationToken) =>
-{
-    var profile = parseResult.GetValue(profileOption);
-    var database = parseResult.GetValue(databaseOption);
-    var connectionString = parseResult.GetValue(connectionStringOption);
-    var cosmosConnectionString = parseResult.GetValue(cosmosConnectionStringOption);
-    var cosmosDatabaseName = parseResult.GetValue(cosmosDatabaseNameOption);
-    var cacheMode = parseResult.GetValue(cacheModeOption);
-    var cacheDir = parseResult.GetValue(cacheDirOption);
-    var tagGroup = parseResult.GetValue(tagGroupOption);
-    var outputDir = parseResult.GetValue(outputDirOption) ?? "./output";
-
-    var profileConfig = ResolveProfile(configuration, profile);
-    if (profileConfig == null) return;
-
-    var resolvedDatabase = ResolveDatabaseType(profileConfig, database);
-    var resolvedConnectionString = ResolveConnectionString(profileConfig, resolvedDatabase, connectionString, cosmosConnectionString);
-    var resolvedCosmosDatabaseName = ResolveCosmosDatabaseName(profileConfig, cosmosDatabaseName);
-    var cacheOptions = BuildCacheOptions(cacheMode, cacheDir);
-
-    await ListTagsAsync(resolvedConnectionString, resolvedDatabase, resolvedCosmosDatabaseName, tagGroup, outputDir, cacheOptions);
-});
+    var target = ResolveConnection(parseResult);
+    var cacheOptions = BuildCacheOptions(parseResult.GetValue(cacheModeOption), parseResult.GetValue(cacheDirOption), target);
+    return await ListTagsAsync(
+        target,
+        parseResult.GetValue(tagGroupOption),
+        parseResult.GetValue(outputDirOption) ?? "./output",
+        cacheOptions);
+}));
 
 // Safe window option (minutes)
 var safeWindowOption = new Option<int>("--safe-window")
@@ -442,70 +334,51 @@ var safeWindowOption = new Option<int>("--safe-window")
 };
 
 // Cache-sync command - sync remote events to local SQLite cache
-var cacheSyncCommand = new Command("cache-sync", "Sync remote events to local SQLite cache")
+var cacheSyncCommand = WithConnectionOptions(new Command("cache-sync", "Sync remote events to local SQLite cache"));
+cacheSyncCommand.Add(cacheDirOption);
+cacheSyncCommand.Add(safeWindowOption);
+cacheSyncCommand.Add(verboseOption);
+
+cacheSyncCommand.SetAction((parseResult, cancellationToken) => RunAsync(async () =>
 {
-    profileOption,
-    databaseOption,
-    connectionStringOption,
-    cosmosConnectionStringOption,
-    cosmosDatabaseNameOption,
-    cacheDirOption,
-    safeWindowOption,
-    verboseOption
-};
-
-cacheSyncCommand.SetAction(async (parseResult, cancellationToken) =>
-{
-    var profile = parseResult.GetValue(profileOption);
-    var database = parseResult.GetValue(databaseOption);
-    var connectionString = parseResult.GetValue(connectionStringOption);
-    var cosmosConnectionString = parseResult.GetValue(cosmosConnectionStringOption);
-    var cosmosDatabaseName = parseResult.GetValue(cosmosDatabaseNameOption);
-    var cacheDir = parseResult.GetValue(cacheDirOption);
-    var safeWindowMinutes = parseResult.GetValue(safeWindowOption);
-    var verbose = parseResult.GetValue(verboseOption);
-
-    var profileConfig = ResolveProfile(configuration, profile);
-    if (profileConfig == null) return;
-
-    var resolvedDatabase = ResolveDatabaseType(profileConfig, database);
-    var resolvedConnectionString = ResolveConnectionString(profileConfig, resolvedDatabase, connectionString, cosmosConnectionString);
-    var resolvedCosmosDatabaseName = ResolveCosmosDatabaseName(profileConfig, cosmosDatabaseName);
-
-    await SyncCacheAsync(resolvedConnectionString, resolvedDatabase, resolvedCosmosDatabaseName, cacheDir ?? "./cache", safeWindowMinutes, verbose);
-});
+    var target = ResolveConnection(parseResult);
+    return await SyncCacheAsync(
+        target,
+        parseResult.GetValue(cacheDirOption) ?? "./cache",
+        parseResult.GetValue(safeWindowOption),
+        parseResult.GetValue(verboseOption));
+}));
 
 // Cache-stats command - show cache statistics
-var cacheStatsCommand = new Command("cache-stats", "Show local cache statistics")
+var cacheStatsCommand = new Command("cache-stats", "Show local cache statistics (all connections cached under the cache directory)")
 {
     cacheDirOption
 };
 
-cacheStatsCommand.SetAction(async (parseResult, cancellationToken) =>
-{
-    var cacheDir = parseResult.GetValue(cacheDirOption) ?? "./cache";
-    await ShowCacheStatsAsync(cacheDir);
-});
+cacheStatsCommand.SetAction((parseResult, cancellationToken) => RunAsync(async () =>
+    await ShowCacheStatsAsync(parseResult.GetValue(cacheDirOption) ?? "./cache")));
 
 // Cache-clear command - clear local cache
-var cacheClearCommand = new Command("cache-clear", "Clear local SQLite cache")
+var cacheClearCommand = new Command("cache-clear", "Clear local SQLite cache (all connections cached under the cache directory)")
 {
-    cacheDirOption
+    cacheDirOption,
+    yesOption
 };
 
-cacheClearCommand.SetAction(async (parseResult, cancellationToken) =>
+cacheClearCommand.SetAction((parseResult, cancellationToken) => RunAsync(async () =>
 {
-    var cacheDir = parseResult.GetValue(cacheDirOption) ?? "./cache";
-    await ClearCacheAsync(cacheDir);
-});
+    var assumeYes = parseResult.GetValue(yesOption);
+    EnsureConfirmationPossible(assumeYes);
+    return await ClearCacheAsync(parseResult.GetValue(cacheDirOption) ?? "./cache", assumeYes);
+}));
 
 // Profiles command - list available profiles
 var profilesCommand = new Command("profiles", "List available profiles defined in user secrets");
-profilesCommand.SetAction((parseResult, cancellationToken) =>
+profilesCommand.SetAction((parseResult, cancellationToken) => RunAsync(() =>
 {
     ListProfiles(configuration);
-    return Task.CompletedTask;
-});
+    return Task.FromResult(0);
+}));
 
 rootCommand.Add(buildCommand);
 rootCommand.Add(listCommand);
@@ -524,6 +397,56 @@ rootCommand.Add(profilesCommand);
 var parseResult = rootCommand.Parse(args);
 return await parseResult.InvokeAsync();
 
+// Runs a command body: failures are written to stderr and turned into exit code 1.
+static async Task<int> RunAsync(Func<Task<int>> action)
+{
+    try
+    {
+        return await action();
+    }
+    catch (CliException ex)
+    {
+        WriteError(ex.Message);
+        return 1;
+    }
+    catch (Exception ex)
+    {
+        var message = ex.InnerException is null || ex.InnerException.Message == ex.Message
+            ? ex.Message
+            : $"{ex.Message} ({ex.InnerException.Message})";
+        WriteError($"{ex.GetType().Name}: {message}");
+        return 1;
+    }
+}
+
+static void WriteError(string message)
+{
+    Console.Out.Flush();
+    Console.Error.WriteLine($"Error: {message}");
+}
+
+// Fails fast (before touching any store) when a prompt would be needed but cannot be answered.
+static void EnsureConfirmationPossible(bool assumeYes)
+{
+    if (!assumeYes && Console.IsInputRedirected)
+    {
+        throw new CliException("Confirmation required, but stdin is not interactive. Re-run with --yes (-y) to proceed without a prompt.");
+    }
+}
+
+static bool Confirm(string prompt, bool assumeYes)
+{
+    if (assumeYes)
+    {
+        return true;
+    }
+
+    EnsureConfirmationPossible(assumeYes);
+    Console.Write(prompt);
+    var response = Console.ReadLine()?.Trim().ToLowerInvariant();
+    return response is "y" or "yes";
+}
+
 static string GetServiceId()
 {
     var configuration = new ConfigurationBuilder()
@@ -533,8 +456,13 @@ static string GetServiceId()
     return ServiceIdValidator.NormalizeAndValidate(configuration["Sekiban:ServiceId"] ?? defaultServiceId);
 }
 
+static IServiceIdProvider CreateServiceIdProvider() => new FixedServiceIdProvider(GetServiceId());
+
+// Root directory for every cache of this service: <cache-dir>/<service id>
+static string GetCacheRoot(string cacheDir) => Path.Combine(cacheDir, Uri.EscapeDataString(GetServiceId()));
+
 // Helper to resolve profile configuration
-static IConfiguration? ResolveProfile(IConfiguration configuration, string? profileName)
+static IConfiguration ResolveProfile(IConfiguration configuration, string? profileName)
 {
     var profilesSection = configuration.GetSection("Profiles");
     var profileEntries = profilesSection.GetChildren().ToList();
@@ -550,9 +478,9 @@ static IConfiguration? ResolveProfile(IConfiguration configuration, string? prof
         }
         else if (hasProfiles)
         {
-            Console.WriteLine("Error: No profile specified. Use --profile option.");
-            Console.WriteLine($"Available profiles: {string.Join(", ", profileEntries.Select(p => p.Key))}");
-            return null;
+            throw new CliException(
+                "No profile specified. Use --profile option.\n" +
+                $"Available profiles: {string.Join(", ", profileEntries.Select(p => p.Key))}");
         }
         else
         {
@@ -563,16 +491,15 @@ static IConfiguration? ResolveProfile(IConfiguration configuration, string? prof
 
     if (!hasProfiles)
     {
-        Console.WriteLine($"Error: Profile '{resolvedProfile}' is not defined. Add it to Profiles in User Secrets.");
-        return null;
+        throw new CliException($"Profile '{resolvedProfile}' is not defined. Add it to Profiles in User Secrets.");
     }
 
     var profileSection = profilesSection.GetSection(resolvedProfile!);
     if (!profileSection.Exists())
     {
-        Console.WriteLine($"Error: Profile '{resolvedProfile}' not found.");
-        Console.WriteLine($"Available profiles: {string.Join(", ", profileEntries.Select(p => p.Key))}");
-        return null;
+        throw new CliException(
+            $"Profile '{resolvedProfile}' not found.\n" +
+            $"Available profiles: {string.Join(", ", profileEntries.Select(p => p.Key))}");
     }
 
     var prefix = $"Profiles:{resolvedProfile}:";
@@ -606,6 +533,7 @@ static IConfiguration? ResolveProfile(IConfiguration configuration, string? prof
     MapAlias("CosmosDatabase", "CosmosDb:DatabaseName");
     MapAlias("ConnectionString", "ConnectionStrings:DcbPostgres");
     MapAlias("PostgresConnectionString", "ConnectionStrings:DcbPostgres");
+    MapAlias("SqlitePath", "Sekiban:SqlitePath");
 
     return new ConfigurationBuilder()
         .AddConfiguration(configuration)
@@ -641,18 +569,21 @@ static void ListProfiles(IConfiguration configuration)
 static string ResolveDatabaseType(IConfiguration config, string? cliOption)
 {
     // Priority: CLI option > Sekiban:Database > DATABASE_TYPE env > "postgres"
-    if (!string.IsNullOrEmpty(cliOption))
-        return cliOption;
+    var value = cliOption;
+    if (string.IsNullOrEmpty(value))
+        value = config["Sekiban:Database"];
+    if (string.IsNullOrEmpty(value))
+        value = config["DATABASE_TYPE"];
+    if (string.IsNullOrEmpty(value))
+        return "postgres";
 
-    var sekibanDatabase = config["Sekiban:Database"];
-    if (!string.IsNullOrEmpty(sekibanDatabase))
-        return sekibanDatabase;
-
-    var envDatabaseType = config["DATABASE_TYPE"];
-    if (!string.IsNullOrEmpty(envDatabaseType))
-        return envDatabaseType;
-
-    return "postgres";
+    return value.Trim().ToLowerInvariant() switch
+    {
+        "postgres" or "postgresql" => "postgres",
+        "cosmos" or "cosmosdb" => "cosmos",
+        "sqlite" => "sqlite",
+        _ => throw new CliException($"Unknown database type '{value}'. Use postgres, cosmos or sqlite.")
+    };
 }
 
 // Helper to resolve Cosmos database name
@@ -673,10 +604,10 @@ static string ResolveCosmosDatabaseName(IConfiguration config, string? cliOption
     return "SekibanDcb";
 }
 
-// Helper to resolve connection string from argument, config, or environment
-static string ResolveConnectionString(IConfiguration config, string databaseType, string? connectionString, string? cosmosConnectionString)
+// Helper to resolve connection string (or SQLite file path) from argument, config, or environment
+static string ResolveConnectionString(IConfiguration config, string databaseType, string? connectionString, string? cosmosConnectionString, string? sqlitePath)
 {
-    if (databaseType.ToLowerInvariant() == "cosmos")
+    if (databaseType == "cosmos")
     {
         // Priority: CLI option > ConnectionStrings:SekibanDcbCosmos > COSMOS_CONNECTION_STRING env
         if (!string.IsNullOrEmpty(cosmosConnectionString))
@@ -690,53 +621,131 @@ static string ResolveConnectionString(IConfiguration config, string databaseType
         if (!string.IsNullOrEmpty(envConnStr))
             return envConnStr;
 
-        throw new InvalidOperationException(
+        throw new CliException(
             "Cosmos DB connection string not provided.\n" +
             "Options:\n" +
             "  1. Use --cosmos-connection-string option\n" +
             "  2. Set user secret: dotnet user-secrets set \"ConnectionStrings:SekibanDcbCosmos\" \"your-connection-string\"\n" +
             "  3. Set environment variable: COSMOS_CONNECTION_STRING");
     }
-    else
+
+    if (databaseType == "sqlite")
     {
-        // Priority: CLI option > ConnectionStrings:DcbPostgres > CONNECTION_STRING env
-        if (!string.IsNullOrEmpty(connectionString))
-            return connectionString;
+        // Priority: CLI option > Sekiban:SqlitePath > SQLITE_PATH env
+        var path = sqlitePath;
+        if (string.IsNullOrEmpty(path))
+            path = config["Sekiban:SqlitePath"];
+        if (string.IsNullOrEmpty(path))
+            path = config["SQLITE_PATH"];
+        if (string.IsNullOrEmpty(path))
+        {
+            throw new CliException(
+                "SQLite database path not provided.\n" +
+                "Options:\n" +
+                "  1. Use --sqlite-path option (the ApiService writes events.db in its working directory)\n" +
+                "  2. Set user secret: dotnet user-secrets set \"Sekiban:SqlitePath\" \"path/to/events.db\"\n" +
+                "  3. Set environment variable: SQLITE_PATH");
+        }
 
-        var configConnStr = config["ConnectionStrings:DcbPostgres"];
-        if (!string.IsNullOrEmpty(configConnStr))
-            return configConnStr;
+        var fullPath = Path.GetFullPath(path);
+        if (!File.Exists(fullPath))
+        {
+            throw new CliException($"SQLite database not found: {path}");
+        }
 
-        var envConnStr = config["CONNECTION_STRING"];
-        if (!string.IsNullOrEmpty(envConnStr))
-            return envConnStr;
-
-        throw new InvalidOperationException(
-            "PostgreSQL connection string not provided.\n" +
-            "Options:\n" +
-            "  1. Use --connection-string option\n" +
-            "  2. Set user secret: dotnet user-secrets set \"ConnectionStrings:DcbPostgres\" \"your-connection-string\"\n" +
-            "  3. Set environment variable: CONNECTION_STRING");
+        return fullPath;
     }
+
+    // Priority: CLI option > ConnectionStrings:DcbPostgres > CONNECTION_STRING env
+    if (!string.IsNullOrEmpty(connectionString))
+        return connectionString;
+
+    var postgresConnStr = config["ConnectionStrings:DcbPostgres"];
+    if (!string.IsNullOrEmpty(postgresConnStr))
+        return postgresConnStr;
+
+    var postgresEnvConnStr = config["CONNECTION_STRING"];
+    if (!string.IsNullOrEmpty(postgresEnvConnStr))
+        return postgresEnvConnStr;
+
+    throw new CliException(
+        "PostgreSQL connection string not provided.\n" +
+        "Options:\n" +
+        "  1. Use --connection-string option\n" +
+        "  2. Set user secret: dotnet user-secrets set \"ConnectionStrings:DcbPostgres\" \"your-connection-string\"\n" +
+        "  3. Set environment variable: CONNECTION_STRING");
 }
 
-static CacheOptions BuildCacheOptions(string? cacheMode, string? cacheDir)
+// Connection string with secrets (passwords, keys, tokens) removed; safe to print or store.
+static string DescribeConnection(ConnectionTarget target)
 {
-    var resolvedMode = cacheMode?.ToLowerInvariant() switch
+    if (target.DatabaseType == "sqlite")
     {
+        return target.ConnectionString;
+    }
+
+    string redacted;
+    try
+    {
+        var builder = new DbConnectionStringBuilder { ConnectionString = target.ConnectionString };
+        var parts = builder.Keys.Cast<string>()
+            .Where(key => !IsSecretKey(key))
+            .OrderBy(key => key, StringComparer.OrdinalIgnoreCase)
+            .Select(key => $"{key.ToLowerInvariant()}={builder[key]}");
+        redacted = string.Join(";", parts);
+    }
+    catch (ArgumentException)
+    {
+        redacted = UnparsableConnection;
+    }
+
+    return target.DatabaseType == "cosmos"
+        ? $"{redacted};database={target.CosmosDatabaseName}"
+        : redacted;
+}
+
+static bool IsSecretKey(string key)
+{
+    var normalized = key.Replace(" ", "").ToLowerInvariant();
+    return normalized is "password" or "pwd" or "accountkey" or "sharedaccesskey" or "accesskey" or "key" ||
+           normalized.Contains("secret") || normalized.Contains("token") || normalized.Contains("password");
+}
+
+// Cache sub directory name for a connection: database type + hash of the full connection identity.
+// Only a truncated SHA-256 of the identity appears in the path.
+static string ComputeConnectionKey(ConnectionTarget target)
+{
+    // Identity = redacted description (host, port, database, user, account endpoint, ...). Secrets are not part of it,
+    // so rotating a password keeps the cache; a different server or database gets its own cache.
+    var description = DescribeConnection(target);
+    var identity = description == UnparsableConnection
+        ? $"{target.DatabaseType}\n{target.ConnectionString}\n{target.CosmosDatabaseName}"
+        : $"{target.DatabaseType}\n{description}";
+    var hash = SHA256.HashData(Encoding.UTF8.GetBytes(identity));
+    return $"{target.DatabaseType}-{Convert.ToHexString(hash)[..16].ToLowerInvariant()}";
+}
+
+static string GetCachePath(string cacheDir, ConnectionTarget target) =>
+    Path.Combine(GetCacheRoot(cacheDir), ComputeConnectionKey(target), "events.db");
+
+static CacheOptions BuildCacheOptions(string? cacheMode, string? cacheDir, ConnectionTarget target)
+{
+    var resolvedMode = (cacheMode ?? "auto").Trim().ToLowerInvariant() switch
+    {
+        "auto" or "" => SimpleCacheMode.Auto,
         "off" => SimpleCacheMode.Off,
         "clear" => SimpleCacheMode.Clear,
         "cache-only" or "cacheonly" => SimpleCacheMode.CacheOnly,
-        _ => SimpleCacheMode.Auto
+        _ => throw new CliException($"Unknown cache mode '{cacheMode}'. Use auto, off, clear or cache-only.")
     };
 
     var resolvedCacheDir = string.IsNullOrWhiteSpace(cacheDir) ? "./cache" : cacheDir;
-    return new CacheOptions(resolvedMode, resolvedCacheDir);
+    return new CacheOptions(resolvedMode, resolvedCacheDir, GetCachePath(resolvedCacheDir, target));
 }
 
 static bool TryResolveCachePath(CacheOptions cacheOptions, out string? cachePath)
 {
-    var resolvedPath = Path.Combine(cacheOptions.CacheDir, Uri.EscapeDataString(GetServiceId()), "events.db");
+    var resolvedPath = cacheOptions.CachePath;
 
     if (cacheOptions.Mode == SimpleCacheMode.Clear && File.Exists(resolvedPath))
     {
@@ -750,12 +759,9 @@ static bool TryResolveCachePath(CacheOptions cacheOptions, out string? cachePath
 
     if (cacheOptions.Mode == SimpleCacheMode.CacheOnly && !useCache)
     {
-        Console.ForegroundColor = ConsoleColor.Red;
-        Console.WriteLine($"Error: SQLite cache not found: {resolvedPath}");
-        Console.WriteLine("Run 'cache-sync' first to create the cache.");
-        Console.ResetColor();
-        cachePath = null;
-        return false;
+        throw new CliException(
+            $"SQLite cache for this connection not found: {resolvedPath}\n" +
+            "Run 'cache-sync' with the same connection settings first to create the cache.");
     }
 
     cachePath = useCache ? resolvedPath : null;
@@ -780,7 +786,7 @@ static bool TryReportCacheUsage(CacheOptions cacheOptions, out string? cachePath
     }
     else if (cacheOptions.Mode != SimpleCacheMode.Off)
     {
-        Console.WriteLine("No cache found, using remote database...");
+        Console.WriteLine("No cache for this connection, using remote database...");
     }
 
     return true;
@@ -806,34 +812,59 @@ static void DeleteCacheFiles(string cachePath)
     }
 }
 
+static void PrintTarget(ConnectionTarget target)
+{
+    Console.WriteLine($"Database: {target.DatabaseType}");
+    Console.WriteLine($"Connection: {DescribeConnection(target)}");
+}
+
+// Throws when a projector name is given but is not registered in the domain.
+static void EnsureProjectorExists(DcbDomainTypes domainTypes, string? projectorName)
+{
+    if (string.IsNullOrEmpty(projectorName))
+    {
+        return;
+    }
+
+    var names = domainTypes.MultiProjectorTypes.GetAllProjectorNames();
+    if (!names.Contains(projectorName))
+    {
+        throw new CliException(
+            $"Unknown projector '{projectorName}'.\n" +
+            $"Registered projectors: {string.Join(", ", names)}");
+    }
+}
+
+// File-name safe form of a name or version (e.g. projector version "1.0.0" stays as is).
+static string ToSafeFileNamePart(string value)
+{
+    var invalid = Path.GetInvalidFileNameChars().Concat([':', '/', '\\', ' ']).ToHashSet();
+    return new string(value.Select(c => invalid.Contains(c) ? '_' : c).ToArray());
+}
+
 // Implementation methods
-static async Task BuildProjectionStatesAsync(
-    string connectionString,
-    string databaseType,
-    string cosmosDatabaseName,
+static async Task<int> BuildProjectionStatesAsync(
+    ConnectionTarget target,
     int minEvents,
     string? projectorName,
     bool forceRebuild,
     bool verbose,
     CacheOptions cacheOptions)
 {
+    EnsureProjectorExists(DomainType.GetDomainTypes(), projectorName);
+
     Console.WriteLine("=== Multi Projection State Builder ===");
-    Console.WriteLine($"Database: {databaseType}");
-    Console.WriteLine($"Connection: {connectionString[..Math.Min(50, connectionString.Length)]}...");
-    if (databaseType.ToLowerInvariant() == "cosmos")
-    {
-        Console.WriteLine($"Cosmos Database: {cosmosDatabaseName}");
-    }
+    PrintTarget(target);
     Console.WriteLine($"Min Events: {minEvents}");
     Console.WriteLine($"Force Rebuild: {forceRebuild}");
 
     if (!TryReportCacheUsage(cacheOptions, out var cachePath))
     {
-        return;
+        return 1;
     }
     Console.WriteLine();
 
-    var services = BuildServices(connectionString, databaseType, cosmosDatabaseName, cachePath: cachePath);
+    var services = BuildServices(target, cachePath: cachePath);
     var builder = services.GetRequiredService<MultiProjectionStateBuilder>();
 
     var options = new MultiProjectionBuildOptions
@@ -848,30 +879,42 @@ static async Task BuildProjectionStatesAsync(
         Console.WriteLine($"Building projector: {projectorName}");
         var result = await builder.BuildProjectorAsync(projectorName, options);
         PrintBuildResult(result, verbose);
-    }
-    else
-    {
-        Console.WriteLine("Building all projectors...");
-        var buildResult = await builder.BuildAllAsync(options);
-        var results = buildResult.Results;
-        Console.WriteLine($"\nResults: {results.Count} projector(s) processed");
-        Console.WriteLine(new string('-', 80));
-
-        foreach (var result in results)
+        if (result.Status == BuildStatus.Failed)
         {
-            PrintBuildResult(result, verbose);
+            throw new CliException($"Build failed for {result.ProjectorName}: {result.Reason}");
         }
-
-        var succeeded = results.Count(r => r.Status == BuildStatus.Success);
-        var skipped = results.Count(r => r.Status == BuildStatus.Skipped);
-        var failed = results.Count(r => r.Status == BuildStatus.Failed);
-
-        Console.WriteLine(new string('=', 80));
-        Console.WriteLine($"Summary: {succeeded} succeeded, {skipped} skipped, {failed} failed");
+        return 0;
     }
+
+    Console.WriteLine("Building all projectors...");
+    var buildResult = await builder.BuildAllAsync(options);
+    var results = buildResult.Results;
+    Console.WriteLine($"\nResults: {results.Count} projector(s) processed");
+    Console.WriteLine(new string('-', 80));
+
+    foreach (var result in results)
+    {
+        PrintBuildResult(result, verbose);
+    }
+
+    var succeeded = results.Count(r => r.Status == BuildStatus.Success);
+    var skipped = results.Count(r => r.Status == BuildStatus.Skipped);
+    var failed = results.Count(r => r.Status == BuildStatus.Failed);
+
+    Console.WriteLine(new string('=', 80));
+    Console.WriteLine($"Summary: {succeeded} succeeded, {skipped} skipped, {failed} failed");
+
+    if (failed > 0)
+    {
+        var reasons = results
+            .Where(r => r.Status == BuildStatus.Failed)
+            .Select(r => $"  {r.ProjectorName}: {r.Reason}");
+        throw new CliException($"{failed} projector build(s) failed:\n{string.Join("\n", reasons)}");
+    }
+    return 0;
 }
 
-static async Task ListProjectorsAsync()
+static Task<int> ListProjectorsAsync()
 {
     Console.WriteLine("=== Registered Projectors ===\n");
 
@@ -886,53 +929,32 @@ static async Task ListProjectorsAsync()
         Console.WriteLine($"  - {name} (version: {version})");
     }
 
-    await Task.CompletedTask;
+    return Task.FromResult(0);
 }
 
-static async Task ShowStatusAsync(string connectionString, string databaseType, string cosmosDatabaseName, CacheOptions cacheOptions)
+static async Task<int> ShowStatusAsync(ConnectionTarget target, CacheOptions cacheOptions)
 {
     Console.WriteLine("=== Projection State Status ===\n");
-    Console.WriteLine($"Database: {databaseType}");
-    if (databaseType.ToLowerInvariant() == "cosmos")
-    {
-        Console.WriteLine($"Cosmos Database: {cosmosDatabaseName}");
-    }
+    PrintTarget(target);
     Console.WriteLine();
 
     if (!TryReportCacheUsage(cacheOptions, out var cachePath))
     {
-        return;
+        return 1;
     }
     Console.WriteLine();
 
-    var services = BuildServices(connectionString, databaseType, cosmosDatabaseName, cachePath: cachePath);
+    var services = BuildServices(target, cachePath: cachePath);
     var stateStore = services.GetRequiredService<IMultiProjectionStateStore>();
     var eventStore = services.GetRequiredService<IEventStore>();
     var domainTypes = services.GetRequiredService<DcbDomainTypes>();
 
-    // Get total event count
-    long totalEvents;
-    try
-    {
-        totalEvents = await eventStore.GetEventCountAsync();
-    }
-    catch (Exception)
-    {
-        totalEvents = 0;
-    }
+    // Get total event count (a connection failure is an error, not "0 events")
+    var totalEvents = await eventStore.GetEventCountAsync();
     Console.WriteLine($"Total Events in Store: {totalEvents:N0}\n");
 
     // List all states
-    IReadOnlyList<ProjectorStateInfo> states;
-    try
-    {
-        states = await stateStore.ListAllAsync();
-    }
-    catch (Exception ex)
-    {
-        Console.WriteLine($"Error listing states: {ex.Message}");
-        return;
-    }
+    var states = await stateStore.ListAllAsync();
     if (states.Count == 0)
     {
         Console.WriteLine("No projection states found.\n");
@@ -963,6 +985,7 @@ static async Task ShowStatusAsync(string connectionString, string databaseType, 
             Console.WriteLine($"  - {name} (version: {version})");
         }
     }
+    return 0;
 }
 
 static void PrintBuildResult(ProjectorBuildResult result, bool verbose)
@@ -1028,30 +1051,20 @@ static async Task<byte[]?> TryReadStateDataAsync(IMultiProjectionStateStore stat
     return ms.ToArray();
 }
 
-static async Task SaveStateJsonAsync(string connectionString, string databaseType, string cosmosDatabaseName, string? projectorName, string outputDir)
+static async Task<int> SaveStateJsonAsync(ConnectionTarget target, string? projectorName, string outputDir)
 {
+    EnsureProjectorExists(DomainType.GetDomainTypes(), projectorName);
+
     Console.WriteLine("=== Save Projection State JSON ===\n");
-    Console.WriteLine($"Database: {databaseType}");
+    PrintTarget(target);
     Console.WriteLine($"Output Directory: {outputDir}");
     Console.WriteLine();
 
-    var services = BuildServices(connectionString, databaseType, cosmosDatabaseName);
+    var services = BuildServices(target);
     var stateStore = services.GetRequiredService<IMultiProjectionStateStore>();
 
-    // Create output directory
-    Directory.CreateDirectory(outputDir);
-
     // Get list of states (summary info)
-    IReadOnlyList<ProjectorStateInfo> stateInfos;
-    try
-    {
-        stateInfos = await stateStore.ListAllAsync();
-    }
-    catch (Exception ex)
-    {
-        Console.WriteLine($"Error listing states: {ex.Message}");
-        return;
-    }
+    IReadOnlyList<ProjectorStateInfo> stateInfos = await stateStore.ListAllAsync();
     if (!string.IsNullOrEmpty(projectorName))
     {
         stateInfos = stateInfos.Where(s => s.ProjectorName == projectorName).ToList();
@@ -1060,11 +1073,15 @@ static async Task SaveStateJsonAsync(string connectionString, string databaseTyp
     if (stateInfos.Count == 0)
     {
         Console.WriteLine("No projection states found.");
-        return;
+        return 0;
     }
+
+    // Create output directory
+    Directory.CreateDirectory(outputDir);
 
     var timestamp = DateTime.UtcNow.ToString("yyyyMMddHHmmss");
     var savedCount = 0;
+    var failedCount = 0;
 
     foreach (var info in stateInfos)
     {
@@ -1076,19 +1093,25 @@ static async Task SaveStateJsonAsync(string connectionString, string databaseTyp
         {
             state = await stateStore.GetLatestForVersionAsync(info.ProjectorName, info.ProjectorVersion);
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            state = null;
+            Console.Error.WriteLine($"  Error: Could not fetch full record for {info.ProjectorName} (v{info.ProjectorVersion}): {ex.Message}");
+            failedCount++;
+            continue;
         }
 
         if (state is null)
         {
-            Console.WriteLine($"  Error: Could not fetch full record");
+            Console.Error.WriteLine($"  Error: Could not fetch full record for {info.ProjectorName} (v{info.ProjectorVersion})");
+            failedCount++;
             continue;
         }
 
+        // One file set per projector version: <projector>_v<version>_<timestamp>_*.json
+        var fileBaseName = $"{ToSafeFileNamePart(state.ProjectorName)}_v{ToSafeFileNamePart(state.ProjectorVersion)}_{timestamp}";
+
         // Save metadata
-        var metadataFileName = $"{state.ProjectorName}_{timestamp}_metadata.json";
+        var metadataFileName = $"{fileBaseName}_metadata.json";
         var metadataPath = Path.Combine(outputDir, metadataFileName);
         var metadata = new
         {
@@ -1114,7 +1137,7 @@ static async Task SaveStateJsonAsync(string connectionString, string databaseTyp
         var stateData = await TryReadStateDataAsync(stateStore, state);
         if (stateData != null)
         {
-            var stateFileName = $"{state.ProjectorName}_{timestamp}_state.json";
+            var stateFileName = $"{fileBaseName}_state.json";
             var statePath = Path.Combine(outputDir, stateFileName);
 
             try
@@ -1143,9 +1166,9 @@ static async Task SaveStateJsonAsync(string connectionString, string databaseTyp
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"  Error decompressing state: {ex.Message}");
+                Console.WriteLine($"  Could not decode state as JSON: {ex.Message}");
                 // Save raw bytes as fallback
-                var rawFileName = $"{state.ProjectorName}_{timestamp}_state.bin";
+                var rawFileName = $"{fileBaseName}_state.bin";
                 var rawPath = Path.Combine(outputDir, rawFileName);
                 await File.WriteAllBytesAsync(rawPath, stateData);
                 Console.WriteLine($"  Raw state saved: {rawFileName}");
@@ -1161,28 +1184,26 @@ static async Task SaveStateJsonAsync(string connectionString, string databaseTyp
     }
 
     Console.WriteLine($"Saved {savedCount} projection state(s) to {outputDir}");
+    if (failedCount > 0)
+    {
+        throw new CliException($"{failedCount} projection state(s) could not be saved.");
+    }
+    return 0;
 }
 
-static async Task DeleteStateAsync(string connectionString, string databaseType, string cosmosDatabaseName, string? projectorName)
+static async Task<int> DeleteStateAsync(ConnectionTarget target, string? projectorName, bool assumeYes)
 {
+    EnsureProjectorExists(DomainType.GetDomainTypes(), projectorName);
+
     Console.WriteLine("=== Delete Projection States ===\n");
-    Console.WriteLine($"Database: {databaseType}");
+    PrintTarget(target);
     Console.WriteLine();
 
-    var services = BuildServices(connectionString, databaseType, cosmosDatabaseName);
+    var services = BuildServices(target);
     var stateStore = services.GetRequiredService<IMultiProjectionStateStore>();
 
     // Get states to delete
-    IReadOnlyList<ProjectorStateInfo> states;
-    try
-    {
-        states = await stateStore.ListAllAsync();
-    }
-    catch (Exception ex)
-    {
-        Console.WriteLine($"Error listing states: {ex.Message}");
-        return;
-    }
+    IReadOnlyList<ProjectorStateInfo> states = await stateStore.ListAllAsync();
     if (!string.IsNullOrEmpty(projectorName))
     {
         states = states.Where(s => s.ProjectorName == projectorName).ToList();
@@ -1191,7 +1212,7 @@ static async Task DeleteStateAsync(string connectionString, string databaseType,
     if (states.Count == 0)
     {
         Console.WriteLine("No projection states found to delete.");
-        return;
+        return 0;
     }
 
     Console.WriteLine($"Found {states.Count} state(s) to delete:");
@@ -1201,12 +1222,10 @@ static async Task DeleteStateAsync(string connectionString, string databaseType,
     }
     Console.WriteLine();
 
-    Console.Write("Are you sure you want to delete these states? (y/N): ");
-    var response = Console.ReadLine();
-    if (response?.ToLowerInvariant() != "y")
+    if (!Confirm("Are you sure you want to delete these states? (y/N): ", assumeYes))
     {
         Console.WriteLine("Cancelled.");
-        return;
+        return 0;
     }
 
     var deleted = 0;
@@ -1220,33 +1239,36 @@ static async Task DeleteStateAsync(string connectionString, string databaseType,
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"  Failed to delete {state.ProjectorName}: {ex.Message}");
+            Console.Error.WriteLine($"  Failed to delete {state.ProjectorName} (v{state.ProjectorVersion}): {ex.Message}");
         }
     }
 
     Console.WriteLine();
     Console.WriteLine($"Deleted {deleted} of {states.Count} state(s)");
+    if (deleted < states.Count)
+    {
+        throw new CliException($"{states.Count - deleted} state(s) could not be deleted.");
+    }
+    return 0;
 }
 
-static async Task FetchTagEventsAsync(
-    string connectionString,
-    string databaseType,
-    string cosmosDatabaseName,
+static async Task<int> FetchTagEventsAsync(
+    ConnectionTarget target,
     string tagString,
     string outputDir,
     CacheOptions cacheOptions)
 {
     Console.WriteLine("=== Fetch Tag Events ===\n");
-    Console.WriteLine($"Database: {databaseType}");
+    PrintTarget(target);
     Console.WriteLine($"Tag: {tagString}");
     Console.WriteLine($"Output Directory: {outputDir}");
     if (!TryReportCacheUsage(cacheOptions, out var cachePath))
     {
-        return;
+        return 1;
     }
     Console.WriteLine();
 
-    var services = BuildServices(connectionString, databaseType, cosmosDatabaseName, cachePath: cachePath);
+    var services = BuildServices(target, cachePath: cachePath);
     var eventStore = services.GetRequiredService<IEventStore>();
     var domainTypes = services.GetRequiredService<DcbDomainTypes>();
 
@@ -1257,22 +1279,13 @@ static async Task FetchTagEventsAsync(
 
     // Fetch events for the tag
     Console.WriteLine("Fetching events...");
-    List<Sekiban.Dcb.Events.Event> events;
-    try
-    {
-        events = (await eventStore.ReadEventsByTagAsync(tag, domainTypes.EventTypes)).ToList();
-    }
-    catch (Exception ex)
-    {
-        Console.WriteLine($"Error fetching events: {ex.Message}");
-        return;
-    }
+    var events = (await eventStore.ReadEventsByTagAsync(tag, domainTypes.EventTypes)).ToList();
     Console.WriteLine($"Found {events.Count} event(s)\n");
 
     if (events.Count == 0)
     {
         Console.WriteLine("No events to save.");
-        return;
+        return 0;
     }
 
     // Create output directory
@@ -1303,7 +1316,7 @@ static async Task FetchTagEventsAsync(
 
     // Save to file
     var timestamp = DateTime.UtcNow.ToString("yyyyMMddHHmmss");
-    var safeTagName = tagString.Replace(":", "_").Replace("/", "_");
+    var safeTagName = ToSafeFileNamePart(tagString);
     var fileName = $"tag_events_{safeTagName}_{timestamp}.json";
     var filePath = Path.Combine(outputDir, fileName);
 
@@ -1335,33 +1348,23 @@ static async Task FetchTagEventsAsync(
     {
         Console.WriteLine($"... and {events.Count - 20} more events");
     }
+    return 0;
 }
 
-static async Task ShowProjectionAsync(string connectionString, string databaseType, string cosmosDatabaseName, string? projectorName)
+static async Task<int> ShowProjectionAsync(ConnectionTarget target, string? projectorName)
 {
+    var domainTypes = DomainType.GetDomainTypes();
+    EnsureProjectorExists(domainTypes, projectorName);
+
     Console.WriteLine("=== Projection State ===\n");
-    Console.WriteLine($"Database: {databaseType}");
-    if (databaseType.ToLowerInvariant() == "cosmos")
-    {
-        Console.WriteLine($"Cosmos Database: {cosmosDatabaseName}");
-    }
+    PrintTarget(target);
     Console.WriteLine();
 
-    var services = BuildServices(connectionString, databaseType, cosmosDatabaseName);
+    var services = BuildServices(target);
     var stateStore = services.GetRequiredService<IMultiProjectionStateStore>();
-    var domainTypes = services.GetRequiredService<DcbDomainTypes>();
 
     // Get list of states
-    IReadOnlyList<ProjectorStateInfo> stateInfos;
-    try
-    {
-        stateInfos = await stateStore.ListAllAsync();
-    }
-    catch (Exception ex)
-    {
-        Console.WriteLine($"Error listing states: {ex.Message}");
-        return;
-    }
+    IReadOnlyList<ProjectorStateInfo> stateInfos = await stateStore.ListAllAsync();
     if (!string.IsNullOrEmpty(projectorName))
     {
         stateInfos = stateInfos.Where(s => s.ProjectorName == projectorName).ToList();
@@ -1381,7 +1384,7 @@ static async Task ShowProjectionAsync(string connectionString, string databaseTy
                 Console.WriteLine($"  - {name}");
             }
         }
-        return;
+        return 0;
     }
 
     foreach (var info in stateInfos)
@@ -1394,16 +1397,7 @@ static async Task ShowProjectionAsync(string connectionString, string databaseTy
         Console.WriteLine();
 
         // Fetch the full record to show state details
-        MultiProjectionStateRecord? state;
-        try
-        {
-            state = await stateStore.GetLatestForVersionAsync(info.ProjectorName, info.ProjectorVersion);
-        }
-        catch (Exception)
-        {
-            state = null;
-        }
-
+        var state = await stateStore.GetLatestForVersionAsync(info.ProjectorName, info.ProjectorVersion);
         if (state is null)
         {
             Console.WriteLine("  Could not fetch full state record.");
@@ -1483,82 +1477,60 @@ static async Task ShowProjectionAsync(string connectionString, string databaseTy
 
         Console.WriteLine();
     }
+    return 0;
 }
 
-static async Task ShowTagStateAsync(
-    string connectionString,
-    string databaseType,
-    string cosmosDatabaseName,
+static async Task<int> ShowTagStateAsync(
+    ConnectionTarget target,
     string tagString,
     string? projectorName,
     CacheOptions cacheOptions)
 {
-    Console.WriteLine("=== Tag State Projection ===\n");
-    Console.WriteLine($"Database: {databaseType}");
-    Console.WriteLine($"Tag: {tagString}");
-    if (!TryReportCacheUsage(cacheOptions, out var cachePath))
-    {
-        return;
-    }
-    Console.WriteLine();
+    var domainTypes = DomainType.GetDomainTypes();
+    var tagProjectorNames = domainTypes.TagProjectorTypes.GetAllProjectorNames();
 
-    var services = BuildServices(connectionString, databaseType, cosmosDatabaseName, cachePath: cachePath);
-    var tagStateService = services.GetRequiredService<TagStateService>();
-    var domainTypes = services.GetRequiredService<DcbDomainTypes>();
-
-    // Auto-detect projector name from tag group if not specified
+    // Resolve the tag projector before connecting: unknown names are argument errors.
     var resolvedProjectorName = projectorName;
+    var autoDetected = false;
     if (string.IsNullOrEmpty(resolvedProjectorName))
     {
         // Extract tag group from tag string (e.g., "UserMonthlyReservation:xxx" -> "UserMonthlyReservation")
         var tagGroup = tagString.Contains(':') ? tagString.Split(':')[0] : tagString;
         resolvedProjectorName = domainTypes.TagProjectorTypes.TryGetProjectorForTagGroup(tagGroup);
-
-        if (resolvedProjectorName != null)
+        if (resolvedProjectorName == null)
         {
-            Console.WriteLine($"Projector: {resolvedProjectorName} (auto-detected from tag group '{tagGroup}')");
+            throw new CliException(
+                $"Could not auto-detect a tag projector from tag group '{tagGroup}'. Use --projector (-p).\n" +
+                $"Available tag projectors: {string.Join(", ", tagProjectorNames)}\n" +
+                $"Available tag groups: {string.Join(", ", domainTypes.TagTypes.GetAllTagGroupNames())}");
         }
-        else
-        {
-            Console.WriteLine($"Projector: (not specified, could not auto-detect from '{tagGroup}')");
-            Console.WriteLine("\nAvailable Tag Projectors:");
-            foreach (var name in tagStateService.GetAllTagProjectorNames())
-            {
-                Console.WriteLine($"  - {name}");
-            }
-            Console.WriteLine("\nAvailable Tag Groups:");
-            foreach (var name in tagStateService.GetAllTagGroupNames())
-            {
-                Console.WriteLine($"  - {name}");
-            }
-            return;
-        }
+        autoDetected = true;
     }
-    else
+    else if (!tagProjectorNames.Contains(resolvedProjectorName))
     {
-        Console.WriteLine($"Projector: {resolvedProjectorName}");
+        throw new CliException(
+            $"Unknown tag projector '{resolvedProjectorName}'.\n" +
+            $"Available tag projectors: {string.Join(", ", tagProjectorNames)}");
+    }
+
+    Console.WriteLine("=== Tag State Projection ===\n");
+    PrintTarget(target);
+    Console.WriteLine($"Tag: {tagString}");
+    Console.WriteLine(autoDetected
+        ? $"Projector: {resolvedProjectorName} (auto-detected from the tag group)"
+        : $"Projector: {resolvedProjectorName}");
+    if (!TryReportCacheUsage(cacheOptions, out var cachePath))
+    {
+        return 1;
     }
     Console.WriteLine();
 
+    var services = BuildServices(target, cachePath: cachePath);
+    var tagStateService = services.GetRequiredService<TagStateService>();
+
     // Project the tag state
     Console.WriteLine("Projecting events...\n");
-    TagStateProjectionResult projectionResult;
-    try
-    {
-        projectionResult = await tagStateService.ProjectTagStateAsync(tagString, resolvedProjectorName);
-    }
-    catch (Exception ex)
-    {
-        Console.WriteLine($"Error: {ex.Message}");
-
-        // Show available projectors
-        Console.WriteLine("\nAvailable Tag Projectors:");
-        foreach (var name in tagStateService.GetAllTagProjectorNames())
-        {
-            Console.WriteLine($"  - {name}");
-        }
-        return;
-    }
+    var projectionResult = await tagStateService.ProjectTagStateAsync(tagString, resolvedProjectorName);
 
     Console.WriteLine($"Tag: {projectionResult.Tag}");
     Console.WriteLine($"Projector: {projectionResult.ProjectorName} (v{projectionResult.ProjectorVersion})");
@@ -1580,24 +1552,30 @@ static async Task ShowTagStateAsync(
     };
     var stateJson = System.Text.Json.JsonSerializer.Serialize(projectionResult.State, stateType, jsonOptions);
     Console.WriteLine(stateJson);
+    return 0;
 }
 
 static ServiceProvider BuildServices(
-    string connectionString,
-    string databaseType,
-    string cosmosDatabaseName,
+    ConnectionTarget target,
     bool enableProgressReporting = true,
     string? cachePath = null)
 {
     var services = new ServiceCollection();
+    var connectionString = target.ConnectionString;
 
     // Register domain types
     var domainTypes = DomainType.GetDomainTypes();
     services.AddSingleton(domainTypes);
+    services.AddSingleton(CreateServiceIdProvider());
 
     var useCache = !string.IsNullOrWhiteSpace(cachePath);
+    if (useCache)
+    {
+        services.AddSingleton<IEventStore>(sp =>
+            new SqliteEventStore(cachePath!, sp.GetRequiredService<DcbDomainTypes>().EventTypes, serviceIdProvider: sp.GetRequiredService<IServiceIdProvider>()));
+    }
 
-    if (databaseType.ToLowerInvariant() == "cosmos")
+    if (target.DatabaseType == "cosmos")
     {
         // Use default optimized options (Direct mode, large page size, parallel deserialization)
         var cosmosOptions = new CosmosDbEventStoreOptions();
@@ -1619,21 +1597,27 @@ static ServiceProvider BuildServices(
         }
 
         // Register Cosmos DB services with options
-        var cosmosContext = new CosmosDbContext(connectionString, cosmosDatabaseName, options: cosmosOptions);
+        var cosmosContext = new CosmosDbContext(connectionString, target.CosmosDatabaseName, options: cosmosOptions);
         services.AddSingleton(cosmosOptions);
 
         services.AddSingleton<ICosmosContainerResolver, DefaultCosmosContainerResolver>();
         services.AddSingleton(cosmosContext);
-        if (useCache)
-        {
-            services.AddSingleton<IEventStore>(sp =>
-                new SqliteEventStore(cachePath!, sp.GetRequiredService<DcbDomainTypes>().EventTypes, serviceIdProvider: sp.GetRequiredService<IServiceIdProvider>()));
-        }
-        else
+        if (!useCache)
         {
             services.AddSingleton<IEventStore, CosmosDbEventStore>();
         }
         services.AddSingleton<IMultiProjectionStateStore, CosmosMultiProjectionStateStore>();
+    }
+    else if (target.DatabaseType == "sqlite")
+    {
+        // SQLite event store written by the ApiService (Sekiban:Database=sqlite); connectionString is the file path
+        if (!useCache)
+        {
+            services.AddSingleton<IEventStore>(sp =>
+                new SqliteEventStore(connectionString, sp.GetRequiredService<DcbDomainTypes>().EventTypes, serviceIdProvider: sp.GetRequiredService<IServiceIdProvider>()));
+        }
+        services.AddSingleton<IMultiProjectionStateStore>(sp =>
+            new SqliteMultiProjectionStateStore(connectionString, serviceIdProvider: sp.GetRequiredService<IServiceIdProvider>()));
     }
     else
     {
@@ -1644,13 +1628,7 @@ static ServiceProvider BuildServices(
         });
 
         // Register event store
-
-        if (useCache)
-        {
-            services.AddSingleton<IEventStore>(sp =>
-                new SqliteEventStore(cachePath!, sp.GetRequiredService<DcbDomainTypes>().EventTypes, serviceIdProvider: sp.GetRequiredService<IServiceIdProvider>()));
-        }
-        else
+        if (!useCache)
         {
             services.AddSingleton<IEventStore, PostgresEventStore>();
         }
@@ -1673,21 +1651,17 @@ static ServiceProvider BuildServices(
     services.AddSingleton<TagStateService>();
     services.AddSingleton<TagListService>();
 
-    services.RemoveAll<IServiceIdProvider>();
-    services.AddSingleton<IServiceIdProvider>(new FixedServiceIdProvider(GetServiceId()));
     return services.BuildServiceProvider();
 }
 
-static async Task ListTagsAsync(
-    string connectionString,
-    string databaseType,
-    string cosmosDatabaseName,
+static async Task<int> ListTagsAsync(
+    ConnectionTarget target,
     string? tagGroup,
     string outputDir,
     CacheOptions cacheOptions)
 {
     Console.WriteLine("=== Tag List ===\n");
-    Console.WriteLine($"Database: {databaseType}");
+    PrintTarget(target);
     if (!string.IsNullOrEmpty(tagGroup))
     {
         Console.WriteLine($"Filter: {tagGroup}");
@@ -1695,30 +1669,22 @@ static async Task ListTagsAsync(
     Console.WriteLine($"Output Directory: {outputDir}");
     if (!TryReportCacheUsage(cacheOptions, out var cachePath))
     {
-        return;
+        return 1;
     }
     Console.WriteLine();
 
-    var services = BuildServices(connectionString, databaseType, cosmosDatabaseName, cachePath: cachePath);
+    var services = BuildServices(target, cachePath: cachePath);
     var tagListService = services.GetRequiredService<TagListService>();
 
     // Export tag list
+    Directory.CreateDirectory(outputDir);
     var timestamp = DateTime.UtcNow.ToString("yyyyMMddHHmmss");
     var fileName = string.IsNullOrEmpty(tagGroup)
         ? $"tag_list_{timestamp}.json"
-        : $"tag_list_{tagGroup}_{timestamp}.json";
+        : $"tag_list_{ToSafeFileNamePart(tagGroup)}_{timestamp}.json";
     var filePath = Path.Combine(outputDir, fileName);
 
-    TagListExportResult exportResult;
-    try
-    {
-        exportResult = await tagListService.ExportTagListAsync(filePath, tagGroup);
-    }
-    catch (Exception ex)
-    {
-        Console.WriteLine($"Error: {ex.Message}");
-        return;
-    }
+    var exportResult = await tagListService.ExportTagListAsync(filePath, tagGroup);
 
     Console.WriteLine($"Total Tag Groups: {exportResult.TotalTagGroups}");
     Console.WriteLine($"Total Tags: {exportResult.TotalTags}");
@@ -1746,36 +1712,35 @@ static async Task ListTagsAsync(
     }
 
     Console.WriteLine($"Tag list saved to: {filePath}");
+    return 0;
 }
 
-static async Task SyncCacheAsync(string connectionString, string databaseType, string cosmosDatabaseName, string cacheDir, int safeWindowMinutes, bool verbose)
+static async Task<int> SyncCacheAsync(ConnectionTarget target, string cacheDir, int safeWindowMinutes, bool verbose)
 {
     Console.WriteLine("=== Cache Sync ===\n");
-    Console.WriteLine($"Remote Database: {databaseType}");
+    PrintTarget(target);
     Console.WriteLine($"Cache Directory: {cacheDir}");
     Console.WriteLine($"Safe Window: {safeWindowMinutes} minutes");
     Console.WriteLine();
 
-    // Create cache directory
-    Directory.CreateDirectory(cacheDir);
-    var cachePath = Path.Combine(cacheDir, Uri.EscapeDataString(GetServiceId()), "events.db");
-
+    // One cache per connection: <cache-dir>/<service id>/<database type>-<connection hash>/events.db
+    var cachePath = GetCachePath(cacheDir, target);
     Directory.CreateDirectory(Path.GetDirectoryName(cachePath)!);
 
     // Build remote services
-    var services = BuildServices(connectionString, databaseType, cosmosDatabaseName);
+    var services = BuildServices(target);
     var remoteStore = services.GetRequiredService<IEventStore>();
     var domainTypes = services.GetRequiredService<DcbDomainTypes>();
 
     // Create local SQLite cache
-    var localStore = new SqliteEventStore(cachePath, domainTypes.EventTypes, serviceIdProvider: new FixedServiceIdProvider(GetServiceId()));
+    var localStore = new SqliteEventStore(cachePath, domainTypes.EventTypes, serviceIdProvider: CreateServiceIdProvider());
 
-    // Create cache sync helper
+    // Cache metadata records a redacted description of the source (no passwords or keys)
     var syncOptions = new CacheSyncOptions
     {
         SafeWindow = TimeSpan.FromMinutes(safeWindowMinutes),
-        RemoteEndpoint = connectionString.Length > 50 ? connectionString[..50] + "..." : connectionString,
-        DatabaseName = databaseType.ToLowerInvariant() == "cosmos" ? cosmosDatabaseName : "postgres"
+        RemoteEndpoint = DescribeConnection(target),
+        DatabaseName = target.DatabaseType == "cosmos" ? target.CosmosDatabaseName : target.DatabaseType
     };
     var cacheSync = SekibanDcbSqliteExtensions.CreateCacheSync(localStore, remoteStore, syncOptions);
 
@@ -1785,8 +1750,7 @@ static async Task SyncCacheAsync(string connectionString, string databaseType, s
     var result = await cacheSync.SyncAsync();
     if (!result.IsSuccess)
     {
-        Console.WriteLine($"Error: {result.ErrorMessage}");
-        return;
+        throw new CliException($"Cache sync failed: {result.ErrorMessage}");
     }
 
     Console.WriteLine($"Sync completed:");
@@ -1795,127 +1759,133 @@ static async Task SyncCacheAsync(string connectionString, string databaseType, s
     Console.WriteLine($"  Total events in cache: {result.TotalEventsInCache:N0}");
     Console.WriteLine($"  Duration: {result.Duration.TotalSeconds:F2}s");
     Console.WriteLine($"\nCache file: {cachePath}");
+    return 0;
 }
 
-static async Task ShowCacheStatsAsync(string cacheDir)
+static List<string> FindCacheFiles(string cacheDir)
+{
+    var cacheRoot = GetCacheRoot(cacheDir);
+    return Directory.Exists(cacheRoot)
+        ? Directory.GetFiles(cacheRoot, "events.db", SearchOption.AllDirectories).OrderBy(p => p, StringComparer.Ordinal).ToList()
+        : [];
+}
+
+static async Task<int> ShowCacheStatsAsync(string cacheDir)
 {
     Console.WriteLine("=== Cache Statistics ===\n");
     Console.WriteLine($"Cache Directory: {cacheDir}");
     Console.WriteLine();
 
-    var cachePath = Path.Combine(cacheDir, Uri.EscapeDataString(GetServiceId()), "events.db");
-
-    if (!File.Exists(cachePath))
+    var cacheFiles = FindCacheFiles(cacheDir);
+    if (cacheFiles.Count == 0)
     {
         Console.WriteLine("No cache file found.");
-        Console.WriteLine($"Expected path: {cachePath}");
-        return;
+        Console.WriteLine($"Expected location: {GetCacheRoot(cacheDir)}/<database>-<connection hash>/events.db");
+        return 0;
     }
 
-    // Get file info
-    var fileInfo = new FileInfo(cachePath);
-    Console.WriteLine($"Cache File: {cachePath}");
-    Console.WriteLine($"File Size: {FormatBytes(fileInfo.Length)}");
-    Console.WriteLine($"Last Modified: {fileInfo.LastWriteTimeUtc:yyyy-MM-dd HH:mm:ss} UTC");
-    Console.WriteLine();
-
-    // Create a minimal SQLite store to read stats
     var domainTypes = DomainType.GetDomainTypes();
-    var localStore = new SqliteEventStore(cachePath, domainTypes.EventTypes, serviceIdProvider: new FixedServiceIdProvider(GetServiceId()));
-
-    // Get event count
-    try
+    foreach (var cachePath in cacheFiles)
     {
-        Console.WriteLine($"Total Events: {await localStore.GetEventCountAsync():N0}");
-    }
-    catch (Exception)
-    {
-        // Count unavailable: keep showing the rest of the cache statistics.
-    }
+        // Get file info
+        var fileInfo = new FileInfo(cachePath);
+        Console.WriteLine($"Cache File: {cachePath}");
+        Console.WriteLine($"File Size: {FormatBytes(fileInfo.Length)}");
+        Console.WriteLine($"Last Modified: {fileInfo.LastWriteTimeUtc:yyyy-MM-dd HH:mm:ss} UTC");
 
-    // Get metadata
-    var metadata = await localStore.GetMetadataAsync();
-    if (metadata != null)
-    {
-        Console.WriteLine();
-        Console.WriteLine("Cache Metadata:");
-        Console.WriteLine($"  Remote Endpoint: {metadata.RemoteEndpoint}");
-        Console.WriteLine($"  Database Name: {metadata.DatabaseName}");
-        Console.WriteLine($"  Last Sync: {metadata.UpdatedUtc:yyyy-MM-dd HH:mm:ss} UTC");
-        Console.WriteLine($"  Last SortableUniqueId: {metadata.LastCachedSortableUniqueId}");
-        Console.WriteLine($"  Schema Version: {metadata.SchemaVersion}");
-    }
+        // Create a minimal SQLite store to read stats
+        var localStore = new SqliteEventStore(cachePath, domainTypes.EventTypes, serviceIdProvider: CreateServiceIdProvider());
 
-    // Get tag summary
-    List<TagInfo>? tags;
-    try
-    {
-        tags = (await localStore.GetAllTagsAsync()).ToList();
-    }
-    catch (Exception)
-    {
-        tags = null;
-    }
-
-    if (tags is not null)
-    {
-        var tagGroups = tags.GroupBy(t => t.TagGroup).ToList();
-
-        Console.WriteLine();
-        Console.WriteLine($"Tags: {tags.Count} total across {tagGroups.Count} groups");
-
-        foreach (var group in tagGroups.Take(5))
+        // Get event count
+        try
         {
-            Console.WriteLine($"  {group.Key}: {group.Count()} tags");
+            Console.WriteLine($"Total Events: {await localStore.GetEventCountAsync():N0}");
+        }
+        catch (Exception)
+        {
+            // Count unavailable: keep showing the rest of the cache statistics.
         }
 
-        if (tagGroups.Count > 5)
+        // Get metadata
+        var metadata = await localStore.GetMetadataAsync();
+        if (metadata != null)
         {
-            Console.WriteLine($"  ... and {tagGroups.Count - 5} more groups");
+            Console.WriteLine("Cache Metadata:");
+            Console.WriteLine($"  Source: {metadata.RemoteEndpoint}");
+            Console.WriteLine($"  Database Name: {metadata.DatabaseName}");
+            Console.WriteLine($"  Last Sync: {metadata.UpdatedUtc:yyyy-MM-dd HH:mm:ss} UTC");
+            Console.WriteLine($"  Last SortableUniqueId: {metadata.LastCachedSortableUniqueId}");
+            Console.WriteLine($"  Schema Version: {metadata.SchemaVersion}");
         }
+
+        // Get tag summary
+        List<TagInfo>? tags;
+        try
+        {
+            tags = (await localStore.GetAllTagsAsync()).ToList();
+        }
+        catch (Exception)
+        {
+            tags = null;
+        }
+
+        if (tags is not null)
+        {
+            var tagGroups = tags.GroupBy(t => t.TagGroup).ToList();
+
+            Console.WriteLine($"Tags: {tags.Count} total across {tagGroups.Count} groups");
+
+            foreach (var group in tagGroups.Take(5))
+            {
+                Console.WriteLine($"  {group.Key}: {group.Count()} tags");
+            }
+
+            if (tagGroups.Count > 5)
+            {
+                Console.WriteLine($"  ... and {tagGroups.Count - 5} more groups");
+            }
+        }
+        Console.WriteLine();
     }
+    return 0;
 }
 
-static async Task ClearCacheAsync(string cacheDir)
+static Task<int> ClearCacheAsync(string cacheDir, bool assumeYes)
 {
     Console.WriteLine("=== Clear Cache ===\n");
     Console.WriteLine($"Cache Directory: {cacheDir}");
     Console.WriteLine();
 
-    var cachePath = Path.Combine(cacheDir, Uri.EscapeDataString(GetServiceId()), "events.db");
-
-    if (!File.Exists(cachePath))
+    var cacheFiles = FindCacheFiles(cacheDir);
+    if (cacheFiles.Count == 0)
     {
         Console.WriteLine("No cache file found. Nothing to clear.");
-        return;
+        return Task.FromResult(0);
     }
 
-    // Get file info before deletion
-    var fileInfo = new FileInfo(cachePath);
-    var fileSize = fileInfo.Length;
-
-    Console.WriteLine($"Cache file: {cachePath}");
-    Console.WriteLine($"File size: {FormatBytes(fileSize)}");
+    foreach (var cachePath in cacheFiles)
+    {
+        Console.WriteLine($"Cache file: {cachePath} ({FormatBytes(new FileInfo(cachePath).Length)})");
+    }
     Console.WriteLine();
 
-    Console.Write("Are you sure you want to delete this cache? (y/N): ");
-    var response = Console.ReadLine();
-    if (response?.ToLowerInvariant() != "y")
+    if (!Confirm($"Are you sure you want to delete {cacheFiles.Count} cache file(s)? (y/N): ", assumeYes))
     {
         Console.WriteLine("Cancelled.");
-        return;
+        return Task.FromResult(0);
     }
 
-    // Delete the cache file and WAL/SHM files
-    try
+    // Delete the cache files and their WAL/SHM files
+    foreach (var cachePath in cacheFiles)
     {
         DeleteCacheFiles(cachePath);
-        Console.WriteLine("\nCache cleared successfully.");
     }
-    catch (Exception ex)
-    {
-        Console.WriteLine($"\nError deleting cache: {ex.Message}");
-    }
-
-    await Task.CompletedTask;
+    Console.WriteLine("\nCache cleared successfully.");
+    return Task.FromResult(0);
 }
+
+// The resolved store a command talks to. For sqlite, ConnectionString is the database file path.
+readonly record struct ConnectionTarget(string DatabaseType, string ConnectionString, string CosmosDatabaseName);
+
+// Expected command failure: the message is printed to stderr and the CLI exits with code 1.
+sealed class CliException(string message) : Exception(message);

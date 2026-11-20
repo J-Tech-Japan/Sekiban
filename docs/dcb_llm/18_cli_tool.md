@@ -292,7 +292,12 @@ Delete projection states:
 
 ```bash
 dotnet run -- delete --profile dev --projector MyProjector
+
+# Non-interactive (scripts / CI): skip the prompt
+dotnet run -- delete --profile dev --projector MyProjector --yes
 ```
+
+Without `--yes` (`-y`) and with a non-interactive stdin, the command fails with exit code 1 instead of waiting for input.
 
 ### tag-events
 
@@ -391,7 +396,10 @@ Clear the local cache:
 
 ```bash
 dotnet run -- cache-clear --cache-dir ./cache
+dotnet run -- cache-clear --cache-dir ./cache --yes
 ```
+
+Caches are stored per connection (`<cache-dir>/<service id>/<database>-<hash>/events.db`; the hash excludes passwords and keys), so a cache synced from one database is never read for another. `cache-stats` and `cache-clear` cover every cache under the directory.
 
 ## Building Services
 
@@ -446,8 +454,8 @@ dotnet run --framework net9.0 -- build --profile dev -f -v
 # Sync to local cache
 dotnet run --framework net9.0 -- cache-sync --profile prod
 
-# Work offline with local cache
-dotnet run --framework net9.0 -- tag-list -d sqlite -c "./cache/events.db"
+# Read the SQLite event store of a local ApiService (Sekiban:Database=sqlite)
+dotnet run --framework net9.0 -- tag-list -d sqlite --sqlite-path "../MyApp.ApiService/events.db"
 ```
 
 ## Reference Implementation

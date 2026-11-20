@@ -292,7 +292,12 @@ dotnet run -- save --profile dev --projector MyProjector --output-dir ./output
 
 ```bash
 dotnet run -- delete --profile dev --projector MyProjector
+
+# 非対話（スクリプト / CI）: 確認プロンプトを省略
+dotnet run -- delete --profile dev --projector MyProjector --yes
 ```
+
+`--yes`（`-y`）なしで stdin が対話的でない場合、入力待ちにならず終了コード 1 で失敗します。
 
 ### tag-events
 
@@ -391,7 +396,10 @@ Tags: 150 total across 5 groups
 
 ```bash
 dotnet run -- cache-clear --cache-dir ./cache
+dotnet run -- cache-clear --cache-dir ./cache --yes
 ```
+
+キャッシュは接続ごとに保存されます（`<cache-dir>/<service id>/<database>-<hash>/events.db`。ハッシュにパスワードやキーは含めません）。ある DB から同期したキャッシュが別の DB に使われることはありません。`cache-stats` と `cache-clear` はディレクトリ配下のすべてのキャッシュが対象です。
 
 ## サービスのビルド
 
@@ -446,8 +454,8 @@ dotnet run --framework net9.0 -- build --profile dev -f -v
 # ローカルキャッシュに同期
 dotnet run --framework net9.0 -- cache-sync --profile prod
 
-# ローカルキャッシュでオフライン作業
-dotnet run --framework net9.0 -- tag-list -d sqlite -c "./cache/events.db"
+# ローカル ApiService の SQLite イベントストアを読む（Sekiban:Database=sqlite）
+dotnet run --framework net9.0 -- tag-list -d sqlite --sqlite-path "../MyApp.ApiService/events.db"
 ```
 
 ## リファレンス実装

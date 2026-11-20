@@ -6,7 +6,7 @@
         <TargetFramework>net10.0</TargetFramework>
         <Nullable>enable</Nullable>
         <ImplicitUsings>enable</ImplicitUsings>
-        <UserSecretsId>sekiban-dcb-cli</UserSecretsId>
+        <UserSecretsId>148ca97b-c22c-44b7-8b6e-36d6dbc6a310</UserSecretsId>
     </PropertyGroup>
 
     <ItemGroup>

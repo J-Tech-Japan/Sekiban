@@ -13,7 +13,7 @@
   },
   "sourceName": "SekibanDcbOrleans",
   "preferNameDirectory": true,
-  "guids": ["64845cd6-595d-452c-825b-063d4df00509"],
+  "guids": ["64845cd6-595d-452c-825b-063d4df00509", "5ef4f3d0-a98f-43cb-b8ba-2b6a6281c6e6"],
   "symbols": {
     "IncludeTests": {
       "type": "parameter",

@@ -1,7 +1,7 @@
 # SekibanDcbDecider CLI (LLM Notes)
 
 This CLI is a maintenance tool for projections, tags, and events in a Sekiban DCB database.
-It supports PostgreSQL and Cosmos DB.
+It supports PostgreSQL, Cosmos DB and SQLite (the `events.db` file the ApiService writes when it runs with `Sekiban:Database=sqlite`).
 
 ## Quick Start
 
@@ -28,6 +28,7 @@ export DATABASE_TYPE="postgres"
 export CONNECTION_STRING="Host=localhost;Database=...;Username=...;Password=..."
 export COSMOS_CONNECTION_STRING="AccountEndpoint=...;AccountKey=..."
 export COSMOS_DATABASE_NAME="SekibanDcb"
+export SQLITE_PATH="../SekibanDcbDecider.ApiService/events.db"
 export OUTPUT_DIR="./output"
 export CACHE_MODE="auto"
 export CACHE_DIR="./cache"
@@ -36,12 +37,26 @@ export SAFE_WINDOW_MINUTES="10"
 
 3) User secrets (recommended for local dev)
 
+The CLI project already declares a `UserSecretsId` that is unique to each generated application, so no `dotnet user-secrets init` is needed and secrets are not shared with other apps.
+
 ```bash
-dotnet user-secrets init
 dotnet user-secrets set "ConnectionStrings:DcbPostgres" "Host=localhost;Database=...;Username=...;Password=..."
 dotnet user-secrets set "ConnectionStrings:SekibanDcbCosmos" "AccountEndpoint=...;AccountKey=..."
 dotnet user-secrets set "Sekiban:Database" "postgres"
 dotnet user-secrets set "CosmosDb:DatabaseName" "SekibanDcb"
+dotnet user-secrets set "Sekiban:SqlitePath" "../SekibanDcbDecider.ApiService/events.db"
+```
+
+Profiles let you switch between environments with `--profile` (`-P`):
+
+```bash
+dotnet user-secrets set "Profiles:dev:Database" "postgres"
+dotnet user-secrets set "Profiles:dev:ConnectionString" "Host=localhost;Database=...;Username=...;Password=..."
+dotnet user-secrets set "Profiles:local:Database" "sqlite"
+dotnet user-secrets set "Profiles:local:SqlitePath" "../SekibanDcbDecider.ApiService/events.db"
+dotnet user-secrets set "DefaultProfile" "dev"
+dotnet run -- profiles
+dotnet run -- status -P local
 ```
 
 ## Common Commands
@@ -50,31 +65,33 @@ dotnet user-secrets set "CosmosDb:DatabaseName" "SekibanDcb"
 - `status` : Show projection state status
 - `build` : Build multi-projection state(s)
 - `save` : Save projection state JSON to files
-- `delete` : Delete projection state(s)
+- `delete` : Delete projection state(s) (asks for confirmation; `--yes` skips it)
 - `tag-events` : Export all events for a tag
 - `projection` : Show a projection state
 - `tag-state` : Project a tag state (auto or explicit projector)
 - `tag-list` : Export list of tags
-- `cache-sync` : Sync remote events to local SQLite cache
-- `cache-stats` : Show local cache statistics
-- `cache-clear` : Clear local SQLite cache
+- `cache-sync` : Sync remote events to the local SQLite cache of the selected connection
+- `cache-stats` : Show statistics of every cache under the cache directory
+- `cache-clear` : Delete every cache under the cache directory (asks for confirmation; `--yes` skips it)
 
 ## Key Options
 
-- `-d, --database` : `postgres` or `cosmos`
+- `-P, --profile` : Profile name from user secrets (`Profiles:<name>:...`)
+- `-d, --database` : `postgres`, `cosmos` or `sqlite`
 - `-c, --connection-string` : PostgreSQL connection string
 - `--cosmos-connection-string` : Cosmos DB connection string
 - `--cosmos-database` : Cosmos database name
-- `-p, --projector` : Target projector name
+- `--sqlite-path` : SQLite event store file (for `-d sqlite`)
+- `-p, --projector` : Projector name. For `build` / `save` / `delete` / `projection` it is a multi-projector (see `list`); for `tag-state` it is a tag projector and is auto-detected from the tag group when omitted
 - `-o, --output-dir` : Output directory (default `./output`)
 - `-t, --tag` : Tag in `group:content` format
-- `-P, --tag-projector` : Tag projector name
 - `-m, --min-events` : Min events before build (default from `MIN_EVENTS` or 3000)
 - `-f, --force` : Force rebuild
 - `-v, --verbose` : Verbose output
 - `--cache-mode` : `auto` | `off` | `clear` | `cache-only` (default `auto`)
 - `-C, --cache-dir` : Cache directory (default `./cache`)
 - `--safe-window` : Safe window minutes for `cache-sync`
+- `-y, --yes` : Skip the confirmation prompt of `delete` / `cache-clear` (required when stdin is not interactive)
 
 ## Examples
 
@@ -89,7 +106,7 @@ dotnet run -- status
 dotnet run -- build
 
 # Build a specific projector
-dotnet run -- build -p "ReservationProjector"
+dotnet run -- build -p "ReservationListProjection"
 
 # Export tag events
 dotnet run -- tag-events -t "Reservation:00000000-0000-0000-0000-000000000001"
@@ -98,7 +115,13 @@ dotnet run -- tag-events -t "Reservation:00000000-0000-0000-0000-000000000001"
 dotnet run -- tag-state -t "Reservation:00000000-0000-0000-0000-000000000001"
 
 # Explicit projector
-dotnet run -- tag-state -t "Reservation:00000000-0000-0000-0000-000000000001" -P "ReservationProjector"
+dotnet run -- tag-state -t "Reservation:00000000-0000-0000-0000-000000000001" -p "ReservationProjector"
+
+# Delete one projector's states without a prompt (scripts / CI)
+dotnet run -- delete -p "ReservationListProjection" --yes
+
+# Read the SQLite event store of a locally running ApiService
+dotnet run -- status -d sqlite --sqlite-path "../SekibanDcbDecider.ApiService/events.db"
 
 # Sync cache and use it for tag events
 dotnet run -- cache-sync --cache-dir ./cache --safe-window 10
@@ -107,7 +130,9 @@ dotnet run -- tag-events -t "Reservation:00000000-0000-0000-0000-000000000001" -
 
 ## Notes
 
-- Output files are written to `./output` unless overridden with `--output-dir`.
-- When `--cache-mode` is `auto`, the CLI uses `events.db` from `--cache-dir` if it exists.
-- `cache-only` requires an existing cache (run `cache-sync` first).
+- Output files are written to `./output` unless overridden with `--output-dir`. `save` writes `<projector>_v<version>_<timestamp>_metadata.json` and `_state.json` per projector version.
+- Exit code is `0` on success and `1` on failure (connection error, unknown projector or tag projector, invalid option value, failed build). Errors are written to stderr.
+- Caches are kept per connection: `<cache-dir>/<service id>/<database>-<hash>/events.db`, where the hash is computed from the connection without its password or key. A cache synced from one database is never used for another one.
+- When `--cache-mode` is `auto`, the CLI uses the cache of the selected connection if it exists, otherwise it reads the database directly.
+- `cache-only` requires an existing cache for the same connection (run `cache-sync` first).
 - Use `dotnet run -- <command> --help` to see command-specific options.
