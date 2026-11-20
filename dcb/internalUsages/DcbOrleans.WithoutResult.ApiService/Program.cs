@@ -500,7 +500,8 @@ var app = builder.Build();
 // Database tables will be created automatically by the DatabaseInitializerService
 // configured in AddSekibanDcbPostgresWithAspire, so no need to run migrations
 
-var apiRoute = app.MapGroup("/api");
+var apiRoute = app.MapGroup("/api")
+    .AddEndpointFilter<QueryParameterValidationFilter>();
 
 // Configure the HTTP request pipeline.
 app.UseExceptionHandler();
@@ -1265,7 +1266,8 @@ apiRoute
             }
         })
     .WithOpenApi()
-    .WithName("PersistProjectionState");
+    .WithName("PersistProjectionState")
+    .AddEndpointFilter<KnownProjectorFilter>();
 
 apiRoute
     .MapPost(
@@ -1277,7 +1279,8 @@ apiRoute
             return Results.Ok(new { success = true });
         })
     .WithOpenApi()
-    .WithName("DeactivateProjection");
+    .WithName("DeactivateProjection")
+    .AddEndpointFilter<KnownProjectorFilter>();
 
 apiRoute
     .MapPost(
@@ -1289,7 +1292,8 @@ apiRoute
             return Results.Ok(new { success = true });
         })
     .WithOpenApi()
-    .WithName("RefreshProjection");
+    .WithName("RefreshProjection")
+    .AddEndpointFilter<KnownProjectorFilter>();
 
 apiRoute
     .MapGet(
@@ -1309,7 +1313,8 @@ apiRoute
             return Results.Text(snapshotJson, "application/json");
         })
     .WithOpenApi()
-    .WithName("GetProjectionSnapshot");
+    .WithName("GetProjectionSnapshot")
+    .AddEndpointFilter<KnownProjectorFilter>();
 
 apiRoute
     .MapPost(
@@ -1321,7 +1326,8 @@ apiRoute
             return ok ? Results.Ok(new { success = true }) : Results.BadRequest(new { error = "No persisted state to overwrite or invalid envelope" });
         })
     .WithOpenApi()
-    .WithName("OverwriteProjectionPersistedVersion");
+    .WithName("OverwriteProjectionPersistedVersion")
+    .AddEndpointFilter<KnownProjectorFilter>();
 
 
 apiRoute

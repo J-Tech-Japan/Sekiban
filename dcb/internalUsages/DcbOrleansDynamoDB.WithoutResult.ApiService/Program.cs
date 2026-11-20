@@ -1,3 +1,4 @@
+using DcbOrleansDynamoDB.WithoutResult.ApiService;
 using Azure.Data.Tables;
 using Azure.Storage.Blobs;
 using Azure.Storage.Queues;
@@ -455,7 +456,8 @@ if (builder.Environment.IsDevelopment())
 }
 var app = builder.Build();
 
-var apiRoute = app.MapGroup("/api");
+var apiRoute = app.MapGroup("/api")
+    .AddEndpointFilter<QueryParameterValidationFilter>();
 
 app.UseExceptionHandler();
 
@@ -940,7 +942,8 @@ apiRoute
             }
         })
     .WithOpenApi()
-    .WithName("PersistProjectionState");
+    .WithName("PersistProjectionState")
+    .AddEndpointFilter<KnownProjectorFilter>();
 
 apiRoute
     .MapPost(
@@ -952,7 +955,8 @@ apiRoute
             return Results.Ok(new { success = true });
         })
     .WithOpenApi()
-    .WithName("DeactivateProjection");
+    .WithName("DeactivateProjection")
+    .AddEndpointFilter<KnownProjectorFilter>();
 
 apiRoute
     .MapPost(
@@ -964,7 +968,8 @@ apiRoute
             return Results.Ok(new { success = true });
         })
     .WithOpenApi()
-    .WithName("RefreshProjection");
+    .WithName("RefreshProjection")
+    .AddEndpointFilter<KnownProjectorFilter>();
 
 apiRoute
     .MapGet(
@@ -984,7 +989,8 @@ apiRoute
             return Results.Text(snapshotJson, "application/json");
         })
     .WithOpenApi()
-    .WithName("GetProjectionSnapshot");
+    .WithName("GetProjectionSnapshot")
+    .AddEndpointFilter<KnownProjectorFilter>();
 
 apiRoute
     .MapPost(
@@ -996,7 +1002,8 @@ apiRoute
             return ok ? Results.Ok(new { success = true }) : Results.BadRequest(new { error = "No persisted state to overwrite or invalid envelope" });
         })
     .WithOpenApi()
-    .WithName("OverwriteProjectionPersistedVersion");
+    .WithName("OverwriteProjectionPersistedVersion")
+    .AddEndpointFilter<KnownProjectorFilter>();
 
 
 apiRoute

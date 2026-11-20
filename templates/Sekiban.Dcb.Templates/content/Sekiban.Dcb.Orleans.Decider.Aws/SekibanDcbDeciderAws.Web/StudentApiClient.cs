@@ -14,10 +14,6 @@ public class StudentApiClient(HttpClient httpClient)
         public string? message { get; set; }
     }
     
-    private class ErrorResponse
-    {
-        public string? error { get; set; }
-    }
     public async Task<StudentState[]> GetStudentsAsync(
         int? pageNumber = null,
         int? pageSize = null,
@@ -83,8 +79,7 @@ public class StudentApiClient(HttpClient httpClient)
             }
             else
             {
-                var errorResult = await response.Content.ReadFromJsonAsync<ErrorResponse>(cancellationToken);
-                return new CommandResponse(false, null, null, errorResult?.error ?? "Unknown error", null);
+                return new CommandResponse(false, null, null, await ApiErrorReader.ReadAsync(response, cancellationToken), null);
             }
         }
         catch (Exception ex)

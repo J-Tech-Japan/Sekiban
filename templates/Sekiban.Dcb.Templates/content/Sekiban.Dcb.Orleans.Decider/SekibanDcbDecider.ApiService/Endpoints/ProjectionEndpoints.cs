@@ -11,7 +11,8 @@ public static class ProjectionEndpoints
     public static void MapProjectionEndpoints(this IEndpointRouteBuilder endpoints)
     {
         var group = endpoints.MapGroup("/projections")
-            .WithTags("Projections");
+            .WithTags("Projections")
+            .AddEndpointFilter<KnownProjectorFilter>();
 
         group.MapPost("/persist", PersistProjectionStateAsync)
             .WithName("PersistProjectionState");

@@ -4,8 +4,8 @@ var builder = DistributedApplication.CreateBuilder(args);
 // Add Azure Storage emulator for Orleans
 var storage = builder
     .AddAzureStorage("azurestorage")
-    // .RunAsEmulator(opt => opt.WithDataVolume());
-    .RunAsEmulator();
+    // Named data volume: tables, blobs and queues survive an AppHost restart.
+    .RunAsEmulator(opt => opt.WithDataVolume());
 var clusteringTable = storage.AddTables("DcbOrleansClusteringTable");
 var grainTable = storage.AddTables("DcbOrleansGrainTable");
 var grainStorage = storage.AddBlobs("DcbOrleansGrainState");
@@ -17,9 +17,11 @@ var multiProjectionOffload = storage.AddBlobs("MultiProjectionOffload");
 // Add PostgreSQL for event storage (optional - can use in-memory for development)
 var postgresServer = builder
     .AddPostgres("dcbOrleansPostgres")
+    // Named data volume: events survive an AppHost restart. The generated password is kept in the
+    // AppHost user secrets, so it stays the same across restarts and matches the volume.
+    .WithDataVolume()
     .WithPgAdmin()
     .WithDbGate();
-// .WithDataVolume()
 var postgres = postgresServer.AddDatabase("DcbPostgres");
 
 // Materialized view database (kept separate from the event store so that the read-side schema can

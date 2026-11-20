@@ -288,7 +288,8 @@ startupLogger.LogInformation("Database type: {DatabaseType}", databaseType ?? "p
 if (configuredDatabasePath is not null)
     startupLogger.LogInformation("SQLite database path: {DatabasePath}", configuredDatabasePath);
 
-var apiRoute = app.MapGroup("/api");
+var apiRoute = app.MapGroup("/api")
+    .AddEndpointFilter<QueryParameterValidationFilter>();
 
 app.UseExceptionHandler();
 

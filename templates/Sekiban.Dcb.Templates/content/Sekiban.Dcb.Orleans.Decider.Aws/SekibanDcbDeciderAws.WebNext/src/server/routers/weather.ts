@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { router, publicProcedure } from "../api/trpc";
+import { extractErrorMessage } from "../lib/api-error-helpers";
 
 const weatherForecastSchema = z.object({
   forecastId: z.string().uuid(),
@@ -13,7 +14,7 @@ const createWeatherForecastSchema = z.object({
   forecastId: z.string().uuid().optional(),
   location: z.string().min(1, "Location is required"),
   date: z.string(),
-  temperatureC: z.number().min(-60).max(60),
+  temperatureC: z.number().min(-50).max(50),
   summary: z.string().min(1, "Summary is required"),
 });
 
@@ -67,8 +68,7 @@ export const weatherRouter = router({
         }
       );
       if (!res.ok) {
-        const error = await res.text();
-        throw new Error(error || "Failed to create weather forecast");
+        throw new Error(await extractErrorMessage(res, "Failed to create weather forecast"));
       }
       return res.json();
     }),
@@ -88,8 +88,7 @@ export const weatherRouter = router({
         }
       );
       if (!res.ok) {
-        const error = await res.text();
-        throw new Error(error || "Failed to update location");
+        throw new Error(await extractErrorMessage(res, "Failed to update location"));
       }
       return res.json();
     }),
@@ -106,8 +105,7 @@ export const weatherRouter = router({
         }
       );
       if (!res.ok) {
-        const error = await res.text();
-        throw new Error(error || "Failed to remove weather forecast");
+        throw new Error(await extractErrorMessage(res, "Failed to remove weather forecast"));
       }
       return res.json();
     }),

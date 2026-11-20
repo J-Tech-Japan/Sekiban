@@ -10,6 +10,8 @@ using Microsoft.EntityFrameworkCore.Storage;
 using Orleans.Runtime;
 using Sekiban.Dcb;
 using Sekiban.Dcb.Tags;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace SekibanDcbDeciderAws.ApiService.Auth;
 
@@ -264,8 +266,10 @@ public class AuthDbInitializer : BackgroundService
             {
                 _logger.LogInformation("Creating sample user: {Email}", userData.Email);
 
-                // Generate a valid GUID for the user ID to ensure it can be used with Sekiban
-                var userId = Guid.CreateVersion7();
+                // A stable id derived from the email keeps seeding idempotent: if the identity database is
+                // recreated while the event store survives (e.g. SQLite events with a fresh Postgres), the
+                // existing user directory entry is found again instead of registering a duplicate user.
+                var userId = SampleUserId(userData.Email);
                 var user = new ApplicationUser
                 {
                     Id = userId.ToString(),
@@ -306,6 +310,14 @@ public class AuthDbInitializer : BackgroundService
                 await EnsureUserAccessAsync(executor, existingUser, roles);
             }
         }
+    }
+
+    private static Guid SampleUserId(string email)
+    {
+        var hash = SHA256.HashData(Encoding.UTF8.GetBytes("sekiban-sample-user:" + email.ToLowerInvariant()));
+        hash[6] = (byte)((hash[6] & 0x0F) | 0x80); // version 8 (name-based, custom)
+        hash[8] = (byte)((hash[8] & 0x3F) | 0x80); // RFC 9562 variant
+        return new Guid(hash.AsSpan(0, 16), bigEndian: true);
     }
 
     private async Task EnsureUserDirectoryAsync(ISekibanExecutor executor, ApplicationUser user)

@@ -576,7 +576,8 @@ startupLogger.LogInformation("Database type: {DatabaseType}", databaseType ?? "p
 if (configuredDatabasePath is not null)
     startupLogger.LogInformation("SQLite database path: {DatabasePath}", configuredDatabasePath);
 
-var apiRoute = app.MapGroup("/api");
+var apiRoute = app.MapGroup("/api")
+    .AddEndpointFilter<QueryParameterValidationFilter>();
 app.UseExceptionHandler();
 if (app.Environment.IsDevelopment())
 {
@@ -906,14 +907,22 @@ apiRoute
         {
             var result = await executor.ExecuteAsync(command);
             if (result.IsSuccess)
+            {
+                // Renaming to the current name is a successful no-op: no event is written, so there is
+                // no event id or sortable id to wait for. `changed` tells the caller which case it got.
+                var execution = result.GetValue();
+                var changed = execution.Events.Any();
                 return Results.Ok(
                     new
                     {
                         success = true,
-                        eventId = result.GetValue().EventId,
+                        changed,
+                        eventId = changed ? execution.EventId : (Guid?)null,
                         aggregateId = command.ForecastId,
-                        sortableUniqueId = result.GetValue().SortableUniqueId
+                        sortableUniqueId = execution.SortableUniqueId,
+                        message = changed ? "Location updated" : "Location unchanged; no event was written"
                     });
+            }
             return ProjectionErrors.Map(result.GetException(), Results.BadRequest(
                 new
                 {
@@ -1101,7 +1110,8 @@ if (TemplateEnvironment.IsDevelopment(app.Environment.EnvironmentName))
                     return ProjectionErrors.Map(ex, Results.BadRequest(new { error = ex.Message }));
                 }
             })
-            .WithName("PersistProjectionState");
+            .WithName("PersistProjectionState")
+            .AddEndpointFilter<KnownProjectorFilter>();
 }
 if (TemplateEnvironment.IsDevelopment(app.Environment.EnvironmentName))
 {
@@ -1121,7 +1131,8 @@ if (TemplateEnvironment.IsDevelopment(app.Environment.EnvironmentName))
                     return ProjectionErrors.Map(ex, Results.BadRequest(new { error = ex.Message }));
                 }
             })
-            .WithName("DeactivateProjection");
+            .WithName("DeactivateProjection")
+            .AddEndpointFilter<KnownProjectorFilter>();
 }
 if (TemplateEnvironment.IsDevelopment(app.Environment.EnvironmentName))
 {
@@ -1141,7 +1152,8 @@ if (TemplateEnvironment.IsDevelopment(app.Environment.EnvironmentName))
                     return ProjectionErrors.Map(ex, Results.BadRequest(new { error = ex.Message }));
                 }
             })
-            .WithName("RefreshProjection");
+            .WithName("RefreshProjection")
+            .AddEndpointFilter<KnownProjectorFilter>();
 }
 if (TemplateEnvironment.IsDevelopment(app.Environment.EnvironmentName))
 {
@@ -1169,7 +1181,8 @@ if (TemplateEnvironment.IsDevelopment(app.Environment.EnvironmentName))
                     return ProjectionErrors.Map(ex, Results.BadRequest(new { error = ex.Message }));
                 }
             })
-            .WithName("GetProjectionSnapshot");
+            .WithName("GetProjectionSnapshot")
+            .AddEndpointFilter<KnownProjectorFilter>();
 }
 if (TemplateEnvironment.IsDevelopment(app.Environment.EnvironmentName))
 {
@@ -1191,7 +1204,8 @@ if (TemplateEnvironment.IsDevelopment(app.Environment.EnvironmentName))
                     return ProjectionErrors.Map(ex, Results.BadRequest(new { error = ex.Message }));
                 }
             })
-            .WithName("OverwriteProjectionPersistedVersion");
+            .WithName("OverwriteProjectionPersistedVersion")
+            .AddEndpointFilter<KnownProjectorFilter>();
 }
 apiRoute
     .MapPost(

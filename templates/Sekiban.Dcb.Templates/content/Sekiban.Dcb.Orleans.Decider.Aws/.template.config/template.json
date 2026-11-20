@@ -13,6 +13,7 @@
   },
   "sourceName": "SekibanDcbDeciderAws",
   "preferNameDirectory": true,
+  "guids": ["2fff957a-22e8-49c8-9385-8da1fb676f91"],
   "symbols": {
     "IncludeTests": {
       "type": "parameter",

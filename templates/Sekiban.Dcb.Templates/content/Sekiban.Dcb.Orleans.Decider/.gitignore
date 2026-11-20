@@ -5,3 +5,8 @@ obj/
 **/obj/
 .env
 secrets.json
+
+# Sekiban CLI working directories and local event cache
+cache/
+output/
+events.db*

@@ -28,7 +28,7 @@
                         {
                             @foreach (var student in students)
                             {
-                                <option value="@student.StudentId">@student.StudentName (@student.Grade)</option>
+                                <option value="@student.StudentId">@student.StudentName (max @student.MaxClassCount classes)</option>
                             }
                         }
                     </select>
@@ -118,7 +118,7 @@
             <thead>
             <tr>
                 <th>Student Name</th>
-                <th>Grade</th>
+                <th>Max Classes</th>
                 <th>Classroom</th>
                 <th>Enrollment Date</th>
                 <th>Actions</th>
@@ -129,7 +129,7 @@
             {
                 <tr>
                     <td>@enrollment.StudentName</td>
-                    <td>@enrollment.Grade</td>
+                    <td>@enrollment.MaxClassCount</td>
                     <td>@enrollment.ClassName</td>
                     <td>@enrollment.EnrollmentDate.ToString("d")</td>
                     <td>
@@ -166,7 +166,7 @@
     {
         public Guid StudentId { get; set; }
         public string StudentName { get; set; } = string.Empty;
-        public int Grade { get; set; }
+        public int MaxClassCount { get; set; }
     }
 
     public class ClassroomView
@@ -187,7 +187,7 @@
     {
         public Guid StudentId { get; set; }
         public string StudentName { get; set; } = string.Empty;
-        public int Grade { get; set; }
+        public int MaxClassCount { get; set; }
         public Guid ClassRoomId { get; set; }
         public string ClassName { get; set; } = string.Empty;
         public DateTime EnrollmentDate { get; set; }
@@ -221,7 +221,7 @@
                 {
                     StudentId = s.StudentId,
                     StudentName = s.Name,
-                    Grade = s.MaxClassCount // Using MaxClassCount as Grade for now
+                    MaxClassCount = s.MaxClassCount
                 }).ToList();
             }
             else
@@ -303,7 +303,7 @@
                             {
                                 StudentId = student.StudentId,
                                 StudentName = student.Name,
-                                Grade = student.MaxClassCount, // Using MaxClassCount as Grade
+                                MaxClassCount = student.MaxClassCount,
                                 ClassRoomId = classroom.ClassRoomId,
                                 ClassName = classroom.Name,
                                 EnrollmentDate = DateTime.Now // We don't have the actual enrollment date

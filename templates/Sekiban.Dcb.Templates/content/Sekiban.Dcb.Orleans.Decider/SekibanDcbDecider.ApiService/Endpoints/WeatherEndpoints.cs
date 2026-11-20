@@ -251,12 +251,17 @@ public static class WeatherEndpoints
         [FromServices] ISekibanExecutor executor)
     {
         var result = await executor.ExecuteAsync(command);
+        // Renaming to the current name is a successful no-op: no event is written, so there is
+        // no event id or sortable id to wait for. `changed` tells the caller which case it got.
+        var changed = result.Events.Any();
         return Results.Ok(new
         {
             success = true,
-            eventId = result.EventId,
+            changed,
+            eventId = changed ? result.EventId : (Guid?)null,
             aggregateId = command.ForecastId,
-            sortableUniqueId = result.SortableUniqueId
+            sortableUniqueId = result.SortableUniqueId,
+            message = changed ? "Location updated" : "Location unchanged; no event was written"
         });
     }
 

@@ -640,7 +640,8 @@ if (configuredDatabasePath is not null)
 // Database tables will be created automatically by the DatabaseInitializerService
 // configured in AddSekibanDcbPostgresWithAspire, so no need to run migrations
 
-var apiRoute = app.MapGroup("/api");
+var apiRoute = app.MapGroup("/api")
+    .AddEndpointFilter<QueryParameterValidationFilter>();
 
 // Configure the HTTP request pipeline.
 app.UseExceptionHandler();
@@ -935,13 +936,18 @@ apiRoute
         async ([FromBody] ChangeLocationName command, [FromServices] ISekibanExecutor executor) =>
         {
             var result = await executor.ExecuteAsync(command);
+            // Renaming to the current name is a successful no-op: no event is written, so there is
+            // no event id or sortable id to wait for. `changed` tells the caller which case it got.
+            var changed = result.Events.Any();
             return Results.Ok(
                 new
                 {
                     success = true,
-                    eventId = result.EventId,
+                    changed,
+                    eventId = changed ? result.EventId : (Guid?)null,
                     aggregateId = command.ForecastId,
-                    sortableUniqueId = result.SortableUniqueId
+                    sortableUniqueId = result.SortableUniqueId,
+                    message = changed ? "Location updated" : "Location unchanged; no event was written"
                 });
         })
     .WithName("UpdateWeatherForecastLocation");
@@ -1112,7 +1118,8 @@ if (TemplateEnvironment.IsDevelopment(app.Environment.EnvironmentName))
                     return ProjectionErrors.Map(persistFailure, Results.BadRequest(new { error = err, elapsedMs }));
                 }
             })
-            .WithName("PersistProjectionState");
+            .WithName("PersistProjectionState")
+            .AddEndpointFilter<KnownProjectorFilter>();
 }
 
 if (TemplateEnvironment.IsDevelopment(app.Environment.EnvironmentName))
@@ -1126,7 +1133,8 @@ if (TemplateEnvironment.IsDevelopment(app.Environment.EnvironmentName))
                 await grain.RequestDeactivationAsync();
                 return Results.Ok(new { success = true });
             })
-            .WithName("DeactivateProjection");
+            .WithName("DeactivateProjection")
+            .AddEndpointFilter<KnownProjectorFilter>();
 }
 
 if (TemplateEnvironment.IsDevelopment(app.Environment.EnvironmentName))
@@ -1140,7 +1148,8 @@ if (TemplateEnvironment.IsDevelopment(app.Environment.EnvironmentName))
                 await grain.RefreshAsync();
                 return Results.Ok(new { success = true });
             })
-            .WithName("RefreshProjection");
+            .WithName("RefreshProjection")
+            .AddEndpointFilter<KnownProjectorFilter>();
 }
 
 if (TemplateEnvironment.IsDevelopment(app.Environment.EnvironmentName))
@@ -1162,7 +1171,8 @@ if (TemplateEnvironment.IsDevelopment(app.Environment.EnvironmentName))
                 }
                 return Results.Text(snapshotJson, "application/json");
             })
-            .WithName("GetProjectionSnapshot");
+            .WithName("GetProjectionSnapshot")
+            .AddEndpointFilter<KnownProjectorFilter>();
 }
 
 if (TemplateEnvironment.IsDevelopment(app.Environment.EnvironmentName))
@@ -1176,7 +1186,8 @@ if (TemplateEnvironment.IsDevelopment(app.Environment.EnvironmentName))
                 var ok = await grain.OverwritePersistedStateVersionAsync(newVersion);
                 return ok ? Results.Ok(new { success = true }) : Results.BadRequest(new { error = "No persisted state to overwrite or invalid envelope" });
             })
-            .WithName("OverwriteProjectionPersistedVersion");
+            .WithName("OverwriteProjectionPersistedVersion")
+            .AddEndpointFilter<KnownProjectorFilter>();
 }
 
 apiRoute
