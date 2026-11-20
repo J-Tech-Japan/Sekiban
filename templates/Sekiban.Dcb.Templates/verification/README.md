@@ -43,13 +43,21 @@ The scripts are bash. They run on macOS and Linux, and use `curl -q` so that a p
 - `python3`, `uuidgen`, `curl` and `docker` on the `PATH`.
 - The Aspire CLI bundle (DCP and dashboard). Restoring an AppHost puts it into the NuGet cache
   (`aspire.cli.<rid>`), and `common/launch.sh` finds it there. Set `ASPIRE_BUNDLE_DIR` to use another one.
-- Free ports: 15258 (dashboard), 19266, 20220, 5010 / 5141 (ApiService), 5234 (Blazor Web), 3000 (WebNext),
+- Free ports: 15258 (dashboard), 19266, 20220, 5010 / 5141 (ApiService), 5234 / 5180 (Blazor Web), 3000 (WebNext),
   4566 (LocalStack), 11111 and 30000 (Orleans).
 - Optional: Playwright or another browser automation tool, for the UI checks.
 
 ## 1. Generate the apps
 
-From a local pack of the branch under test:
+First check that no data volumes of an earlier run are left. Each generated app gets a new Postgres password, and a
+volume left by an earlier app generated at the same path can make the new app fail to log in to Postgres or start with
+old data:
+
+```bash
+docker volume ls --format '{{.Name}}' | grep -E '^v(orleans|withoutresult|decider)\.apphost-'   # expect no output
+```
+
+Then generate from a local pack of the branch under test:
 
 ```bash
 V=$PWD/templates/Sekiban.Dcb.Templates/verification   # run from the repository root
@@ -103,7 +111,7 @@ $V/common/collect-logs.sh $R/run2
 $V/common/stop.sh $R/apphost2.log.pid
 ```
 
-Always pass the connection explicitly to the CLI (`-d` / `-c`, as `exercise-cli.sh` does). A CLI started without it
+Always pass the connection explicitly to the CLI (`-d` with `-c` or `--sqlite-path`, as `exercise-cli.sh` does). A CLI started without it
 falls back to its profile or user secrets, which can point at a real database.
 
 ### Per template
@@ -113,7 +121,7 @@ falls back to its profile or user secrets, which can point at a real database.
 | `sekiban-dcb-orleans` | `VOrleans` | `http://localhost:5010` | 5234 | `TEMP_FORMAT=object samples/exercise-api.sh` | `common/exercise-cli.sh <cli> <conn> <dir> $SID $FID` | ResultBox flavour; `temperatureC` is `{"value":n}`, clamped to -50..50 |
 | `sekiban-dcb-orleans-withoutresult` | `VWithoutResult` | `http://localhost:5141` | 5234 | `samples/exercise-api.sh` | same as above | |
 | `sekiban-dcb-orleans-aws` | `VWithoutResultAws` | `http://localhost:5141` | 5234 | `samples/exercise-api.sh` | `common/exercise-cli-aws.sh <cli>` | DynamoDB + S3 on LocalStack; run `offload-check.sh` |
-| `sekiban-dcb-decider` | `VDecider` | `http://localhost:5141` | 5234 | `decider/exercise-api.sh` | `common/exercise-cli.sh <cli> <conn> <dir> $SID $FID $Q1` | auth, meeting rooms, WebNext on 3000 |
+| `sekiban-dcb-decider` | `VDecider` | `http://localhost:5141` | 5180 | `decider/exercise-api.sh` | `common/exercise-cli.sh <cli> <conn> <dir> $SID $FID $Q1` | auth, meeting rooms, WebNext on 3000 |
 | `sekiban-dcb-decider-aws` | `VDeciderAws` | `http://localhost:5141` | 5234 | `decider/exercise-api.sh` | `common/exercise-cli-aws.sh <cli>` | Decider on LocalStack; run `offload-check.sh` |
 
 The dashboard (`http://localhost:15258`) lists every resource with its URL. Check it when a port differs.
@@ -127,8 +135,8 @@ Repeat the run with environment variables set before `launch.sh`:
 
 - `Orleans__UseInMemoryStreams=false`: Orleans streams on Azure Queues (Azurite). Run the API script in `full` mode.
 - `Sekiban__Database=sqlite`: SQLite event store (`events.db` in the ApiService directory). Run the API script in
-  `subset` mode, restart once with the same setting and run the persist check, then delete the `events.db*` files.
-  The CLI reads it with `-d sqlite --sqlite-path <path>`.
+  `subset` mode, run the CLI script with `sqlite:<path to events.db>` as the connection, restart once with the same
+  setting and run the persist check, then delete the `events.db*` files.
 
 ### AWS templates: snapshot offload
 
@@ -160,7 +168,8 @@ in the browser console.
 
 - `<prefix>.tsv`: one line per check: `PASS` / `FAIL`, name, request, expected and actual status, body excerpt.
   `<prefix>.log` has the full request and response of each check.
-- The API, CLI and persist scripts exit with the number of failed checks, and `offload-check.sh` exits 0 or 1.
+- The API, CLI and persist scripts exit with the number of failed checks (at most 255), and `offload-check.sh` exits
+  0 or 1. The count is also printed (`FAILS=`, `CLI FAILS=`, `PERSIST FAILS=`).
   **A correct app gives 0 for each**, except the persist check of the AWS templates (see below). Any FAIL is a
   defect in the template or the library, unless the expectation in the script is out of date; in that case fix the
   script in the same pull request as the behaviour change.
@@ -170,7 +179,8 @@ in the browser console.
 - `collect-logs.sh` prints the number of `fail:` / `crit:` lines per log. In the Decider templates, `fail:` lines
   for the `auth-initialization` health check during the first seconds of startup are normal (the identity database
   is still being created); anything else needs a look.
-- `stop.sh` must end with `stopped after ...`. Compare `docker ps -a` with the state before the run.
+- `stop.sh` must end with `stopped after ...`. It ignores Aspire DCP processes that were already running before
+  `launch.sh`, but it counts any container created during the run, so do not start other containers meanwhile.
 
 ### Expected behaviour that looks like a failure
 

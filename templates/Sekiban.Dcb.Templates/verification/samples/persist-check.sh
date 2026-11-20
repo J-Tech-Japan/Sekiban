@@ -30,4 +30,5 @@ g /api/weatherforecast-uwmv Kyoto
 g /api/mv/status entries
 g /api/weatherforecast/status isCaughtUp
 echo "PERSIST FAILS=$FAILS"
-exit $FAILS
+[ "$FAILS" -gt 255 ] && exit 255
+exit "$FAILS"

@@ -22,4 +22,5 @@ run err build -d dynamodb
 run err nosuchcommand
 run err list --bogus
 echo; echo "CLI FAILS=$FAILS"
-exit $FAILS
+[ "$FAILS" -gt 255 ] && exit 255
+exit "$FAILS"

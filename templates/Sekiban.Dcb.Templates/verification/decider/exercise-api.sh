@@ -119,13 +119,15 @@ AT2=$(jget accessToken); RT2=$(jget refreshToken)
 check "refresh with the just-rotated refresh token (grace)" 200 POST /auth/refresh "{\"accessToken\":\"$AT\",\"refreshToken\":\"$RT\"}" accessToken
 [ "$(jget refreshToken)" = "$RT2" ] && note PASS "grace refresh returns the successor refresh token" ||
   note FAIL "grace refresh did not return the successor refresh token"
-check "login new user via JWT for the grace-expiry check" 200 POST /auth/login "{\"email\":\"$NEWMAIL\",\"password\":\"Fullpass1234%\",\"useCookies\":false}" accessToken
-GAT=$(jget accessToken); GRT=$(jget refreshToken)
-check "rotate the grace-check refresh token" 200 POST /auth/refresh "{\"accessToken\":\"$GAT\",\"refreshToken\":\"$GRT\"}" accessToken
-GROTATED_AT=$SECONDS
 check "FAIL refresh with garbage access token" 401 POST /auth/refresh "{\"accessToken\":\"garbage\",\"refreshToken\":\"$RT2\"}"
 HDR="Authorization: Bearer $AT2"; check "logout (JWT, revokes refresh tokens)" 200 POST /auth/logout "" '"succeeded":true'
 HDR=""; check "FAIL refresh after logout" 401 POST /auth/refresh "{\"accessToken\":\"$AT2\",\"refreshToken\":\"$RT2\"}"
+# Grace expiry: a separate session created after the logout above (logout revokes all of the user's tokens).
+check "login new user via JWT for the grace-expiry check" 200 POST /auth/login "{\"email\":\"$NEWMAIL\",\"password\":\"Fullpass1234%\",\"useCookies\":false}" accessToken
+GAT=$(jget accessToken); GRT=$(jget refreshToken)
+check "rotate the grace-check refresh token" 200 POST /auth/refresh "{\"accessToken\":\"$GAT\",\"refreshToken\":\"$GRT\"}" accessToken
+GRT2=$(jget refreshToken)
+GROTATED_AT=$SECONDS
 
 # ---------- students / classrooms ----------
 as anon
@@ -183,8 +185,8 @@ fi
 eventually "MV students contains A" "/api/mv/students?pageSize=200&waitForSortableUniqueId=$ENR_SORT" "$SID"
 eventually "MV classrooms contains Math" "/api/mv/classrooms?pageSize=200" "$CID"
 eventually "MV enrollments filter by student A" "/api/mv/enrollments?studentId=$SID" "$CID"
-check "MV enrollments filter by classroom Math" 200 GET "/api/mv/enrollments?classRoomId=$CID" "$SID"
-check "MV enrollments all" 200 GET "/api/mv/enrollments" "$SID"
+check "MV enrollments filter by classroom Math" 200 GET "/api/mv/enrollments?classRoomId=$CID" "" "$SID"
+check "MV enrollments all" 200 GET "/api/mv/enrollments" "" "$SID"
 check "MV status" 200 GET /api/mv/status "" 'databaseType'
 if [ "$MODE" = full ]; then
 check "MV students page 2 size 1" 200 GET "/api/mv/students?pageNumber=2&pageSize=1"
@@ -342,7 +344,7 @@ check "reject A2 via decision" 200 POST /api/approvals/$AR2/decision "{\"decisio
 AP_SORT=$(jget reservationSortableUniqueId)
 eventually "A1 Confirmed after approval" "/api/reservations/by-room/$R2?waitForSortableUniqueId=$AP_SORT" "$A1\"[^}]*\"status\":\"Confirmed\""
 check "A2 Rejected after decision" 200 GET "/api/reservations/by-room/$R2" "" "$A2\"[^}]*\"status\":\"Rejected\""
-check "approval inbox pendingOnly=false shows decided" 200 GET "/api/approvals?pendingOnly=false" "$AR1"
+check "approval inbox pendingOnly=false shows decided" 200 GET "/api/approvals?pendingOnly=false" "" "$AR1"
 if [ "$MODE" = full ]; then
 check "FAIL decide A1 again (not pending)" 400 POST /api/approvals/$AR1/decision "{\"decision\":\"Rejected\",\"comment\":\"again\"}" "not pending"
 check "FAIL decide unknown approval" 400 POST /api/approvals/"$(u)"/decision "{\"decision\":\"Approved\"}"
@@ -354,7 +356,7 @@ fi
 # ---------- users (admin) / monthly limit ----------
 as admin
 eventually "user directory lists user1 with roles" "/api/users" "user1@example.com"
-check "user directory activeOnly" 200 GET "/api/users?activeOnly=true" "admin@example.com"
+check "user directory activeOnly" 200 GET "/api/users?activeOnly=true" "" "admin@example.com"
 U2DIR=$U2ID
 check "set new user monthly limit 1" 200 POST /api/users/$U2DIR/monthly-limit '{"monthlyReservationLimit":1}' '"monthlyReservationLimit":1'
 if [ "$MODE" = full ]; then
@@ -433,6 +435,7 @@ if [ "$MODE" = full ]; then
   wait_s=$((GROTATED_AT + 65 - SECONDS)); [ $wait_s -gt 0 ] && sleep $wait_s
   as anon
   check "FAIL refresh with a rotated refresh token after the 60 s grace" 401 POST /auth/refresh "{\"accessToken\":\"$GAT\",\"refreshToken\":\"$GRT\"}"
+  check "the successor of that token still refreshes (so the 401 above is the grace expiry)" 200 POST /auth/refresh "{\"accessToken\":\"$GAT\",\"refreshToken\":\"$GRT2\"}" accessToken
 fi
 
 as user1; check "logout user1 (cookie)" 200 POST /auth/logout "" '"succeeded":true'
@@ -442,4 +445,5 @@ echo "ADMIN_RELOGINS=$RELOGINS" | tee -a "$LOG"
 echo "FAILS=$FAILS" | tee -a "$LOG"
 grep -c '^PASS' "$TSV" | sed 's/^/PASS count: /'
 grep -E '^(FAIL|INFO)' "$TSV"
-exit $FAILS
+[ "$FAILS" -gt 255 ] && exit 255
+exit "$FAILS"

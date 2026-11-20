@@ -206,4 +206,5 @@ check "debug events contains StudentCreated" 200 GET /api/debug/events "" Studen
 echo "FAILS=$FAILS" | tee -a "$LOG"
 grep -c '^PASS' "$TSV" | sed 's/^/PASS count: /'
 grep '^FAIL' "$TSV"
-exit $FAILS
+[ "$FAILS" -gt 255 ] && exit 255
+exit "$FAILS"

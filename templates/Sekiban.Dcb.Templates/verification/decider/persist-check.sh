@@ -34,4 +34,5 @@ g "/api/approvals?pendingOnly=false" "$AR1"
 g /api/users user1@example.com
 rm -f "$J"
 echo "PERSIST FAILS=$FAILS"
-exit $FAILS
+[ "$FAILS" -gt 255 ] && exit 255
+exit "$FAILS"

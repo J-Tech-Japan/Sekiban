@@ -1,16 +1,23 @@
 #!/usr/bin/env bash
 # Run every command of a generated app's CLI (Orleans, WithoutResult and Decider templates) against the running
-# app's Postgres event store, and check the exit codes.
-# usage: exercise-cli.sh <CLI_BINARY> <POSTGRES_CONN> <WORK_DIR> [STUDENT_ID] [FORECAST_ID] [RESERVATION_ID]
+# app's event store (Postgres, or SQLite for the Sekiban__Database=sqlite variant), and check the exit codes.
+# usage: exercise-cli.sh <CLI_BINARY> <CONNECTION> <WORK_DIR> [STUDENT_ID] [FORECAST_ID] [RESERVATION_ID]
 #   CLI_BINARY     e.g. MyApp/MyApp.Cli/bin/Debug/net10.0/MyApp.Cli
-#   POSTGRES_CONN  ConnectionStrings__DcbPostgres of the running ApiService (common/process-env.sh prints it)
+#   CONNECTION     Postgres: ConnectionStrings__DcbPostgres of the running ApiService (common/process-env.sh prints it)
+#                  SQLite:   sqlite:<path to events.db> (the Sekiban__Database=sqlite variant)
 #   WORK_DIR       output and cache directory (created)
 #   STUDENT_ID / FORECAST_ID   ids written by exercise-api.sh (<prefix>.ids, SID and FID)
 #   RESERVATION_ID             Decider templates: a reservation id (Q1 in <prefix>.ids) to run the meeting-room part
-# -d/-c are passed on every database command, so profiles and user secrets never redirect it to another database.
+# -d and the connection are passed on every database command, so profiles and user secrets never redirect it to
+# another database.
 # Writes the transcript to stdout; exit code = number of commands whose exit code was not the expected one.
 CLI=${1:?cli}; CONN=${2:?conn}; W=${3:?workdir}; SID=${4:-}; FID=${5:-}; RID=${6:-}
-mkdir -p "$W/output" "$W/cache"; cd "$W" || exit 1
+mkdir -p "$W/output" "$W/cache"
+# absolute paths, so that the cd below does not change what they point at
+W=$(cd "$W" && pwd)
+case $CLI in /*) ;; *) CLI=$(cd "$(dirname "$CLI")" && pwd)/$(basename "$CLI") ;; esac
+[ -x "$CLI" ] || { echo "CLI binary not found or not executable: $CLI" >&2; exit 2; }
+cd "$W" || exit 2
 FAILS=0
 # run EXPECT(ok|err) args... ; ok = exit 0, err = non-zero exit
 run() {
@@ -21,7 +28,10 @@ run() {
   if { [ "$exp" = ok ] && [ $rc -eq 0 ]; } || { [ "$exp" = err ] && [ $rc -ne 0 ]; }; then echo "[exit $rc] PASS"
   else echo "[exit $rc] FAIL (expected $exp)"; FAILS=$((FAILS+1)); fi
 }
-DC=(-d postgres -c "$CONN")
+case $CONN in
+  sqlite:*) p=${CONN#sqlite:}; case $p in /*) ;; *) p=$OLDPWD/$p ;; esac; DC=(-d sqlite --sqlite-path "$p") ;;
+  *) DC=(-d postgres -c "$CONN") ;;
+esac
 run ok --help
 for c in build list status save delete tag-events projection tag-state tag-list cache-sync cache-stats cache-clear profiles; do
   run ok $c --help
@@ -70,4 +80,5 @@ if [ -n "$RID" ]; then
 fi
 rm -f "$W/last.txt"
 echo; echo "CLI FAILS=$FAILS"
-exit $FAILS
+[ "$FAILS" -gt 255 ] && exit 255
+exit "$FAILS"

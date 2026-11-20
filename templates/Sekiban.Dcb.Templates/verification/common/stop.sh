@@ -6,13 +6,17 @@ pidf=${1:?usage: stop.sh <pid file>}
 pid=$(cat "$pidf"); app=$(cat "$pidf.app" 2>/dev/null || true)
 kill -TERM "$pid" 2>/dev/null
 pattern="${app:-__none__}\.(AppHost|ApiService|Web|WebNext)|/dcp "
+# processes matching the pattern, without the DCP processes that existed before launch.sh
+own() {
+  if [ -f "$pidf.dcp" ]; then pgrep -f "$pattern" | grep -vxF -f "$pidf.dcp"; else pgrep -f "$pattern"; fi
+}
 for i in $(seq 1 90); do
-  n=$(pgrep -f "$pattern" | wc -l | tr -d ' ')
+  n=$(own | wc -l | tr -d ' ')
   left=$(docker ps -a --format '{{.ID}}' | grep -vxF -f "$pidf.containers" | wc -l | tr -d ' ')
   if [ "$n" = 0 ] && [ "$left" = 0 ]; then echo "stopped after $((i * 2))s"; exit 0; fi
   sleep 2
 done
 echo "still running after 180s: processes=$n new containers=$left" >&2
-pgrep -fl "$pattern" >&2
+pids=$(own | paste -sd, -); [ -n "$pids" ] && ps -o pid=,command= -p "$pids" >&2
 docker ps -a --format '{{.ID}} {{.Names}} {{.Status}}' | grep -vF -f "$pidf.containers" >&2
 exit 1

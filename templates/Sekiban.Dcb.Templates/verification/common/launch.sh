@@ -17,6 +17,10 @@ set -euo pipefail
 dir=${1:?usage: launch.sh <AppHost dir> <log file> [pid file]}
 log=${2:?usage: launch.sh <AppHost dir> <log file> [pid file]}
 pidf=${3:-$log.pid}
+# make log and pid paths absolute before the cd below
+abs() { (cd "$(dirname "$1")" && echo "$(pwd)/$(basename "$1")"); }
+mkdir -p "$(dirname "$log")" "$(dirname "$pidf")"
+log=$(abs "$log"); pidf=$(abs "$pidf")
 dir=$(cd "$dir" && pwd)
 name=$(basename "$dir")
 csproj="$dir/$name.csproj"
@@ -44,6 +48,8 @@ bundle=${bundle%/}
 # Containers that exist before the start; stop.sh waits until only these are left.
 docker ps -a --format '{{.ID}}' > "$pidf.containers"
 echo "${name%.AppHost}" > "$pidf.app"
+# DCP processes of other AppHosts that are already running; stop.sh ignores them.
+pgrep -f '/dcp ' > "$pidf.dcp" || true
 
 cd "$dir"
 export DOTNET_LAUNCH_PROFILE=http ASPNETCORE_URLS=http://localhost:15258 ASPIRE_ALLOW_UNSECURED_TRANSPORT=true \
