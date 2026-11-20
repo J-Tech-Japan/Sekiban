@@ -703,9 +703,26 @@ static CacheOptions BuildCacheOptions(string? cacheMode, string? cacheDir, Conne
     };
 
     var resolvedCacheDir = string.IsNullOrWhiteSpace(cacheDir) ? "./cache" : cacheDir;
-    return resolvedMode == SimpleCacheMode.Off
-        ? new CacheOptions(resolvedMode, resolvedCacheDir, "")
-        : new CacheOptions(resolvedMode, resolvedCacheDir, GetCachePath(resolvedCacheDir, target));
+    if (resolvedMode == SimpleCacheMode.Off)
+    {
+        return new CacheOptions(resolvedMode, resolvedCacheDir, "");
+    }
+
+    // A cache is keyed by the database the connection names. Without one, cache-only cannot work; the other modes
+    // read the remote store directly without any cache.
+    if (!ConnectionIdentity.IdentifiesDatabase(target.DatabaseType, target.ConnectionString))
+    {
+        if (resolvedMode == SimpleCacheMode.CacheOnly)
+        {
+            ConnectionIdentity.EnsureIdentifiesDatabase(target.DatabaseType, target.ConnectionString);
+        }
+        Console.Out.Flush();
+        Console.Error.WriteLine(
+            "Warning: the connection string does not name its database (Database / AccountEndpoint); " +
+            "the local cache is not used for this command.");
+        return new CacheOptions(SimpleCacheMode.Off, resolvedCacheDir, "");
+    }
+    return new CacheOptions(resolvedMode, resolvedCacheDir, GetCachePath(resolvedCacheDir, target));
 }
 
 static bool TryResolveCachePath(CacheOptions cacheOptions, out string? cachePath)
@@ -780,26 +797,19 @@ static void DeleteCacheFiles(string cachePath)
 // Opens a SQLite file read-only (never creates or changes it) and checks whether a table exists.
 static bool SqliteTableExists(string path, string tableName)
 {
+    // Read-only, no pooling: never creates or changes the file. Throws SqliteException when the file cannot be read.
     var connectionString = new SqliteConnectionStringBuilder
     {
         DataSource = path,
         Mode = SqliteOpenMode.ReadOnly,
         Pooling = false
     }.ToString();
-    try
-    {
-        using var connection = new SqliteConnection(connectionString);
-        connection.Open();
-        using var command = connection.CreateCommand();
-        command.CommandText = "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = $name";
-        command.Parameters.AddWithValue("$name", tableName);
-        return Convert.ToInt64(command.ExecuteScalar()) > 0;
-    }
-    catch (SqliteException)
-    {
-        // Not a SQLite database (or unreadable)
-        return false;
-    }
+    using var connection = new SqliteConnection(connectionString);
+    connection.Open();
+    using var command = connection.CreateCommand();
+    command.CommandText = "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = $name";
+    command.Parameters.AddWithValue("$name", tableName);
+    return Convert.ToInt64(command.ExecuteScalar()) > 0;
 }
 
 // Throws unless the file exists and is a Sekiban DCB SQLite event store (has the dcb_events table).
@@ -809,7 +819,16 @@ static void EnsureSekibanSqliteStore(string path)
     {
         throw new CliException($"SQLite database not found: {path}");
     }
-    if (!SqliteTableExists(path, "dcb_events"))
+    bool hasEvents;
+    try
+    {
+        hasEvents = SqliteTableExists(path, "dcb_events");
+    }
+    catch (SqliteException ex)
+    {
+        throw new CliException($"'{path}' could not be read as a SQLite database ({ex.Message}). The file was not modified.");
+    }
+    if (!hasEvents)
     {
         throw new CliException($"'{path}' is not a Sekiban DCB SQLite event store (no dcb_events table). The file was not modified.");
     }
@@ -1855,7 +1874,7 @@ static async Task<int> SyncCacheAsync(ConnectionTarget target, string cacheDir, 
 
 // Cache files of this CLI only: <root>/<database>-<16 hex>/events.db, plus the legacy <root>/events.db when it
 // carries cache-sync metadata. Other SQLite files (for example an ApiService events.db) are never picked up.
-static List<string> FindCacheFiles(string cacheDir)
+static List<CacheFile> FindCacheFiles(string cacheDir)
 {
     var cacheRoot = GetCacheRoot(cacheDir);
     if (!Directory.Exists(cacheRoot))
@@ -1863,35 +1882,46 @@ static List<string> FindCacheFiles(string cacheDir)
         return [];
     }
 
+    // <root>/<database>-<16 hex>/events.db: CLI-owned cache folders (listed even when unreadable)
     var cacheFolderPattern = new Regex("^(postgres|cosmos|sqlite)-[0-9a-f]{16}$");
     var files = Directory.GetDirectories(cacheRoot)
         .Where(dir => cacheFolderPattern.IsMatch(Path.GetFileName(dir)))
         .Select(dir => Path.Combine(dir, "events.db"))
         .Where(File.Exists)
-        .Where(path => SqliteTableExists(path, "dcb_events"))
+        .Select(path => new CacheFile(path, IsLegacy: false))
         .ToList();
 
+    // Legacy <root>/events.db: only a candidate; see GetLegacyCacheStatus
     var legacyPath = Path.Combine(cacheRoot, "events.db");
-    if (File.Exists(legacyPath) && IsCacheSyncTarget(legacyPath))
+    if (File.Exists(legacyPath))
     {
-        files.Add(legacyPath);
+        files.Add(new CacheFile(legacyPath, IsLegacy: true));
     }
-    return files.OrderBy(p => p, StringComparer.Ordinal).ToList();
+    return files.OrderBy(f => f.Path, StringComparer.Ordinal).ToList();
 }
 
 // True when the file is a Sekiban SQLite store that cache-sync wrote metadata to (read-only check).
-static bool IsCacheSyncTarget(string path)
+// A legacy <root>/events.db is a cache only when cache-sync wrote metadata to it. IsCache is false for any other
+// file; Error is set when the file cannot be read (then it is neither shown nor deleted).
+static (bool IsCache, string? Error) GetLegacyCacheStatus(string path)
 {
-    if (!SqliteTableExists(path, "dcb_events") || !SqliteTableExists(path, "dcb_meta"))
+    try
     {
-        return false;
+        if (!SqliteTableExists(path, "dcb_events") || !SqliteTableExists(path, "dcb_meta"))
+        {
+            return (false, null);
+        }
+        var connectionString = new SqliteConnectionStringBuilder { DataSource = path, Mode = SqliteOpenMode.ReadOnly, Pooling = false }.ToString();
+        using var connection = new SqliteConnection(connectionString);
+        connection.Open();
+        using var command = connection.CreateCommand();
+        command.CommandText = "SELECT COUNT(*) FROM dcb_meta WHERE Key = 'remoteEndpoint' OR Key LIKE '%:remoteEndpoint'";
+        return (Convert.ToInt64(command.ExecuteScalar()) > 0, null);
     }
-    var connectionString = new SqliteConnectionStringBuilder { DataSource = path, Mode = SqliteOpenMode.ReadOnly, Pooling = false }.ToString();
-    using var connection = new SqliteConnection(connectionString);
-    connection.Open();
-    using var command = connection.CreateCommand();
-    command.CommandText = "SELECT COUNT(*) FROM dcb_meta WHERE Key = 'remoteEndpoint' OR Key LIKE '%:remoteEndpoint'";
-    return Convert.ToInt64(command.ExecuteScalar()) > 0;
+    catch (SqliteException ex)
+    {
+        return (false, ex.Message);
+    }
 }
 
 static async Task<int> ShowCacheStatsAsync(string cacheDir)
@@ -1910,8 +1940,23 @@ static async Task<int> ShowCacheStatsAsync(string cacheDir)
 
     var domainTypes = DomainType.GetDomainTypes();
     var failures = 0;
-    foreach (var cachePath in cacheFiles)
+    foreach (var (cachePath, isLegacy) in cacheFiles)
     {
+        if (isLegacy)
+        {
+            var (isCache, error) = GetLegacyCacheStatus(cachePath);
+            if (error != null)
+            {
+                Console.Error.WriteLine($"  Error: Could not read legacy cache {cachePath}: {error}");
+                failures++;
+                continue;
+            }
+            if (!isCache)
+            {
+                continue;
+            }
+        }
+
         // Get file info
         var fileInfo = new FileInfo(cachePath);
         Console.WriteLine($"Cache File: {cachePath}");
@@ -1988,33 +2033,64 @@ static Task<int> ClearCacheAsync(string cacheDir, bool assumeYes)
     Console.WriteLine($"Cache Directory: {cacheDir}");
     Console.WriteLine();
 
-    var cacheFiles = FindCacheFiles(cacheDir);
-    if (cacheFiles.Count == 0)
+    // Cache folders are CLI-owned and are deleted even when unreadable. A legacy <root>/events.db is deleted only when
+    // its metadata identifies it as a cache; an unreadable one is reported and kept.
+    var toDelete = new List<string>();
+    var unreadableLegacy = 0;
+    foreach (var (path, isLegacy) in FindCacheFiles(cacheDir))
     {
-        Console.WriteLine("No cache file found. Nothing to clear.");
-        return Task.FromResult(0);
+        if (!isLegacy)
+        {
+            toDelete.Add(path);
+            continue;
+        }
+        var (isCache, error) = GetLegacyCacheStatus(path);
+        if (error != null)
+        {
+            Console.Error.WriteLine($"  Error: Could not read legacy cache {path} (not deleted): {error}");
+            unreadableLegacy++;
+        }
+        else if (isCache)
+        {
+            toDelete.Add(path);
+        }
     }
 
-    foreach (var cachePath in cacheFiles)
+    if (toDelete.Count == 0)
+    {
+        Console.WriteLine("No cache file found. Nothing to clear.");
+        return unreadableLegacy > 0
+            ? throw new CliException($"{unreadableLegacy} legacy cache file(s) could not be read and were kept.")
+            : Task.FromResult(0);
+    }
+
+    foreach (var cachePath in toDelete)
     {
         Console.WriteLine($"Cache file: {cachePath} ({FormatBytes(new FileInfo(cachePath).Length)})");
     }
     Console.WriteLine();
 
-    if (!Confirm($"Are you sure you want to delete {cacheFiles.Count} cache file(s)? (y/N): ", assumeYes))
+    if (!Confirm($"Are you sure you want to delete {toDelete.Count} cache file(s)? (y/N): ", assumeYes))
     {
         Console.WriteLine("Cancelled.");
         return Task.FromResult(0);
     }
 
     // Delete the cache files and their WAL/SHM files
-    foreach (var cachePath in cacheFiles)
+    foreach (var cachePath in toDelete)
     {
         DeleteCacheFiles(cachePath);
     }
     Console.WriteLine("\nCache cleared successfully.");
+    if (unreadableLegacy > 0)
+    {
+        throw new CliException($"{unreadableLegacy} legacy cache file(s) could not be read and were kept.");
+    }
     return Task.FromResult(0);
 }
+
+// A cache file found under the cache root; IsLegacy for the old <root>/events.db location.
+readonly record struct CacheFile(string Path, bool IsLegacy);
 
 // The resolved store a command talks to. For sqlite, ConnectionString is the database file path.
 readonly record struct ConnectionTarget(string DatabaseType, string ConnectionString, string CosmosDatabaseName);

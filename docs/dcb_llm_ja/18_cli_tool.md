@@ -154,80 +154,18 @@ dotnet user-secrets set "DefaultProfile" "dev"
 | `PostgresConnectionString` | `ConnectionStrings:DcbPostgres` |
 | `CosmosConnectionString` | `ConnectionStrings:SekibanDcbCosmos` |
 | `CosmosDatabase` | `CosmosDb:DatabaseName` |
+| `SqlitePath` | `Sekiban:SqlitePath` |
 
 ### プロファイル解決の実装
 
-```csharp
-static IConfiguration? ResolveProfile(IConfiguration configuration, string? profileName)
-{
-    var profilesSection = configuration.GetSection("Profiles");
-    var profileEntries = profilesSection.GetChildren().ToList();
-    var hasProfiles = profileEntries.Count > 0;
+`ResolveProfile`（リファレンス実装を参照）の動作：
 
-    var resolvedProfile = profileName;
-    if (string.IsNullOrWhiteSpace(resolvedProfile))
-    {
-        var defaultProfile = configuration["DefaultProfile"];
-        if (!string.IsNullOrWhiteSpace(defaultProfile))
-        {
-            resolvedProfile = defaultProfile;
-        }
-        else if (hasProfiles)
-        {
-            Console.WriteLine("Error: プロファイルが指定されていません。--profileオプションを使用してください。");
-            Console.WriteLine($"利用可能なプロファイル: {string.Join(", ", profileEntries.Select(p => p.Key))}");
-            return null;
-        }
-        else
-        {
-            return configuration;
-        }
-    }
+1. `--profile` を使い、未指定なら `DefaultProfile` を使います。
+2. どちらもなく `Profiles` セクションもなければ、ルート設定（オプション・環境変数・User Secrets）を使います。
+3. プロファイルがあるのに選択されていない、または選択したプロファイルが存在しない場合は、エラーと利用可能なプロファイル名を stderr に出力し、終了コード 1 で終了します。
+4. それ以外はプロファイルのキーをルート設定に重ね、上の表のエイリアスキーを対応付けます（プロファイル内で標準キーが明示されていればエイリアスより優先）。
 
-    if (!hasProfiles)
-    {
-        Console.WriteLine($"Error: プロファイル '{resolvedProfile}' が定義されていません。");
-        return null;
-    }
-
-    var profileSection = profilesSection.GetSection(resolvedProfile!);
-    if (!profileSection.Exists())
-    {
-        Console.WriteLine($"Error: プロファイル '{resolvedProfile}' が見つかりません。");
-        return null;
-    }
-
-    // プロファイルオーバーライドで設定をビルド
-    var prefix = $"Profiles:{resolvedProfile}:";
-    var overrides = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
-
-    foreach (var pair in profileSection.AsEnumerable())
-    {
-        if (pair.Value == null) continue;
-        var key = pair.Key.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
-            ? pair.Key[prefix.Length..]
-            : pair.Key;
-        overrides[key] = pair.Value;
-    }
-
-    // エイリアスをマップ
-    void MapAlias(string aliasKey, string targetKey)
-    {
-        if (overrides.TryGetValue(aliasKey, out var value) && !overrides.ContainsKey(targetKey))
-            overrides[targetKey] = value;
-    }
-
-    MapAlias("Database", "Sekiban:Database");
-    MapAlias("CosmosConnectionString", "ConnectionStrings:SekibanDcbCosmos");
-    MapAlias("CosmosDatabase", "CosmosDb:DatabaseName");
-    MapAlias("ConnectionString", "ConnectionStrings:DcbPostgres");
-
-    return new ConfigurationBuilder()
-        .AddConfiguration(configuration)
-        .AddInMemoryCollection(overrides!)
-        .Build();
-}
-```
+コマンドラインオプション（例: `-d`、`-c`）はプロファイルの値より優先されます。
 
 ## 利用可能なコマンド
 
@@ -398,7 +336,7 @@ dotnet run -- cache-clear --cache-dir ./cache
 dotnet run -- cache-clear --cache-dir ./cache --yes
 ```
 
-キャッシュは接続ごとに保存されます（`<cache-dir>/<service id>/<database>-<hash>/events.db`。ハッシュにパスワードやキーは含めません）。ある DB から同期したキャッシュが別の DB に使われることはありません。キャッシュを使うには接続にデータベースが明示されている必要があります（Postgres は `Database`/`DB`、Cosmos は `AccountEndpoint`）。`Search Path` も識別に含まれます。`cache-stats` と `cache-clear` はディレクトリ配下のすべてのキャッシュが対象です。
+キャッシュは接続ごとに保存されます（`<cache-dir>/<service id>/<database>-<hash>/events.db`。ハッシュにパスワードやキーは含めません）。ある DB から同期したキャッシュが別の DB に使われることはありません。キャッシュを使うには接続にデータベースが明示されている必要があります（Postgres は `Database`/`DB`、Cosmos は `AccountEndpoint`）。ない場合、`auto` は警告を出してキャッシュなしで DB を直接読み、`cache-only` と `cache-sync` は失敗します。Postgres の値は Npgsql と同じく解決されます（`Database`/`DB`、`Host`/`Server` などは最後の指定が有効）。search path も識別に含まれます：`Search Path`、なければ `Options` 内の `search_path` 指定（PostgreSQL は `Options` の後に起動パラメータを適用するため `Search Path` が優先）。`Options` のそれ以外は無視します。キャッシュルート直下の旧形式 `events.db` は、cache-sync のメタデータでキャッシュと判定できる場合だけ表示・削除します。`cache-stats` と `cache-clear` はディレクトリ配下のすべてのキャッシュが対象です。
 
 ## サービスのビルド
 

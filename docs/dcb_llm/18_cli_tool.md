@@ -154,80 +154,18 @@ The following aliases are supported for convenience:
 | `PostgresConnectionString` | `ConnectionStrings:DcbPostgres` |
 | `CosmosConnectionString` | `ConnectionStrings:SekibanDcbCosmos` |
 | `CosmosDatabase` | `CosmosDb:DatabaseName` |
+| `SqlitePath` | `Sekiban:SqlitePath` |
 
 ### Implementing Profile Resolution
 
-```csharp
-static IConfiguration? ResolveProfile(IConfiguration configuration, string? profileName)
-{
-    var profilesSection = configuration.GetSection("Profiles");
-    var profileEntries = profilesSection.GetChildren().ToList();
-    var hasProfiles = profileEntries.Count > 0;
+`ResolveProfile` (see the reference implementation) works like this:
 
-    var resolvedProfile = profileName;
-    if (string.IsNullOrWhiteSpace(resolvedProfile))
-    {
-        var defaultProfile = configuration["DefaultProfile"];
-        if (!string.IsNullOrWhiteSpace(defaultProfile))
-        {
-            resolvedProfile = defaultProfile;
-        }
-        else if (hasProfiles)
-        {
-            Console.WriteLine("Error: No profile specified. Use --profile option.");
-            Console.WriteLine($"Available profiles: {string.Join(", ", profileEntries.Select(p => p.Key))}");
-            return null;
-        }
-        else
-        {
-            return configuration;
-        }
-    }
+1. Use `--profile`; if it is not given, use `DefaultProfile`.
+2. If neither is set and no `Profiles` section exists, use the root configuration (options, environment variables, user secrets).
+3. If profiles exist but none is selected, or the selected profile does not exist, write the error and the available profile names to stderr and exit with code 1.
+4. Otherwise overlay the profile's keys on the root configuration and map the alias keys from the table above (an explicit standard key in the profile wins over its alias).
 
-    if (!hasProfiles)
-    {
-        Console.WriteLine($"Error: Profile '{resolvedProfile}' is not defined.");
-        return null;
-    }
-
-    var profileSection = profilesSection.GetSection(resolvedProfile!);
-    if (!profileSection.Exists())
-    {
-        Console.WriteLine($"Error: Profile '{resolvedProfile}' not found.");
-        return null;
-    }
-
-    // Build configuration with profile overrides
-    var prefix = $"Profiles:{resolvedProfile}:";
-    var overrides = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
-
-    foreach (var pair in profileSection.AsEnumerable())
-    {
-        if (pair.Value == null) continue;
-        var key = pair.Key.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
-            ? pair.Key[prefix.Length..]
-            : pair.Key;
-        overrides[key] = pair.Value;
-    }
-
-    // Map aliases
-    void MapAlias(string aliasKey, string targetKey)
-    {
-        if (overrides.TryGetValue(aliasKey, out var value) && !overrides.ContainsKey(targetKey))
-            overrides[targetKey] = value;
-    }
-
-    MapAlias("Database", "Sekiban:Database");
-    MapAlias("CosmosConnectionString", "ConnectionStrings:SekibanDcbCosmos");
-    MapAlias("CosmosDatabase", "CosmosDb:DatabaseName");
-    MapAlias("ConnectionString", "ConnectionStrings:DcbPostgres");
-
-    return new ConfigurationBuilder()
-        .AddConfiguration(configuration)
-        .AddInMemoryCollection(overrides!)
-        .Build();
-}
-```
+Command-line options still take priority over profile values (for example `-d` and `-c`).
 
 ## Available Commands
 
@@ -398,7 +336,7 @@ dotnet run -- cache-clear --cache-dir ./cache
 dotnet run -- cache-clear --cache-dir ./cache --yes
 ```
 
-Caches are stored per connection (`<cache-dir>/<service id>/<database>-<hash>/events.db`; the hash excludes passwords and keys), so a cache synced from one database is never read for another. A cache is only used when the connection names its database (Postgres `Database`/`DB`, Cosmos `AccountEndpoint`); `Search Path` is part of the identity. `cache-stats` and `cache-clear` cover every cache under the directory.
+Caches are stored per connection (`<cache-dir>/<service id>/<database>-<hash>/events.db`; the hash excludes passwords and keys), so a cache synced from one database is never read for another. A cache is only used when the connection names its database (Postgres `Database`/`DB`, Cosmos `AccountEndpoint`): without one, `auto` writes a warning and reads the database directly, while `cache-only` and `cache-sync` fail. Postgres values are resolved as Npgsql does (the last of `Database`/`DB`, `Host`/`Server`, ... wins). The search path is part of the identity: `Search Path`, or else a `search_path` switch in `Options` (`Search Path` wins, as PostgreSQL applies startup parameters after `Options`); the rest of `Options` is ignored. A legacy `events.db` directly in the cache root is only shown or deleted when cache-sync metadata identifies it as a cache. `cache-stats` and `cache-clear` cover every cache under the directory.
 
 ## Building Services
 

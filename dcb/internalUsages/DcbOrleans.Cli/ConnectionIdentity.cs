@@ -2,32 +2,63 @@ using System.Data.Common;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using Npgsql;
 
 /// <summary>
 ///     Non-secret identity of a database connection, used for console output, cache metadata and the cache folder name.
-///     Only allowlisted keys (host, port, database, user, endpoint, ...) are kept; every other key (passwords, account
-///     keys, shared access signatures, tokens, ...) is dropped. Query strings and fragments are removed from URL values,
-///     so SAS tokens in endpoints are not kept either.
+///     Only an allowlist of values is kept; everything else (passwords, account keys, shared access signatures, tokens,
+///     other Options switches, ...) is dropped from the description and from the hash input.
 /// </summary>
 internal static class ConnectionIdentity
 {
-    // Allowlisted keys (spaces removed, lower case) mapped to one canonical name, so aliases such as Npgsql's
-    // Server/Host, DB/Database, User Id/Username or SearchPath/Search Path give the same identity.
-    private static readonly Dictionary<string, string> AllowedKeys = new(StringComparer.OrdinalIgnoreCase)
-    {
-        ["host"] = "host", ["server"] = "host", ["address"] = "host", ["datasource"] = "host",
-        ["port"] = "port",
-        ["database"] = "database", ["db"] = "database", ["initialcatalog"] = "database", ["dbname"] = "database",
-        ["username"] = "username", ["userid"] = "username", ["uid"] = "username",
-        // Schema selection: Sekiban's Postgres provider uses unqualified table names, so these select the data.
-        ["searchpath"] = "searchpath", ["options"] = "options",
-        ["accountendpoint"] = "accountendpoint", ["serviceurl"] = "serviceurl", ["region"] = "region", ["serviceid"] = "serviceid"
-    };
-
     private const string LegacySourceNotShown = "(legacy cache; source not shown)";
 
-    /// <summary>Allowlisted key/value pairs (lower-case keys, sorted). Throws <see cref="CliException" /> when unparsable.</summary>
-    public static IReadOnlyList<KeyValuePair<string, string>> GetPublicParts(string connectionString)
+    /// <summary>
+    ///     Allowlisted values as canonical key/value pairs, sorted by key. Throws <see cref="CliException" /> when the
+    ///     connection string cannot be parsed.
+    ///     Postgres: parsed by Npgsql itself, so aliases (Server/Host, DB/Database, User Id/Username, SearchPath) and
+    ///     repeated keys resolve exactly as the provider resolves them (the last one wins). The search path comes from
+    ///     Search Path, or else from a search_path switch in Options; Search Path wins because PostgreSQL applies
+    ///     startup parameters after the Options switches. All other Options content is dropped.
+    ///     Cosmos: only AccountEndpoint (scheme, host, port and path; no user info, query or fragment).
+    /// </summary>
+    public static IReadOnlyList<KeyValuePair<string, string>> GetPublicParts(string databaseType, string connectionString)
+    {
+        var parts = databaseType == "postgres"
+            ? GetPostgresParts(connectionString)
+            : GetGenericParts(connectionString);
+        return parts
+            .Where(pair => !string.IsNullOrEmpty(pair.Value))
+            .OrderBy(pair => pair.Key, StringComparer.Ordinal)
+            .ToList();
+    }
+
+    private static IEnumerable<KeyValuePair<string, string>> GetPostgresParts(string connectionString)
+    {
+        NpgsqlConnectionStringBuilder builder;
+        try
+        {
+            builder = new NpgsqlConnectionStringBuilder(connectionString);
+        }
+        catch (ArgumentException)
+        {
+            throw new CliException("The PostgreSQL connection string could not be parsed.");
+        }
+
+        var searchPath = !string.IsNullOrEmpty(builder.SearchPath)
+            ? builder.SearchPath
+            : GetSearchPathFromOptions(builder.Options);
+        return
+        [
+            new("host", builder.Host ?? ""),
+            new("port", builder.Port.ToString(System.Globalization.CultureInfo.InvariantCulture)),
+            new("database", builder.Database ?? ""),
+            new("username", builder.Username ?? ""),
+            new("searchpath", searchPath ?? "")
+        ];
+    }
+
+    private static IEnumerable<KeyValuePair<string, string>> GetGenericParts(string connectionString)
     {
         DbConnectionStringBuilder builder;
         try
@@ -39,22 +70,57 @@ internal static class ConnectionIdentity
             throw new CliException("The connection string could not be parsed.");
         }
 
-        return builder.Keys.Cast<string>()
-            .Select(key => (Key: key, Canonical: AllowedKeys.GetValueOrDefault(key.Replace(" ", ""))))
-            .Where(entry => entry.Canonical != null)
-            .Select(entry => new KeyValuePair<string, string>(
-                entry.Canonical!,
-                RemoveUrlSecrets(Convert.ToString(builder[entry.Key]) ?? "")))
-            .OrderBy(pair => pair.Key, StringComparer.Ordinal)
-            .ThenBy(pair => pair.Value, StringComparer.Ordinal)
-            .ToList();
+        if (builder.TryGetValue("AccountEndpoint", out var endpoint))
+        {
+            return [new("accountendpoint", NormalizeEndpoint(Convert.ToString(endpoint)) ?? "")];
+        }
+        return [];
     }
 
-    /// <summary>
-    ///     Throws unless the connection names what it reads (Postgres: a database; Cosmos: an account endpoint).
-    ///     Required before a cache is used or filled, so caches of different databases are never mixed.
-    /// </summary>
-    public static void EnsureIdentifiesDatabase(string databaseType, string connectionString)
+    // Last search_path set in an Npgsql Options string ("-c search_path=x", "-csearch_path=x" or "--search_path=x").
+    private static string? GetSearchPathFromOptions(string? options)
+    {
+        if (string.IsNullOrWhiteSpace(options))
+        {
+            return null;
+        }
+
+        string? result = null;
+        var tokens = options.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+        for (var i = 0; i < tokens.Length; i++)
+        {
+            string? setting = tokens[i] switch
+            {
+                "-c" when i + 1 < tokens.Length => tokens[++i],
+                var t when t.StartsWith("--", StringComparison.Ordinal) => t[2..],
+                var t when t.StartsWith("-c", StringComparison.Ordinal) => t[2..],
+                _ => null
+            };
+            if (setting is null)
+            {
+                continue;
+            }
+            var eq = setting.IndexOf('=');
+            if (eq > 0 && setting[..eq].Replace('-', '_').Equals("search_path", StringComparison.OrdinalIgnoreCase))
+            {
+                result = setting[(eq + 1)..];
+            }
+        }
+        return result;
+    }
+
+    // scheme://host[:port]/path of an absolute URI; null (value dropped) when it is not one.
+    private static string? NormalizeEndpoint(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value) || !Uri.TryCreate(value, UriKind.Absolute, out var uri) || string.IsNullOrEmpty(uri.Host))
+        {
+            return null;
+        }
+        return uri.GetComponents(UriComponents.SchemeAndServer | UriComponents.Path, UriFormat.UriEscaped);
+    }
+
+    /// <summary>True when the connection names what it reads (Postgres: a database; Cosmos: an account endpoint).</summary>
+    public static bool IdentifiesDatabase(string databaseType, string connectionString)
     {
         var required = databaseType switch
         {
@@ -62,10 +128,16 @@ internal static class ConnectionIdentity
             "cosmos" => "accountendpoint",
             _ => null
         };
-        if (required != null && GetPublicParts(connectionString).All(pair => pair.Key != required))
+        return required == null || GetPublicParts(databaseType, connectionString).Any(pair => pair.Key == required);
+    }
+
+    /// <summary>Throws unless <see cref="IdentifiesDatabase" />; required before a cache is read or written.</summary>
+    public static void EnsureIdentifiesDatabase(string databaseType, string connectionString)
+    {
+        if (!IdentifiesDatabase(databaseType, connectionString))
         {
             throw new CliException(
-                $"The {databaseType} connection string has no {(required == "database" ? "Database (or DB)" : "AccountEndpoint")} value, " +
+                $"The {databaseType} connection string has no {(databaseType == "postgres" ? "Database (or DB)" : "AccountEndpoint")} value, " +
                 "so its cache cannot be identified. Add it to the connection string or use --cache-mode off.");
         }
     }
@@ -73,6 +145,7 @@ internal static class ConnectionIdentity
     /// <summary>
     ///     Safe form of a source stored in cache metadata. New caches store <see cref="Describe" /> output (or a SQLite
     ///     path); legacy caches stored the first 50 characters of the raw connection string, which may contain secrets.
+    ///     Only the keys host, port, database, username, searchpath and accountendpoint are shown.
     /// </summary>
     public static string DescribeStoredSource(string? stored)
     {
@@ -87,12 +160,23 @@ internal static class ConnectionIdentity
         }
         try
         {
-            var parts = GetPublicParts(stored.EndsWith("...", StringComparison.Ordinal) ? stored[..^3] : stored);
-            return parts.Count == 0
-                ? LegacySourceNotShown
-                : string.Join(";", parts.Select(pair => $"{pair.Key}={pair.Value}"));
+            var text = stored.EndsWith("...", StringComparison.Ordinal) ? stored[..^3] : stored;
+            var builder = new DbConnectionStringBuilder { ConnectionString = text };
+            var shown = new List<string>();
+            foreach (var key in new[] { "host", "port", "database", "username", "searchpath" })
+            {
+                if (builder.TryGetValue(key, out var value))
+                {
+                    shown.Add($"{key}={value}");
+                }
+            }
+            if (builder.TryGetValue("accountendpoint", out var endpoint) && NormalizeEndpoint(Convert.ToString(endpoint)) is { } safeEndpoint)
+            {
+                shown.Add($"accountendpoint={safeEndpoint}");
+            }
+            return shown.Count == 0 ? LegacySourceNotShown : string.Join(";", shown);
         }
-        catch (CliException)
+        catch (ArgumentException)
         {
             return LegacySourceNotShown;
         }
@@ -106,13 +190,17 @@ internal static class ConnectionIdentity
             return connectionString;
         }
 
-        var description = string.Join(";", GetPublicParts(connectionString).Select(pair => $"{pair.Key}={pair.Value}"));
-        return databaseType == "cosmos" ? $"{description};database={cosmosDatabaseName}" : description;
+        var description = string.Join(";", GetPublicParts(databaseType, connectionString).Select(pair => $"{pair.Key}={pair.Value}"));
+        if (databaseType != "cosmos")
+        {
+            return description;
+        }
+        return description.Length == 0 ? $"database={cosmosDatabaseName}" : $"{description};database={cosmosDatabaseName}";
     }
 
     /// <summary>
     ///     Cache folder name: "&lt;database type&gt;-&lt;16 hex&gt;". The hash input is a JSON array of [key, value] pairs built
-    ///     from the parsed, allowlisted values, so quoting cannot make two different connections collide.
+    ///     from the resolved, allowlisted values, so quoting cannot make two different connections collide.
     /// </summary>
     public static string ComputeKey(string databaseType, string connectionString, string cosmosDatabaseName)
     {
@@ -123,7 +211,7 @@ internal static class ConnectionIdentity
         }
         else
         {
-            pairs.AddRange(GetPublicParts(connectionString).Select(pair => new[] { pair.Key, pair.Value }));
+            pairs.AddRange(GetPublicParts(databaseType, connectionString).Select(pair => new[] { pair.Key, pair.Value }));
             if (databaseType == "cosmos")
             {
                 pairs.Add(["cosmosdatabase", cosmosDatabaseName]);
@@ -132,25 +220,5 @@ internal static class ConnectionIdentity
 
         var hash = SHA256.HashData(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(pairs)));
         return $"{databaseType}-{Convert.ToHexString(hash)[..16].ToLowerInvariant()}";
-    }
-
-    private static string RemoveUrlSecrets(string value)
-    {
-        if (!value.Contains("://", StringComparison.Ordinal))
-        {
-            return value;
-        }
-
-        var end = value.IndexOfAny(['?', '#']);
-        var withoutQuery = end >= 0 ? value[..end] : value;
-        // Drop user info ("scheme://user:secret@host") as well.
-        var schemeEnd = withoutQuery.IndexOf("://", StringComparison.Ordinal) + 3;
-        var at = withoutQuery.IndexOf('@', schemeEnd);
-        var slash = withoutQuery.IndexOf('/', schemeEnd);
-        if (at >= 0 && (slash < 0 || at < slash))
-        {
-            withoutQuery = withoutQuery[..schemeEnd] + withoutQuery[(at + 1)..];
-        }
-        return withoutQuery;
     }
 }
