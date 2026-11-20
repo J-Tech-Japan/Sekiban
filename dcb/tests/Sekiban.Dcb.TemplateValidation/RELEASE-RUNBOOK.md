@@ -111,6 +111,9 @@ final list is the four WithResult packages.
    **`public_libraries=true`**. Require the whole run and every other job green.
    The `Published-library template consumer` must succeed after actually running
    against nuget.org; a skipped job is rejected. PR runs cannot be record evidence.
+   Also run the manual full-feature verification of all five templates on that
+   commit (`templates/Sekiban.Dcb.Templates/verification/README.md`); every API,
+   CLI, persist and offload script must report 0 failures.
 3. Add `intents/sekiban/releases/dcbTemplates-v{V}-release-record.json`:
    schema 3 with the same top-level prepared members, template candidate's
    `merged_sha` and `candidate_pr`, exactly `templatePublicConsumer` with its
