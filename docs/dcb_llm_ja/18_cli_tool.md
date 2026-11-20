@@ -262,7 +262,7 @@ dotnet run -- status --profile dev
 - `--connection-string, -c` - PostgreSQL接続文字列
 - `--cosmos-connection-string` - Cosmos DB接続文字列
 - `--cosmos-database` - Cosmos DBデータベース名
-- `--sqlite-path` - `-d sqlite` で読む SQLite イベントストアのファイル（ApiService が `Sekiban:Database=sqlite` で書く `events.db`）。読み取り系コマンドは読み取り専用で開き、作成・マイグレーション・WAL 切り替えをしません。ファイルには `dcb_events` テーブルが必要です
+- `--sqlite-path` - `-d sqlite` で読む SQLite イベントストアのファイル（ApiService が `Sekiban:Database=sqlite` で書く `events.db`）。読み取り系コマンドは読み取り専用で開き、作成・マイグレーション・WAL 切り替えをしません。ファイルには `dcb_events` テーブルが必要です。パスは接続文字列の値として Sekiban の SQLite ストアに渡されるため、`;`・`=`・引用符を含められません
 
 ### build
 
@@ -398,7 +398,7 @@ dotnet run -- cache-clear --cache-dir ./cache
 dotnet run -- cache-clear --cache-dir ./cache --yes
 ```
 
-キャッシュは接続ごとに保存されます（`<cache-dir>/<service id>/<database>-<hash>/events.db`。ハッシュにパスワードやキーは含めません）。ある DB から同期したキャッシュが別の DB に使われることはありません。`cache-stats` と `cache-clear` はディレクトリ配下のすべてのキャッシュが対象です。
+キャッシュは接続ごとに保存されます（`<cache-dir>/<service id>/<database>-<hash>/events.db`。ハッシュにパスワードやキーは含めません）。ある DB から同期したキャッシュが別の DB に使われることはありません。キャッシュを使うには接続にデータベースが明示されている必要があります（Postgres は `Database`/`DB`、Cosmos は `AccountEndpoint`）。`Search Path` も識別に含まれます。`cache-stats` と `cache-clear` はディレクトリ配下のすべてのキャッシュが対象です。
 
 ## サービスのビルド
 

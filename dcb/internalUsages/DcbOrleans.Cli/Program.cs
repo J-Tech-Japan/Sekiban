@@ -674,8 +674,11 @@ static string DescribeConnection(ConnectionTarget target) =>
 static string ComputeConnectionKey(ConnectionTarget target) =>
     ConnectionIdentity.ComputeKey(target.DatabaseType, target.ConnectionString, target.CosmosDatabaseName);
 
-static string GetCachePath(string cacheDir, ConnectionTarget target) =>
-    Path.Combine(GetCacheRoot(cacheDir), ComputeConnectionKey(target), "events.db");
+static string GetCachePath(string cacheDir, ConnectionTarget target)
+{
+    ConnectionIdentity.EnsureIdentifiesDatabase(target.DatabaseType, target.ConnectionString);
+    return Path.Combine(GetCacheRoot(cacheDir), ComputeConnectionKey(target), "events.db");
+}
 
 static CacheOptions BuildCacheOptions(string? cacheMode, string? cacheDir, ConnectionTarget target)
 {
@@ -689,7 +692,9 @@ static CacheOptions BuildCacheOptions(string? cacheMode, string? cacheDir, Conne
     };
 
     var resolvedCacheDir = string.IsNullOrWhiteSpace(cacheDir) ? "./cache" : cacheDir;
-    return new CacheOptions(resolvedMode, resolvedCacheDir, GetCachePath(resolvedCacheDir, target));
+    return resolvedMode == SimpleCacheMode.Off
+        ? new CacheOptions(resolvedMode, resolvedCacheDir, "")
+        : new CacheOptions(resolvedMode, resolvedCacheDir, GetCachePath(resolvedCacheDir, target));
 }
 
 static bool TryResolveCachePath(CacheOptions cacheOptions, out string? cachePath)
@@ -801,14 +806,13 @@ static void EnsureSekibanSqliteStore(string path)
 
 // SQLite "database path" for the Sekiban stores that opens the file read-only. The stores build
 // "Data Source={path}", so the read-only mode is appended as another connection string keyword.
-static string ToReadOnlySqlitePath(string path)
-{
-    if (path.IndexOfAny([';', '"', '\'', '=']) >= 0)
-    {
-        throw new CliException($"SQLite path must not contain ';', '=' or quotes: {path}");
-    }
-    return $"{path};Mode=ReadOnly";
-}
+static string ToReadOnlySqlitePath(string path) =>
+    TryToReadOnlySqlitePath(path) ?? throw new CliException(
+        $"Cannot open SQLite file '{path}' read-only: the path contains ';', '=' or a quote, which cannot be passed to " +
+        "the Sekiban SQLite stores. Move or rename the file (or use a symbolic link) to a path without these characters.");
+
+static string? TryToReadOnlySqlitePath(string path) =>
+    path.IndexOfAny([';', '"', '\'', '=']) >= 0 ? null : $"{path};Mode=ReadOnly";
 
 static void PrintTarget(ConnectionTarget target)
 {
@@ -897,6 +901,12 @@ static async Task<int> BuildProjectionStatesAsync(
     Console.WriteLine();
 
     var services = BuildServices(target, cachePath: cachePath, readOnly: false);
+
+    // The builder turns event-count and state-read errors into "Skipped" results. Read both once up front so an
+    // unreachable or broken store is reported as an error (exit 1) instead of a skip.
+    await services.GetRequiredService<IEventStore>().GetEventCountAsync();
+    await ListStoredStatesAsync(services, target);
+
     var builder = services.GetRequiredService<MultiProjectionStateBuilder>();
 
     var options = new MultiProjectionBuildOptions
@@ -911,7 +921,7 @@ static async Task<int> BuildProjectionStatesAsync(
         Console.WriteLine($"Building projector: {projectorName}");
         var result = await builder.BuildProjectorAsync(projectorName, options);
         PrintBuildResult(result, verbose);
-        if (result.Status == BuildStatus.Failed)
+        if (IsBuildError(result))
         {
             throw new CliException($"Build failed for {result.ProjectorName}: {result.Reason}");
         }
@@ -930,8 +940,8 @@ static async Task<int> BuildProjectionStatesAsync(
     }
 
     var succeeded = results.Count(r => r.Status == BuildStatus.Success);
-    var skipped = results.Count(r => r.Status == BuildStatus.Skipped);
-    var failed = results.Count(r => r.Status == BuildStatus.Failed);
+    var skipped = results.Count(r => r.Status == BuildStatus.Skipped && !IsBuildError(r));
+    var failed = results.Count(IsBuildError);
 
     Console.WriteLine(new string('=', 80));
     Console.WriteLine($"Summary: {succeeded} succeeded, {skipped} skipped, {failed} failed");
@@ -939,12 +949,18 @@ static async Task<int> BuildProjectionStatesAsync(
     if (failed > 0)
     {
         var reasons = results
-            .Where(r => r.Status == BuildStatus.Failed)
+            .Where(IsBuildError)
             .Select(r => $"  {r.ProjectorName}: {r.Reason}");
         throw new CliException($"{failed} projector build(s) failed:\n{string.Join("\n", reasons)}");
     }
     return 0;
 }
+
+// Failed results, and "Skipped" results that the builder produced from an error
+// ("Failed to get event count: ..." / "Failed to get current state: ...").
+static bool IsBuildError(ProjectorBuildResult result) =>
+    result.Status == BuildStatus.Failed ||
+    (result.Status == BuildStatus.Skipped && result.Reason.StartsWith("Failed to ", StringComparison.Ordinal));
 
 static Task<int> ListProjectorsAsync()
 {
@@ -1424,7 +1440,9 @@ static async Task<int> ShowProjectionAsync(ConnectionTarget target, string? proj
         var state = await stateStore.GetLatestForVersionAsync(info.ProjectorName, info.ProjectorVersion);
         if (state is null)
         {
-            Console.WriteLine("  Could not fetch full state record.");
+            // Listed a moment ago but gone now (deleted or replaced concurrently)
+            Console.Error.WriteLine($"  Error: Could not fetch the state record of {info.ProjectorName} (v{info.ProjectorVersion}).");
+            readFailures++;
             continue;
         }
 
@@ -1880,6 +1898,7 @@ static async Task<int> ShowCacheStatsAsync(string cacheDir)
     }
 
     var domainTypes = DomainType.GetDomainTypes();
+    var failures = 0;
     foreach (var cachePath in cacheFiles)
     {
         // Get file info
@@ -1888,9 +1907,10 @@ static async Task<int> ShowCacheStatsAsync(string cacheDir)
         Console.WriteLine($"File Size: {FormatBytes(fileInfo.Length)}");
         Console.WriteLine($"Last Modified: {fileInfo.LastWriteTimeUtc:yyyy-MM-dd HH:mm:ss} UTC");
 
-        // Open the cache read-only without schema initialization
+        // Open the cache read-only without schema initialization. Caches are CLI-owned, so a path that cannot be
+        // expressed read-only is opened normally (still without schema initialization).
         var localStore = new SqliteEventStore(
-            ToReadOnlySqlitePath(cachePath),
+            TryToReadOnlySqlitePath(cachePath) ?? cachePath,
             domainTypes.EventTypes,
             new SqliteEventStoreOptions { AutoCreateDatabase = false },
             serviceIdProvider: CreateServiceIdProvider());
@@ -1900,36 +1920,28 @@ static async Task<int> ShowCacheStatsAsync(string cacheDir)
         {
             Console.WriteLine($"Total Events: {await localStore.GetEventCountAsync():N0}");
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            // Count unavailable: keep showing the rest of the cache statistics.
+            Console.Error.WriteLine($"  Error: Could not count events in {cachePath}: {ex.Message}");
+            failures++;
         }
 
-        // Get metadata
+        // Get metadata (the stored source is shown through the allowlist; legacy caches stored raw text)
         var metadata = await localStore.GetMetadataAsync();
         if (metadata != null)
         {
             Console.WriteLine("Cache Metadata:");
-            Console.WriteLine($"  Source: {metadata.RemoteEndpoint}");
-            Console.WriteLine($"  Database Name: {metadata.DatabaseName}");
+            Console.WriteLine($"  Source: {ConnectionIdentity.DescribeStoredSource(metadata.RemoteEndpoint)}");
+            Console.WriteLine($"  Database Name: {ConnectionIdentity.DescribeStoredSource(metadata.DatabaseName)}");
             Console.WriteLine($"  Last Sync: {metadata.UpdatedUtc:yyyy-MM-dd HH:mm:ss} UTC");
             Console.WriteLine($"  Last SortableUniqueId: {metadata.LastCachedSortableUniqueId}");
             Console.WriteLine($"  Schema Version: {metadata.SchemaVersion}");
         }
 
         // Get tag summary
-        List<TagInfo>? tags;
         try
         {
-            tags = (await localStore.GetAllTagsAsync()).ToList();
-        }
-        catch (Exception)
-        {
-            tags = null;
-        }
-
-        if (tags is not null)
-        {
+            var tags = (await localStore.GetAllTagsAsync()).ToList();
             var tagGroups = tags.GroupBy(t => t.TagGroup).ToList();
 
             Console.WriteLine($"Tags: {tags.Count} total across {tagGroups.Count} groups");
@@ -1944,7 +1956,17 @@ static async Task<int> ShowCacheStatsAsync(string cacheDir)
                 Console.WriteLine($"  ... and {tagGroups.Count - 5} more groups");
             }
         }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"  Error: Could not read tags in {cachePath}: {ex.Message}");
+            failures++;
+        }
         Console.WriteLine();
+    }
+
+    if (failures > 0)
+    {
+        throw new CliException($"{failures} cache read(s) failed.");
     }
     return 0;
 }

@@ -262,7 +262,7 @@ Options:
 - `--connection-string, -c` - PostgreSQL connection string
 - `--cosmos-connection-string` - Cosmos DB connection string
 - `--cosmos-database` - Cosmos DB database name
-- `--sqlite-path` - SQLite event store file for `-d sqlite` (the `events.db` the ApiService writes with `Sekiban:Database=sqlite`). Read commands open it read-only and never create, migrate or switch it to WAL; the file must already contain the `dcb_events` table
+- `--sqlite-path` - SQLite event store file for `-d sqlite` (the `events.db` the ApiService writes with `Sekiban:Database=sqlite`). Read commands open it read-only and never create, migrate or switch it to WAL; the file must already contain the `dcb_events` table. The path must not contain `;`, `=` or quotes, because it is passed to the Sekiban SQLite stores as a connection-string value
 
 ### build
 
@@ -398,7 +398,7 @@ dotnet run -- cache-clear --cache-dir ./cache
 dotnet run -- cache-clear --cache-dir ./cache --yes
 ```
 
-Caches are stored per connection (`<cache-dir>/<service id>/<database>-<hash>/events.db`; the hash excludes passwords and keys), so a cache synced from one database is never read for another. `cache-stats` and `cache-clear` cover every cache under the directory.
+Caches are stored per connection (`<cache-dir>/<service id>/<database>-<hash>/events.db`; the hash excludes passwords and keys), so a cache synced from one database is never read for another. A cache is only used when the connection names its database (Postgres `Database`/`DB`, Cosmos `AccountEndpoint`); `Search Path` is part of the identity. `cache-stats` and `cache-clear` cover every cache under the directory.
 
 ## Building Services
 

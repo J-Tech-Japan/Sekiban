@@ -11,13 +11,20 @@ using System.Text.Json;
 /// </summary>
 internal static class ConnectionIdentity
 {
-    private static readonly HashSet<string> AllowedKeys = new(StringComparer.OrdinalIgnoreCase)
+    // Allowlisted keys (spaces removed, lower case) mapped to one canonical name, so aliases such as Npgsql's
+    // Server/Host, DB/Database, User Id/Username or SearchPath/Search Path give the same identity.
+    private static readonly Dictionary<string, string> AllowedKeys = new(StringComparer.OrdinalIgnoreCase)
     {
-        "host", "server", "data source", "datasource", "address", "port",
-        "database", "initial catalog", "dbname",
-        "username", "user name", "user id", "userid", "uid",
-        "accountendpoint", "serviceurl", "service url", "region", "service id", "serviceid"
+        ["host"] = "host", ["server"] = "host", ["address"] = "host", ["datasource"] = "host",
+        ["port"] = "port",
+        ["database"] = "database", ["db"] = "database", ["initialcatalog"] = "database", ["dbname"] = "database",
+        ["username"] = "username", ["userid"] = "username", ["uid"] = "username",
+        // Schema selection: Sekiban's Postgres provider uses unqualified table names, so these select the data.
+        ["searchpath"] = "searchpath", ["options"] = "options",
+        ["accountendpoint"] = "accountendpoint", ["serviceurl"] = "serviceurl", ["region"] = "region", ["serviceid"] = "serviceid"
     };
+
+    private const string LegacySourceNotShown = "(legacy cache; source not shown)";
 
     /// <summary>Allowlisted key/value pairs (lower-case keys, sorted). Throws <see cref="CliException" /> when unparsable.</summary>
     public static IReadOnlyList<KeyValuePair<string, string>> GetPublicParts(string connectionString)
@@ -33,13 +40,62 @@ internal static class ConnectionIdentity
         }
 
         return builder.Keys.Cast<string>()
-            .Where(AllowedKeys.Contains)
-            .Select(key => new KeyValuePair<string, string>(
-                key.ToLowerInvariant(),
-                RemoveUrlSecrets(Convert.ToString(builder[key]) ?? "")))
+            .Select(key => (Key: key, Canonical: AllowedKeys.GetValueOrDefault(key.Replace(" ", ""))))
+            .Where(entry => entry.Canonical != null)
+            .Select(entry => new KeyValuePair<string, string>(
+                entry.Canonical!,
+                RemoveUrlSecrets(Convert.ToString(builder[entry.Key]) ?? "")))
             .OrderBy(pair => pair.Key, StringComparer.Ordinal)
             .ThenBy(pair => pair.Value, StringComparer.Ordinal)
             .ToList();
+    }
+
+    /// <summary>
+    ///     Throws unless the connection names what it reads (Postgres: a database; Cosmos: an account endpoint).
+    ///     Required before a cache is used or filled, so caches of different databases are never mixed.
+    /// </summary>
+    public static void EnsureIdentifiesDatabase(string databaseType, string connectionString)
+    {
+        var required = databaseType switch
+        {
+            "postgres" => "database",
+            "cosmos" => "accountendpoint",
+            _ => null
+        };
+        if (required != null && GetPublicParts(connectionString).All(pair => pair.Key != required))
+        {
+            throw new CliException(
+                $"The {databaseType} connection string has no {(required == "database" ? "Database (or DB)" : "AccountEndpoint")} value, " +
+                "so its cache cannot be identified. Add it to the connection string or use --cache-mode off.");
+        }
+    }
+
+    /// <summary>
+    ///     Safe form of a source stored in cache metadata. New caches store <see cref="Describe" /> output (or a SQLite
+    ///     path); legacy caches stored the first 50 characters of the raw connection string, which may contain secrets.
+    /// </summary>
+    public static string DescribeStoredSource(string? stored)
+    {
+        if (string.IsNullOrWhiteSpace(stored))
+        {
+            return LegacySourceNotShown;
+        }
+        if (!stored.Contains('=') && !stored.Contains(';'))
+        {
+            // SQLite source path
+            return stored;
+        }
+        try
+        {
+            var parts = GetPublicParts(stored.EndsWith("...", StringComparison.Ordinal) ? stored[..^3] : stored);
+            return parts.Count == 0
+                ? LegacySourceNotShown
+                : string.Join(";", parts.Select(pair => $"{pair.Key}={pair.Value}"));
+        }
+        catch (CliException)
+        {
+            return LegacySourceNotShown;
+        }
     }
 
     /// <summary>Human readable description without secrets (sqlite: the full file path).</summary>
