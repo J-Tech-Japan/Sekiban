@@ -26,6 +26,7 @@ import { cn } from "@/lib/utils";
 import { RequireAuth } from "@/components/auth/require-auth";
 
 type ReservationStatus = "Draft" | "Held" | "Confirmed" | "Cancelled" | "Rejected" | "Expired";
+const inactiveStatuses: ReadonlySet<ReservationStatus> = new Set<ReservationStatus>(["Cancelled", "Rejected", "Expired"]);
 type ReservationDetails = {
   reservationId: string;
   roomId: string;
@@ -200,6 +201,13 @@ function ReservationsContent() {
     roomId: selectedRoomId || undefined,
     waitForSortableUniqueId: lastSortableUniqueId,
   });
+
+  // The calendar grids show only reservations that still occupy the room.
+  // Cancelled, rejected and expired ones stay visible in the lists below.
+  const gridReservations = useMemo(
+    () => reservations?.filter((r) => !inactiveStatuses.has(r.status as ReservationStatus)),
+    [reservations]
+  );
 
   const { data: authStatus } = trpc.auth.status.useQuery();
   const isAdmin = authStatus?.roles?.includes("Admin") ?? false;
@@ -588,10 +596,10 @@ function ReservationsContent() {
   };
 
   const layoutByDay = useMemo(() => {
-    if (!reservations) return new Map<string, Map<string, ReservationLayout>>();
+    if (!gridReservations) return new Map<string, Map<string, ReservationLayout>>();
     const byDay = new Map<string, ReservationDetails[]>();
 
-    for (const res of reservations) {
+    for (const res of gridReservations) {
       const details: ReservationDetails = {
         reservationId: res.reservationId,
         roomId: res.roomId,
@@ -616,13 +624,13 @@ function ReservationsContent() {
       layouts.set(dayKey, buildDayLayout(items));
     }
     return layouts;
-  }, [reservations]);
+  }, [gridReservations]);
 
   const layoutByDayRoom = useMemo(() => {
-    if (!reservations) return new Map<string, Map<string, Map<string, ReservationLayout>>>();
+    if (!gridReservations) return new Map<string, Map<string, Map<string, ReservationLayout>>>();
     const byDayRoom = new Map<string, Map<string, ReservationDetails[]>>();
 
-    for (const res of reservations) {
+    for (const res of gridReservations) {
       const details: ReservationDetails = {
         reservationId: res.reservationId,
         roomId: res.roomId,
@@ -653,7 +661,7 @@ function ReservationsContent() {
       layouts.set(dayKey, roomLayouts);
     }
     return layouts;
-  }, [reservations]);
+  }, [gridReservations]);
 
   const previousWeek = () => {
     const prev = new Date(currentWeek);
@@ -687,11 +695,11 @@ function ReservationsContent() {
 
   // Get reservations for a specific day and time slot
   const getReservationsForSlot = (day: Date, timeSlot: string) => {
-    if (!reservations) return [];
+    if (!gridReservations) return [];
     const dayStr = formatDate(day);
     const { slotStart, slotEnd } = getSlotBounds(dayStr, timeSlot);
 
-    return reservations.filter((r) => {
+    return gridReservations.filter((r) => {
       const startDate = new Date(r.startTime);
       const endDate = new Date(r.endTime);
       const resDateStr = formatDate(startDate);
@@ -702,11 +710,11 @@ function ReservationsContent() {
   };
 
   const getReservationsForSlotByRoom = (day: Date, timeSlot: string, roomId: string) => {
-    if (!reservations) return [];
+    if (!gridReservations) return [];
     const dayStr = formatDate(day);
     const { slotStart, slotEnd } = getSlotBounds(dayStr, timeSlot);
 
-    return reservations.filter((r) => {
+    return gridReservations.filter((r) => {
       if (r.roomId !== roomId) return false;
       const startDate = new Date(r.startTime);
       const endDate = new Date(r.endTime);
@@ -1488,7 +1496,8 @@ function ReservationsContent() {
                   {selectedReservation.requiresApproval ? "Approve & Confirm" : "Confirm"}
                 </Button>
               )}
-              {(selectedReservation.status === "Confirmed" || selectedReservation.status === "Held" || selectedReservation.status === "Draft") && (
+              {(isAdmin || selectedReservation.organizerId === authStatus?.id) &&
+                (selectedReservation.status === "Confirmed" || selectedReservation.status === "Held" || selectedReservation.status === "Draft") && (
                 <Button variant="destructive" onClick={openCancelModal}>
                   Cancel Reservation
                 </Button>

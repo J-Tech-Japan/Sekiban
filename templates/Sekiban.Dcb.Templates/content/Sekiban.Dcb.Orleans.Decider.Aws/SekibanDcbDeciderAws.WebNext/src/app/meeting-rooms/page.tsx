@@ -34,6 +34,10 @@ export default function MeetingRoomsPage() {
 function MeetingRoomsContent() {
   const [lastSortableUniqueId, setLastSortableUniqueId] = useState<string | undefined>();
 
+  // Creating and editing rooms is limited to administrators (the API enforces the same rule)
+  const { data: authStatus } = trpc.auth.status.useQuery();
+  const isAdmin = authStatus?.roles?.includes("Admin") ?? false;
+
   // Modal state
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -189,12 +193,14 @@ function MeetingRoomsContent() {
             Manage meeting rooms and their equipment
           </p>
         </div>
-        <Button onClick={() => setIsAddModalOpen(true)} className="gap-2">
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-          </svg>
-          Add Room
-        </Button>
+        {isAdmin && (
+          <Button onClick={() => setIsAddModalOpen(true)} className="gap-2">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+            Add Room
+          </Button>
+        )}
       </div>
 
       {/* Stats Cards */}
@@ -330,9 +336,11 @@ function MeetingRoomsContent() {
                         </Badge>
                       </TableCell>
                       <TableCell className="text-right">
-                        <Button variant="outline" size="sm" onClick={() => openEditModal(room)}>
-                          Edit
-                        </Button>
+                        {isAdmin && (
+                          <Button variant="outline" size="sm" onClick={() => openEditModal(room)}>
+                            Edit
+                          </Button>
+                        )}
                       </TableCell>
                     </TableRow>
                   ))}
@@ -348,7 +356,7 @@ function MeetingRoomsContent() {
               </div>
               <h3 className="text-lg font-medium mb-1">No rooms yet</h3>
               <p className="text-sm text-muted-foreground mb-4">Get started by adding your first meeting room</p>
-              <Button onClick={() => setIsAddModalOpen(true)}>Add Room</Button>
+              {isAdmin && <Button onClick={() => setIsAddModalOpen(true)}>Add Room</Button>}
             </div>
           )}
         </CardContent>

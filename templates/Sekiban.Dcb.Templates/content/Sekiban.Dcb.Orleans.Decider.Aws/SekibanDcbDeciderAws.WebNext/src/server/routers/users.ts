@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { router, publicProcedure } from "../api/trpc";
 import { createAuthHeaders } from "../lib/auth-helpers";
-import { extractErrorMessage } from "../lib/api-error-helpers";
+import { apiStatusError, extractErrorMessage } from "../lib/api-error-helpers";
 
 const userDirectoryItemSchema = z.object({
   userId: z.string().uuid(),
@@ -40,12 +40,12 @@ export const usersRouter = router({
       const res = await fetch(`${process.env.API_BASE_URL}/api/users?${params.toString()}`, { headers });
       if (!res.ok) {
         if (res.status === 401) {
-          throw new Error("Authentication required");
+          throw apiStatusError(res.status, "Authentication required");
         }
         if (res.status === 403) {
-          throw new Error("Admin access required");
+          throw apiStatusError(res.status, "Admin access required");
         }
-        throw new Error("Failed to fetch users");
+        throw apiStatusError(res.status, await extractErrorMessage(res, "Failed to fetch users"));
       }
       const data = await res.json();
       return z.array(userDirectoryItemSchema).parse(data);

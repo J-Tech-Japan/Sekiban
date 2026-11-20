@@ -20,6 +20,8 @@ const approvalInboxItemSchema = z.object({
   approverIds: z.array(z.string().uuid()),
   requestedAt: z.string(),
   status: z.string(),
+  decidedAt: z.string().nullable().optional(),
+  decisionComment: z.string().nullable().optional(),
 });
 
 export const approvalsRouter = router({

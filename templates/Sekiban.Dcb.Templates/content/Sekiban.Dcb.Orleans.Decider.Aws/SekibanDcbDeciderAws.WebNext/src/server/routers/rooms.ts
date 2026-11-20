@@ -83,6 +83,9 @@ export const roomsRouter = router({
         if (res.status === 401) {
           throw new Error("Authentication required");
         }
+        if (res.status === 403) {
+          throw new Error("Admin access required");
+        }
         const error = await extractErrorMessage(res, "Failed to create room");
         throw new Error(error);
       }
@@ -110,6 +113,9 @@ export const roomsRouter = router({
       if (!res.ok) {
         if (res.status === 401) {
           throw new Error("Authentication required");
+        }
+        if (res.status === 403) {
+          throw new Error("Admin access required");
         }
         const error = await extractErrorMessage(res, "Failed to update room");
         throw new Error(error);

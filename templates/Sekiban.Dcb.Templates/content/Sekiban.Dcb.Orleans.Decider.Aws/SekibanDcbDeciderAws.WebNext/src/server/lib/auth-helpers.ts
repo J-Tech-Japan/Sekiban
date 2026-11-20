@@ -1,4 +1,5 @@
 import { cookies } from "next/headers";
+import { z } from "zod";
 
 export const ACCESS_TOKEN_COOKIE = "bff_access_token";
 export const REFRESH_TOKEN_COOKIE = "bff_refresh_token";
@@ -99,4 +100,46 @@ export async function clearSessionCookies(): Promise<void> {
   cookieStore.delete(ACCESS_TOKEN_COOKIE);
   cookieStore.delete(REFRESH_TOKEN_COOKIE);
   cookieStore.delete(REFRESH_EXPIRES_COOKIE);
+}
+
+const refreshedTokensSchema = z.object({
+  accessToken: z.string(),
+  refreshToken: z.string(),
+  refreshTokenExpires: z.string(),
+});
+
+/**
+ * Exchange the stored refresh token for a new access token and store the new tokens in the
+ * session cookies. Returns the new access token, or null when the session cannot be refreshed.
+ */
+export async function refreshSessionTokens(): Promise<string | null> {
+  const session = await getSessionTokens();
+  if (!session) {
+    return null;
+  }
+
+  const refreshRes = await fetch(`${process.env.API_BASE_URL}/auth/refresh`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      accessToken: session.accessToken,
+      refreshToken: session.refreshToken,
+    }),
+    cache: "no-store",
+  });
+  if (!refreshRes.ok) {
+    return null;
+  }
+
+  const parsed = refreshedTokensSchema.safeParse(await refreshRes.json());
+  if (!parsed.success) {
+    return null;
+  }
+
+  await setSessionCookies({
+    accessToken: parsed.data.accessToken,
+    refreshToken: parsed.data.refreshToken,
+    refreshExpiresAt: new Date(parsed.data.refreshTokenExpires),
+  });
+  return parsed.data.accessToken;
 }
