@@ -57,7 +57,6 @@ public class ReservationAuthorizationTests
         await RegisterAsync(_organizerId, "Organizer", "organizer@example.com", "User");
         await RegisterAsync(_otherUserId, "Other", "other@example.com", "User");
         await RegisterAsync(_adminId, "Admin", "admin@example.com", "User");
-        await _executor.ExecuteAsync(new GrantUserRole { UserId = _adminId, Role = "Admin" });
     }
 
     // D-1 / D-2: endpoint policies
@@ -124,8 +123,83 @@ public class ReservationAuthorizationTests
     public async Task Cancel_ByAdministrator_Succeeds()
     {
         var reservationId = await QuickReserveAsync(_openRoomId);
-        await CancelAsync(reservationId, _adminId);
+        await CancelAsync(reservationId, _adminId, isAdmin: true);
         Assert.That(await ReservationStateAsync(reservationId), Is.InstanceOf<ReservationState.ReservationCancelled>());
+    }
+
+    [Test]
+    public async Task Cancel_ByDomainAdminWithoutAuthenticatedAdminRole_IsForbidden()
+    {
+        // The domain UserAccess role is not an authorization source; only the token's Admin role is
+        await _executor.ExecuteAsync(new GrantUserRole { UserId = _otherUserId, Role = "Admin" });
+        var reservationId = await QuickReserveAsync(_openRoomId);
+        Assert.ThrowsAsync<UnauthorizedAccessException>(() => CancelAsync(reservationId, _otherUserId));
+    }
+
+    [Test]
+    public async Task Hold_ByDomainAdminWithoutAuthenticatedAdminRole_IsForbidden()
+    {
+        await _executor.ExecuteAsync(new GrantUserRole { UserId = _otherUserId, Role = "Admin" });
+        var reservationId = await CreateDraftAsync(_openRoomId);
+        Assert.ThrowsAsync<UnauthorizedAccessException>(() => HoldAsync(reservationId, _otherUserId));
+    }
+
+    [Test]
+    public void DraftFromRequestBody_ClientSuppliedAdminFlagAndOrganizer_AreOverwritten()
+    {
+        var json = $$"""
+            {"reservationId":"{{Guid.CreateVersion7()}}","roomId":"{{_openRoomId}}",
+             "organizerId":"{{_adminId}}","organizerName":"Admin","actingUserIsAdmin":true,
+             "startTime":"2030-01-01T09:00:00Z","endTime":"2030-01-01T10:00:00Z","purpose":"x"}
+            """;
+        var fromClient = System.Text.Json.JsonSerializer.Deserialize<CreateReservationDraft>(
+            json, new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web))!;
+        Assert.That(fromClient.ActingUserIsAdmin, Is.True); // the body can carry it ...
+
+        var user = new OrganizerContext(_otherUserId, "Other", IsAdmin: false);
+        var command = ActingUserCommands.ForActingUser(fromClient, user);
+
+        Assert.That(command.ActingUserIsAdmin, Is.False); // ... but the endpoint overwrites it from the token
+        Assert.That(command.OrganizerId, Is.EqualTo(_otherUserId));
+        Assert.That(command.OrganizerName, Is.EqualTo("Other"));
+    }
+
+    [TestCase("Admin", true)]
+    [TestCase("User", false)]
+    public void Resolver_TakesAdminFromTheTokenRole(string role, bool expected)
+    {
+        var context = new DefaultHttpContext
+        {
+            User = new System.Security.Claims.ClaimsPrincipal(new System.Security.Claims.ClaimsIdentity(
+                [
+                    new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.NameIdentifier, _otherUserId.ToString()),
+                    new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.Role, role)
+                ],
+                "Test"))
+        };
+        var result = ReservationOrganizerResolver.Resolve(context);
+        Assert.That(result.Organizer!.Value.IsAdmin, Is.EqualTo(expected));
+    }
+
+    [Test]
+    public async Task TagConsistencyConflict_MapsTo409()
+    {
+        var context = new DefaultHttpContext
+        { RequestServices = new ServiceCollection().BuildServiceProvider(), Response = { Body = new MemoryStream() } };
+        var conflict = new InvalidOperationException(
+            "Failed to reserve tags: Tag Reservation:x: Tag Reservation:x has been modified. Expected version: a, Current version: b");
+        await new GlobalExceptionHandler(NullLogger<GlobalExceptionHandler>.Instance).TryHandleAsync(context, conflict, default);
+        Assert.That(context.Response.StatusCode, Is.EqualTo(StatusCodes.Status409Conflict));
+    }
+
+    [Test]
+    public async Task OtherInvalidOperation_StaysA500()
+    {
+        var context = new DefaultHttpContext
+        { RequestServices = new ServiceCollection().BuildServiceProvider(), Response = { Body = new MemoryStream() } };
+        await new GlobalExceptionHandler(NullLogger<GlobalExceptionHandler>.Instance)
+            .TryHandleAsync(context, new InvalidOperationException("Something else"), default);
+        Assert.That(context.Response.StatusCode, Is.EqualTo(StatusCodes.Status500InternalServerError));
     }
 
     [Test]
@@ -349,7 +423,7 @@ public class ReservationAuthorizationTests
     public async Task Hold_ByAdministrator_Succeeds()
     {
         var reservationId = await CreateDraftAsync(_openRoomId);
-        await HoldAsync(reservationId, _adminId);
+        await HoldAsync(reservationId, _adminId, isAdmin: true);
         Assert.That(await ReservationStateAsync(reservationId), Is.InstanceOf<ReservationState.ReservationHeld>());
     }
 
@@ -362,7 +436,7 @@ public class ReservationAuthorizationTests
     [Test]
     public void Cancel_UnknownReservation_IsDomainError()
     {
-        var error = Assert.ThrowsAsync<ApplicationException>(() => CancelAsync(Guid.CreateVersion7(), _adminId));
+        var error = Assert.ThrowsAsync<ApplicationException>(() => CancelAsync(Guid.CreateVersion7(), _adminId, isAdmin: true));
         Assert.That(error!.Message, Does.Contain("not found"));
     }
 
@@ -455,16 +529,18 @@ public class ReservationAuthorizationTests
         return reservationId;
     }
 
-    private Task CancelAsync(Guid reservationId, Guid requestedBy) =>
+    // isAdmin stands for the authenticated Admin role, which the API copies onto the command
+    private Task CancelAsync(Guid reservationId, Guid requestedBy, bool isAdmin = false) =>
         _executor.ExecuteAsync(new CancelReservation
         {
-            ReservationId = reservationId, Reason = "No longer needed", RequestedByUserId = requestedBy
+            ReservationId = reservationId, Reason = "No longer needed", RequestedByUserId = requestedBy,
+            ActingUserIsAdmin = isAdmin
         });
 
-    private Task HoldAsync(Guid reservationId, Guid requestedBy) =>
+    private Task HoldAsync(Guid reservationId, Guid requestedBy, bool isAdmin = false) =>
         _executor.ExecuteAsync(new CommitReservationHold
         {
-            ReservationId = reservationId, RequestedByUserId = requestedBy
+            ReservationId = reservationId, RequestedByUserId = requestedBy, ActingUserIsAdmin = isAdmin
         });
 
     private Task RejectAsync(Guid reservationId, Guid approvalRequestId) =>

@@ -100,11 +100,7 @@ public static class ReservationEndpoints
         }
 
         var organizer = organizerResult.Organizer!.Value;
-        var updatedCommand = command with
-        {
-            OrganizerId = organizer.OrganizerId,
-            OrganizerName = organizer.DisplayName
-        };
+        var updatedCommand = ActingUserCommands.ForActingUser(command, organizer);
         var result = await executor.ExecuteAsync(updatedCommand);
         var createdEvent = result.Events.FirstOrDefault(m => m.Payload is ReservationDraftCreated)?.Payload.As<ReservationDraftCreated>();
         return Results.Ok(new
@@ -135,6 +131,7 @@ public static class ReservationEndpoints
         var command = new CommitReservationHold
         {
             RequestedByUserId = requesterResult.Organizer!.Value.OrganizerId,
+            ActingUserIsAdmin = requesterResult.Organizer!.Value.IsAdmin,
             ReservationId = reservationId,
             RoomId = request.RoomId,
             RequiresApproval = request.RequiresApproval,
@@ -190,7 +187,8 @@ public static class ReservationEndpoints
             ReservationId = reservationId,
             RoomId = request.RoomId,
             Reason = request.Reason,
-            RequestedByUserId = requesterResult.Organizer!.Value.OrganizerId
+            RequestedByUserId = requesterResult.Organizer!.Value.OrganizerId,
+            ActingUserIsAdmin = requesterResult.Organizer!.Value.IsAdmin
         };
         var result = await executor.ExecuteAsync(command);
         return Results.Ok(new
@@ -259,7 +257,8 @@ public static class ReservationEndpoints
             request.EndTime,
             request.Purpose,
             request.SelectedEquipment,
-            request.ApprovalRequestComment);
+            request.ApprovalRequestComment,
+            organizer.IsAdmin);
 
         return Results.Ok(new
         {

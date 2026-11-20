@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { router, publicProcedure } from "../api/trpc";
 import { createAuthHeaders } from "../lib/auth-helpers";
-import { extractErrorMessage } from "../lib/api-error-helpers";
+import { apiFailure, extractErrorMessage } from "../lib/api-error-helpers";
 
 // Reservation status types matching the backend discriminated union
 const reservationStatusSchema = z.enum([
@@ -106,8 +106,7 @@ export const reservationsRouter = router({
         if (res.status === 401) {
           throw new Error("Authentication required");
         }
-        const error = await extractErrorMessage(res, "Failed to create quick reservation");
-        throw new Error(error);
+        throw await apiFailure(res, "Failed to create quick reservation");
       }
       return res.json();
     }),
@@ -134,8 +133,7 @@ export const reservationsRouter = router({
         if (res.status === 401) {
           throw new Error("Authentication required");
         }
-        const error = await extractErrorMessage(res, "Failed to create reservation draft");
-        throw new Error(error);
+        throw await apiFailure(res, "Failed to create reservation draft");
       }
       return res.json();
     }),
@@ -170,8 +168,7 @@ export const reservationsRouter = router({
         if (res.status === 401) {
           throw new Error("Authentication required");
         }
-        const error = await extractErrorMessage(res, "Failed to commit hold");
-        throw new Error(error);
+        throw await apiFailure(res, "Failed to commit hold");
       }
       return res.json();
     }),
@@ -203,8 +200,7 @@ export const reservationsRouter = router({
         if (res.status === 403) {
           throw new Error("Admin access required");
         }
-        const error = await extractErrorMessage(res, "Failed to confirm reservation");
-        throw new Error(error);
+        throw await apiFailure(res, "Failed to confirm reservation");
       }
       return res.json();
     }),
@@ -235,8 +231,7 @@ export const reservationsRouter = router({
         if (res.status === 401) {
           throw new Error("Authentication required");
         }
-        const error = await extractErrorMessage(res, "Failed to cancel reservation");
-        throw new Error(error);
+        throw await apiFailure(res, "Failed to cancel reservation");
       }
       return res.json();
     }),

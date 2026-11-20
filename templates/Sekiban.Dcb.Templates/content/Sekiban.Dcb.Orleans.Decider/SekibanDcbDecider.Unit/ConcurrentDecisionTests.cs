@@ -13,6 +13,7 @@ using Sekiban.Dcb.Commands;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.Tags;
 using Sekiban.Dcb.Testing;
+using SekibanDcbDecider.ApiService.Exceptions;
 
 namespace SekibanDcbDecider.Unit;
 
@@ -59,7 +60,7 @@ public class ConcurrentDecisionTests
         // Run the real decision handler, but let the organizer's cancel commit after the handler has read
         // its state and before it appends its first event.
         var cancelCommitted = false;
-        Assert.That(
+        var error = Assert.CatchAsync(
             async () => await executor.ExecuteAsync(
                 decision,
                 (command, context) => RecordApprovalDecision.HandleAsync(
@@ -71,8 +72,10 @@ public class ConcurrentDecisionTests
                             ReservationId = reservationId, Reason = "Plans changed", RequestedByUserId = organizerId
                         });
                         cancelCommitted = true;
-                    }))),
-            Throws.Exception.With.Message.Contains("has been modified"));
+                    }))));
+        Assert.That(error!.Message, Does.Contain("has been modified"));
+        // The API answers this with 409 Conflict
+        Assert.That(GlobalExceptionHandler.IsConcurrencyConflict(error), Is.True);
 
         Assert.That(cancelCommitted, Is.True);
         var reservation = await executor.GetTagStateAsync(

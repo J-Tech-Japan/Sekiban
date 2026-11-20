@@ -61,3 +61,16 @@ const trpcCodeByStatus: Record<number, TrpcErrorCode> = {
 export function apiStatusError(status: number, message: string): TRPCError {
   return new TRPCError({ code: trpcCodeByStatus[status] ?? "INTERNAL_SERVER_ERROR", message });
 }
+
+export const CONFLICT_MESSAGE = "This was changed by someone else. Reload and try again.";
+
+/**
+ * Turn a failed API response into a tRPC error that keeps the HTTP status. A 409 (another user or
+ * request changed the same data first) gets a "reload and try again" message.
+ */
+export async function apiFailure(res: Response, fallback: string): Promise<TRPCError> {
+  if (res.status === 409) {
+    return apiStatusError(409, CONFLICT_MESSAGE);
+  }
+  return apiStatusError(res.status, await extractErrorMessage(res, fallback));
+}

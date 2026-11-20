@@ -38,6 +38,13 @@ public record CreateQuickReservation : ICommandWithHandler<CreateQuickReservatio
 
     public List<string> SelectedEquipment { get; init; } = [];
 
+    /// <summary>
+    ///     Whether the organizer (the acting user) is an administrator; administrators are exempt from the
+    ///     booking window and the monthly limit. The API always sets this from the authenticated
+    ///     user's role and overwrites any value sent by the client.
+    /// </summary>
+    public bool ActingUserIsAdmin { get; init; }
+
     public static async Task<EventOrNone> HandleAsync(
         CreateQuickReservation command,
         ICommandContext context)
@@ -52,7 +59,7 @@ public record CreateQuickReservation : ICommandWithHandler<CreateQuickReservatio
             throw new ApplicationException("Cannot create reservation in the past");
         }
 
-        await ReservationCreationRules.ValidateAsync(context, command.OrganizerId, command.StartTime);
+        await ReservationCreationRules.ValidateAsync(context, command.OrganizerId, command.StartTime, command.ActingUserIsAdmin);
 
         var roomTag = new RoomTag(command.RoomId);
         if (!await context.TagExistsAsync(roomTag))

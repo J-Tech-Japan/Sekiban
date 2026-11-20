@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { router, publicProcedure } from "../api/trpc";
 import { createAuthHeaders } from "../lib/auth-helpers";
-import { extractErrorMessage } from "../lib/api-error-helpers";
+import { apiFailure, extractErrorMessage } from "../lib/api-error-helpers";
 
 const approvalDecisionSchema = z.enum(["Approved", "Rejected"]);
 
@@ -90,8 +90,7 @@ export const approvalsRouter = router({
         if (res.status === 403) {
           throw new Error("Admin access required");
         }
-        const error = await extractErrorMessage(res, "Failed to record approval decision");
-        throw new Error(error);
+        throw await apiFailure(res, "Failed to record approval decision");
       }
       return res.json();
     }),

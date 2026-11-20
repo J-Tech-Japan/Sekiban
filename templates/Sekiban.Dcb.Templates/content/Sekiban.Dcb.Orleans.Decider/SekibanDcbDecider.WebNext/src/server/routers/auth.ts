@@ -3,7 +3,6 @@ import { z } from "zod";
 import { router, publicProcedure } from "../api/trpc";
 import {
   clearSessionCookies,
-  clearSessionCookiesIfUnchanged,
   getSessionTokens,
   refreshSessionTokens,
   setSessionCookies,
@@ -198,14 +197,13 @@ export const authRouter = router({
         if (retryRes.ok) {
           return userInfoSchema.parse(await retryRes.json());
         }
-        throw new TRPCError({ code: "SERVICE_UNAVAILABLE", message: "Authentication service unavailable" });
+        if (retryRes.status !== 401) {
+          throw new TRPCError({ code: "SERVICE_UNAVAILABLE", message: "Authentication service unavailable" });
+        }
       }
 
-      // The API rejected the refresh token: the session is over. Clear the cookies unless another
-      // request already stored newer tokens.
-      if (refreshed.status === "rejected") {
-        await clearSessionCookiesIfUnchanged(refreshed.refreshToken);
-      }
+      // No usable session (the refresh token was rejected, or the new token is not accepted).
+      // The cookies are not cleared here; a later login overwrites them and logout clears them.
       return {
         id: "",
         email: "",

@@ -49,11 +49,21 @@ public class ReservationCreationRulesTests
     [TestCase(true)]
     public async Task Administrator_IsExemptFromWindowAndLimit(bool quick)
     {
-        await _executor.ExecuteAsync(new GrantUserRole { UserId = _userId, Role = "Admin" });
+        // The administrator flag comes from the authenticated role (set by the API on the command)
         var start = NextMonth().AddMonths(1);
-        await CreateAsync(quick, start);
-        await CreateAsync(quick, start.AddHours(2));
+        await CreateAsync(quick, start, isAdmin: true);
+        await CreateAsync(quick, start.AddHours(2), isAdmin: true);
         Assert.That(await CountAsync(start), Is.EqualTo(2));
+    }
+
+    [TestCase(false)]
+    [TestCase(true)]
+    public async Task DomainAdminRole_WithoutTheAuthenticatedAdminFlag_IsNotExempt(bool quick)
+    {
+        // The domain UserAccess role is not used for authorization
+        await _executor.ExecuteAsync(new GrantUserRole { UserId = _userId, Role = "Admin" });
+        var error = Assert.ThrowsAsync<ApplicationException>(() => CreateAsync(quick, NextMonth().AddMonths(1)));
+        Assert.That(error!.Message, Is.EqualTo("Reservations can only be made for this month or next month."));
     }
 
     [TestCase(false)]
@@ -88,14 +98,15 @@ public class ReservationCreationRulesTests
         return ((UserMonthlyReservationState)state.Payload).ActiveRequestCount;
     }
 
-    private async Task CreateAsync(bool quick, DateTime start)
+    private async Task CreateAsync(bool quick, DateTime start, bool isAdmin = false)
     {
         if (quick)
         {
             await _executor.ExecuteAsync(new CreateQuickReservation
             {
                 ReservationId = Guid.CreateVersion7(), RoomId = _roomId, OrganizerId = _userId,
-                StartTime = start, EndTime = start.AddHours(1), Purpose = "Test reservation"
+                StartTime = start, EndTime = start.AddHours(1), Purpose = "Test reservation",
+                ActingUserIsAdmin = isAdmin
             });
         }
         else
@@ -103,7 +114,8 @@ public class ReservationCreationRulesTests
             await _executor.ExecuteAsync(new CreateReservationDraft
             {
                 ReservationId = Guid.CreateVersion7(), RoomId = _roomId, OrganizerId = _userId,
-                StartTime = start, EndTime = start.AddHours(1), Purpose = "Test reservation"
+                StartTime = start, EndTime = start.AddHours(1), Purpose = "Test reservation",
+                ActingUserIsAdmin = isAdmin
             });
         }
     }

@@ -1,16 +1,13 @@
 "use client";
 
 import { NavMenu } from "./nav-menu";
-import { trpc } from "@/lib/trpc";
+import { useAuthStatus } from "@/components/auth/use-auth-status";
 import Link from "next/link";
 
 export function MainLayout({ children }: { children: React.ReactNode }) {
-  const { data: authStatus, isLoading: authLoading, isFetching } = trpc.auth.status.useQuery(undefined, {
-    staleTime: 0,
-    refetchOnMount: "always",
-  });
+  const { data: authStatus, isLoading: authLoading, isFetching, serviceUnavailable } = useAuthStatus();
   // Show loading while fetching if not yet authenticated (prevents flash of "Please Login")
-  const showLoading = authLoading || (isFetching && !authStatus?.isAuthenticated);
+  const showLoading = !serviceUnavailable && (authLoading || (isFetching && !authStatus?.isAuthenticated));
   const isAuthenticated = authStatus?.isAuthenticated ?? false;
   const isAdmin = authStatus?.roles?.includes("Admin") ?? false;
   return (
@@ -58,6 +55,14 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
                     {authStatus.displayName || authStatus.email?.split("@")[0] || "User"}
                   </p>
                   <p className="text-xs text-sidebar-foreground/60 truncate">{authStatus.email}</p>
+                </div>
+              </div>
+            ) : serviceUnavailable ? (
+              <div className="flex items-center gap-3 rounded-lg bg-white/5 px-3 py-2">
+                <div className="h-8 w-8 rounded-full bg-sidebar-accent/20 animate-pulse" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-sidebar-foreground">Service unavailable</p>
+                  <p className="text-xs text-sidebar-foreground/60">Retrying...</p>
                 </div>
               </div>
             ) : (

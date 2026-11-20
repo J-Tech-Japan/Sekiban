@@ -40,6 +40,12 @@ public record CommitReservationHold : ICommandWithHandler<CommitReservationHold>
     /// </summary>
     public Guid RequestedByUserId { get; init; }
 
+    /// <summary>
+    ///     Whether the acting user is an administrator. The API always sets this from the authenticated
+    ///     user's role and overwrites any value sent by the client.
+    /// </summary>
+    public bool ActingUserIsAdmin { get; init; }
+
     public static async Task<EventOrNone> HandleAsync(
         CommitReservationHold command,
         ICommandContext context)
@@ -58,8 +64,7 @@ public record CommitReservationHold : ICommandWithHandler<CommitReservationHold>
             throw new ApplicationException($"Reservation {command.ReservationId} is not in draft state");
         }
 
-        if (command.RequestedByUserId != draft.OrganizerId
-            && !await ReservationAccessRules.IsAdminAsync(context, command.RequestedByUserId))
+        if (!ReservationAccessRules.IsOrganizerOrAdmin(command.RequestedByUserId, command.ActingUserIsAdmin, draft.OrganizerId))
         {
             throw new UnauthorizedAccessException("Only the organizer or an administrator can hold this reservation.");
         }

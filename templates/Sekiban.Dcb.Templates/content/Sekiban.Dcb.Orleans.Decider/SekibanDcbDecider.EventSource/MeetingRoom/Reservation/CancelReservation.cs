@@ -29,6 +29,12 @@ public record CancelReservation : ICommandWithHandler<CancelReservation>
     /// </summary>
     public Guid RequestedByUserId { get; init; }
 
+    /// <summary>
+    ///     Whether the acting user is an administrator. The API always sets this from the authenticated
+    ///     user's role and overwrites any value sent by the client.
+    /// </summary>
+    public bool ActingUserIsAdmin { get; init; }
+
     public static async Task<EventOrNone> HandleAsync(
         CancelReservation command,
         ICommandContext context)
@@ -51,8 +57,7 @@ public record CancelReservation : ICommandWithHandler<CancelReservation>
             _ => throw new ApplicationException($"Reservation {command.ReservationId} cannot be cancelled from state: {state.GetType().Name}")
         };
 
-        if (command.RequestedByUserId != organizerId
-            && !await ReservationAccessRules.IsAdminAsync(context, command.RequestedByUserId))
+        if (!ReservationAccessRules.IsOrganizerOrAdmin(command.RequestedByUserId, command.ActingUserIsAdmin, organizerId))
         {
             throw new UnauthorizedAccessException("Only the organizer or an administrator can cancel this reservation.");
         }

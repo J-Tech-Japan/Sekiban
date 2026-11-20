@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { router, publicProcedure } from "../api/trpc";
 import { createAuthHeaders } from "../lib/auth-helpers";
-import { extractErrorMessage } from "../lib/api-error-helpers";
+import { apiFailure, extractErrorMessage } from "../lib/api-error-helpers";
 
 const roomSchema = z.object({
   roomId: z.string().uuid(),
@@ -86,8 +86,7 @@ export const roomsRouter = router({
         if (res.status === 403) {
           throw new Error("Admin access required");
         }
-        const error = await extractErrorMessage(res, "Failed to create room");
-        throw new Error(error);
+        throw await apiFailure(res, "Failed to create room");
       }
       return res.json();
     }),
@@ -117,8 +116,7 @@ export const roomsRouter = router({
         if (res.status === 403) {
           throw new Error("Admin access required");
         }
-        const error = await extractErrorMessage(res, "Failed to update room");
-        throw new Error(error);
+        throw await apiFailure(res, "Failed to update room");
       }
       return res.json();
     }),

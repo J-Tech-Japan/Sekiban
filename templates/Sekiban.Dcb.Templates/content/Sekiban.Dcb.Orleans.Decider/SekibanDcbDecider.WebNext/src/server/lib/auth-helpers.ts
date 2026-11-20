@@ -120,15 +120,16 @@ const REFRESH_TIMEOUT_MS = 10_000;
 /**
  * Result of a refresh:
  * - "ok": new tokens were stored in the session cookies.
- * - "rejected": the API refused the refresh token (401/403). The session is over; callers may clear
- *   the cookies (with clearSessionCookiesIfUnchanged).
+ * - "rejected": the API refused the refresh token (401/403). The session is over and callers treat
+ *   the request as unauthenticated. Cookies are left as they are: another request may already have
+ *   stored newer tokens, a later login overwrites them, and an explicit logout clears them.
  * - "unavailable": the refresh could not be completed (network error, timeout, 5xx such as 503 while
  *   the API starts). The session may still be valid, so callers must not clear the cookies.
  * - "no-session": there are no session cookies.
  */
 export type RefreshOutcome =
   | { status: "ok"; accessToken: string }
-  | { status: "rejected"; refreshToken: string }
+  | { status: "rejected" }
   | { status: "unavailable" }
   | { status: "no-session" };
 
@@ -215,20 +216,8 @@ export async function refreshSessionTokens(): Promise<RefreshOutcome> {
       await setSessionCookies(result.tokens);
       return { status: "ok", accessToken: result.tokens.accessToken };
     case "rejected":
-      return { status: "rejected", refreshToken: key };
+      return { status: "rejected" };
     default:
       return { status: "unavailable" };
-  }
-}
-
-/**
- * Clear the session cookies after the API rejected the refresh token, but only when they still hold
- * the token that was rejected. If another request already stored newer tokens, keep them.
- * Never call this for a transient ("unavailable") refresh failure.
- */
-export async function clearSessionCookiesIfUnchanged(failedRefreshToken: string): Promise<void> {
-  const current = await getSessionTokens();
-  if (!current || current.refreshToken === failedRefreshToken) {
-    await clearSessionCookies();
   }
 }
