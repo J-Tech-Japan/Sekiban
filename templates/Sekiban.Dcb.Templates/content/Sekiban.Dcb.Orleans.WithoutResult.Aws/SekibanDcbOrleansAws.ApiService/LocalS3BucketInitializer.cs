@@ -22,7 +22,8 @@ public sealed class LocalS3BucketInitializer(
 
     /// <summary>
     ///     True only for an emulator endpoint on this machine or in the local container network
-    ///     (localhost, a loopback address, *.localhost, localstack, host.docker.internal).
+    ///     (localhost, a loopback address, *.localhost, localstack, *.localhost.localstack.cloud,
+    ///     host.docker.internal).
     ///     Any other URL, including real AWS endpoints, is never used to create buckets.
     /// </summary>
     public static bool IsLocalEndpoint(string? serviceUrl)
@@ -35,6 +36,8 @@ public sealed class LocalS3BucketInitializer(
         var host = uri.Host.Trim('[', ']').ToLowerInvariant();
         return host is "localhost" or "localstack" or "host.docker.internal"
             || host.EndsWith(".localhost", StringComparison.Ordinal)
+            || host == "localhost.localstack.cloud"
+            || host.EndsWith(".localhost.localstack.cloud", StringComparison.Ordinal)
             || (System.Net.IPAddress.TryParse(host, out var address) && System.Net.IPAddress.IsLoopback(address));
     }
     private static readonly TimeSpan RetryDelay = TimeSpan.FromSeconds(2);
