@@ -108,9 +108,50 @@ const refreshedTokensSchema = z.object({
   refreshTokenExpires: z.string(),
 });
 
+// Refresh tokens are single use. Several server requests can find the same expired access token at
+// once (auth.status, the SSE proxies, and requests sent before the browser received the new cookies),
+// so every refresh of one refresh token shares a single exchange, and its result is reused for a short
+// while. Without this, a second exchange of the already used token fails and logs the user out.
+const REFRESH_REUSE_MS = 60_000;
+const refreshStore = globalThis as typeof globalThis & {
+  __sekibanSessionRefreshes?: Map<string, Promise<SessionTokens | null>>;
+};
+const sessionRefreshes = (refreshStore.__sekibanSessionRefreshes ??= new Map());
+
+async function exchangeRefreshToken(session: SessionTokens): Promise<SessionTokens | null> {
+  try {
+    const refreshRes = await fetch(`${process.env.API_BASE_URL}/auth/refresh`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        accessToken: session.accessToken,
+        refreshToken: session.refreshToken,
+      }),
+      cache: "no-store",
+    });
+    if (!refreshRes.ok) {
+      return null;
+    }
+
+    const parsed = refreshedTokensSchema.safeParse(await refreshRes.json());
+    if (!parsed.success) {
+      return null;
+    }
+
+    return {
+      accessToken: parsed.data.accessToken,
+      refreshToken: parsed.data.refreshToken,
+      refreshExpiresAt: new Date(parsed.data.refreshTokenExpires),
+    };
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Exchange the stored refresh token for a new access token and store the new tokens in the
  * session cookies. Returns the new access token, or null when the session cannot be refreshed.
+ * Concurrent calls with the same refresh token share one exchange.
  */
 export async function refreshSessionTokens(): Promise<string | null> {
   const session = await getSessionTokens();
@@ -118,28 +159,30 @@ export async function refreshSessionTokens(): Promise<string | null> {
     return null;
   }
 
-  const refreshRes = await fetch(`${process.env.API_BASE_URL}/auth/refresh`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      accessToken: session.accessToken,
-      refreshToken: session.refreshToken,
-    }),
-    cache: "no-store",
-  });
-  if (!refreshRes.ok) {
+  const key = session.refreshToken;
+  let pending = sessionRefreshes.get(key);
+  if (!pending) {
+    pending = exchangeRefreshToken(session);
+    sessionRefreshes.set(key, pending);
+    setTimeout(() => sessionRefreshes.delete(key), REFRESH_REUSE_MS).unref?.();
+  }
+
+  const tokens = await pending;
+  if (!tokens) {
     return null;
   }
 
-  const parsed = refreshedTokensSchema.safeParse(await refreshRes.json());
-  if (!parsed.success) {
-    return null;
-  }
+  await setSessionCookies(tokens);
+  return tokens.accessToken;
+}
 
-  await setSessionCookies({
-    accessToken: parsed.data.accessToken,
-    refreshToken: parsed.data.refreshToken,
-    refreshExpiresAt: new Date(parsed.data.refreshTokenExpires),
-  });
-  return parsed.data.accessToken;
+/**
+ * Clear the session cookies after a failed refresh, but only when they still hold the refresh token
+ * that failed. If another request already stored newer tokens, keep them.
+ */
+export async function clearSessionCookiesIfUnchanged(failedRefreshToken: string): Promise<void> {
+  const current = await getSessionTokens();
+  if (!current || current.refreshToken === failedRefreshToken) {
+    await clearSessionCookies();
+  }
 }

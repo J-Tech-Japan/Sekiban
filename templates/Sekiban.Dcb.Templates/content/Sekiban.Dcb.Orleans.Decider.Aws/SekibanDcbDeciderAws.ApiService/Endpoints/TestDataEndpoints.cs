@@ -12,7 +12,8 @@ public static class TestDataEndpoints
     {
         var group = endpoints.MapGroup("/test-data")
             .WithTags("Test Data")
-            .RequireAuthorization();
+            // Every route here can create rooms (and sample users), so the group is limited to administrators
+            .RequireAuthorization("AdminOnly");
 
         group.MapPost("/generate", GenerateTestDataAsync)
             .WithName("GenerateTestData");

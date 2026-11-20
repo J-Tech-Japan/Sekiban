@@ -36,6 +36,9 @@ export const testDataRouter = router({
       if (res.status === 401) {
         throw new Error("Authentication required");
       }
+      if (res.status === 403) {
+        throw new Error("Admin access required");
+      }
       const error = await res.text();
       throw new Error(error || "Failed to generate test data");
     }
@@ -51,6 +54,9 @@ export const testDataRouter = router({
     if (!res.ok) {
       if (res.status === 401) {
         throw new Error("Authentication required");
+      }
+      if (res.status === 403) {
+        throw new Error("Admin access required");
       }
       const error = await res.text();
       throw new Error(error || "Failed to generate rooms");
@@ -77,6 +83,9 @@ export const testDataRouter = router({
       if (!res.ok) {
         if (res.status === 401) {
           throw new Error("Authentication required");
+        }
+        if (res.status === 403) {
+          throw new Error("Admin access required");
         }
         const error = await res.text();
         throw new Error(error || "Failed to generate reservations");

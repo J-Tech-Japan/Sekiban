@@ -2,7 +2,9 @@ import { z } from "zod";
 import { router, publicProcedure } from "../api/trpc";
 import {
   clearSessionCookies,
+  clearSessionCookiesIfUnchanged,
   getSessionTokens,
+  refreshSessionTokens,
   setSessionCookies,
 } from "../lib/auth-helpers";
 
@@ -176,27 +178,12 @@ export const authRouter = router({
         return userInfoSchema.parse(await res.json());
       }
 
-      // Token might be expired, try to refresh
-      const refreshRes = await fetch(`${process.env.API_BASE_URL}/auth/refresh`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          accessToken: session.accessToken,
-          refreshToken: session.refreshToken,
-        }),
-      });
-
-      if (refreshRes.ok) {
-        const newTokens = tokenResponseSchema.parse(await refreshRes.json());
-        await setSessionCookies({
-          accessToken: newTokens.accessToken,
-          refreshToken: newTokens.refreshToken,
-          refreshExpiresAt: new Date(newTokens.refreshTokenExpires),
-        });
-
+      // Token might be expired, try to refresh (shared with the SSE proxies; see refreshSessionTokens)
+      const refreshedAccessToken = await refreshSessionTokens();
+      if (refreshedAccessToken) {
         // Retry getting user info
         const retryRes = await fetch(`${process.env.API_BASE_URL}/auth/me`, {
-          headers: { Authorization: `Bearer ${newTokens.accessToken}` },
+          headers: { Authorization: `Bearer ${refreshedAccessToken}` },
         });
 
         if (retryRes.ok) {
@@ -204,8 +191,8 @@ export const authRouter = router({
         }
       }
 
-      // Failed to refresh, clean up
-      await clearSessionCookies();
+      // Failed to refresh, clean up unless another request already stored newer tokens
+      await clearSessionCookiesIfUnchanged(session.refreshToken);
       return {
         id: "",
         email: "",

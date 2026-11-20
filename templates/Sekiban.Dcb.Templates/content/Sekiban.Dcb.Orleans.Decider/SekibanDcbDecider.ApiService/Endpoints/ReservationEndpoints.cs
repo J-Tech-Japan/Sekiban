@@ -205,10 +205,21 @@ public static class ReservationEndpoints
     private static async Task<IResult> RejectReservationAsync(
         Guid reservationId,
         [FromBody] RejectReservationRequest request,
+        HttpContext httpContext,
         [FromServices] ISekibanExecutor executor)
     {
+        var rejecterResult = ReservationOrganizerResolver.Resolve(httpContext);
+        if (!rejecterResult.IsSuccess)
+        {
+            return Results.Problem(
+                detail: rejecterResult.Error,
+                statusCode: StatusCodes.Status401Unauthorized);
+        }
+
+        // Rejecting also records the Rejected approval decision, so the approval request does not stay pending.
         var command = new RejectReservation
         {
+            RejectedByUserId = rejecterResult.Organizer!.Value.OrganizerId,
             ReservationId = reservationId,
             RoomId = request.RoomId,
             ApprovalRequestId = request.ApprovalRequestId,

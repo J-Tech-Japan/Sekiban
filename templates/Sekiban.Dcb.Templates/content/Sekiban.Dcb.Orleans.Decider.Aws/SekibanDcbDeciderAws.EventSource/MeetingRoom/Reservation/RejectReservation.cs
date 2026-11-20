@@ -1,18 +1,22 @@
-using Dcb.MeetingRoomModels.Events.Reservation;
-using Dcb.MeetingRoomModels.States.Reservation;
-using Dcb.MeetingRoomModels.Tags;
+using Dcb.EventSource.MeetingRoom.ApprovalRequest;
+using Dcb.MeetingRoomModels.Events.ApprovalRequest;
 using Sekiban.Dcb.Commands;
 using Sekiban.Dcb.Events;
-using Sekiban.Dcb.Tags;
 using System.ComponentModel.DataAnnotations;
 namespace Dcb.EventSource.MeetingRoom.Reservation;
 
+/// <summary>
+///     Rejects a held reservation that is waiting for approval. This is the same as recording a
+///     Rejected approval decision: the approval request and the reservation are updated together.
+/// </summary>
 public record RejectReservation : ICommandWithHandler<RejectReservation>
 {
     [Required]
     public Guid ReservationId { get; init; }
 
-    [Required]
+    /// <summary>
+    ///     Kept for API compatibility. The room is taken from the reservation itself.
+    /// </summary>
     public Guid RoomId { get; init; }
 
     [Required]
@@ -22,52 +26,20 @@ public record RejectReservation : ICommandWithHandler<RejectReservation>
     [StringLength(500)]
     public string Reason { get; init; } = string.Empty;
 
-    public static async Task<EventOrNone> HandleAsync(
+    /// <summary>
+    ///     The administrator rejecting the reservation (recorded as the approver).
+    ///     The API sets this from the authenticated user; it is not read from the request body.
+    /// </summary>
+    public Guid RejectedByUserId { get; init; }
+
+    public static Task<EventOrNone> HandleAsync(
         RejectReservation command,
-        ICommandContext context)
-    {
-        var tag = new ReservationTag(command.ReservationId);
-        var exists = await context.TagExistsAsync(tag);
-
-        if (!exists)
-        {
-            throw new ApplicationException($"Reservation {command.ReservationId} not found");
-        }
-
-
-        var reservationState = await context.GetStateAsync<ReservationProjector>(tag);
-        var payloadState = reservationState.Payload as ReservationState ?? ReservationState.Empty;
-
-        // Only a held reservation that is waiting for approval can be rejected.
-        // Drafts, confirmed, cancelled, rejected and expired reservations are not part of an approval decision.
-        if (payloadState is not ReservationState.ReservationHeld { RequiresApproval: true } held)
-        {
-            throw new ApplicationException(
-                $"Reservation {command.ReservationId} cannot be rejected from state: {payloadState.GetType().Name}");
-        }
-
-        if (held.ApprovalRequestId != command.ApprovalRequestId)
-        {
-            throw new ApplicationException(
-                $"Approval request {command.ApprovalRequestId} does not belong to reservation {command.ReservationId}");
-        }
-
-        var monthlyTag = UserMonthlyReservationTag.FromStartTime(held.OrganizerId, held.StartTime);
-
-        var payload = new ReservationRejected(
-            command.ReservationId,
-            held.RoomId,
+        ICommandContext context) =>
+        ApprovalDecisionFlow.DecideAsync(
+            context,
             command.ApprovalRequestId,
-            command.Reason,
-            DateTime.UtcNow);
-
-        var tags = new List<ITag>
-        {
-            new ReservationTag(command.ReservationId),
-            new RoomReservationTag(held.RoomId),
-            monthlyTag
-        };
-
-        return new EventPayloadWithTags(payload, tags);
-    }
+            command.ReservationId,
+            command.RejectedByUserId,
+            ApprovalDecision.Rejected,
+            command.Reason);
 }

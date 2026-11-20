@@ -67,6 +67,9 @@ public class ReservationAuthorizationTests
     [TestCase("POST", "/api/reservations/{reservationId:guid}/reject")]
     [TestCase("POST", "/api/reservations/{reservationId:guid}/confirm")]
     [TestCase("POST", "/api/approvals/{approvalRequestId:guid}/decision")]
+    [TestCase("POST", "/api/test-data/generate")]
+    [TestCase("POST", "/api/test-data/generate-rooms")]
+    [TestCase("POST", "/api/test-data/generate-reservations")]
     public void ManagementEndpoints_RequireAdminPolicy(string method, string route) =>
         Assert.That(PoliciesFor(method, route), Does.Contain("AdminOnly"));
 
@@ -129,7 +132,8 @@ public class ReservationAuthorizationTests
         await CancelAsync(reservationId, _organizerId);
 
         var error = Assert.ThrowsAsync<ApplicationException>(() => RejectAsync(reservationId, approvalRequestId));
-        Assert.That(error!.Message, Does.Contain("cannot be rejected"));
+        Assert.That(error!.Message, Does.Contain("not awaiting approval"));
+        Assert.That(await ApprovalStateAsync(approvalRequestId), Is.InstanceOf<ApprovalRequestState.ApprovalRequestPending>());
         Assert.That(await ReservationStateAsync(reservationId), Is.InstanceOf<ReservationState.ReservationCancelled>());
     }
 
@@ -141,11 +145,64 @@ public class ReservationAuthorizationTests
     }
 
     [Test]
-    public async Task Reject_WithAnotherApprovalRequest_IsRejected()
+    public async Task Reject_WithUnknownApprovalRequest_IsRejected()
     {
         var (reservationId, _) = await QuickReserveWithApprovalAsync();
         var error = Assert.ThrowsAsync<ApplicationException>(() => RejectAsync(reservationId, Guid.CreateVersion7()));
+        Assert.That(error!.Message, Does.Contain("not found"));
+    }
+
+    [Test]
+    public async Task Decision_WithSecondApprovalRequestOfSameReservation_IsRejected()
+    {
+        var (reservationId, _) = await QuickReserveWithApprovalAsync();
+        var strayApprovalRequestId = Guid.CreateVersion7();
+        await _executor.ExecuteAsync(new StartApprovalFlow
+        {
+            ApprovalRequestId = strayApprovalRequestId, ReservationId = reservationId, RoomId = _approvalRoomId,
+            RequesterId = _organizerId
+        });
+
+        var error = Assert.ThrowsAsync<ApplicationException>(() =>
+            DecideAsync(strayApprovalRequestId, reservationId, ApprovalDecision.Approved));
         Assert.That(error!.Message, Does.Contain("does not belong"));
+        Assert.That(await ReservationStateAsync(reservationId), Is.InstanceOf<ReservationState.ReservationHeld>());
+        Assert.That(await ApprovalStateAsync(strayApprovalRequestId), Is.InstanceOf<ApprovalRequestState.ApprovalRequestPending>());
+    }
+
+    [Test]
+    public async Task Decision_OnCancelledReservation_IsRejected_AndNothingIsRecorded()
+    {
+        var (reservationId, approvalRequestId) = await QuickReserveWithApprovalAsync();
+        await CancelAsync(reservationId, _organizerId);
+
+        var error = Assert.ThrowsAsync<ApplicationException>(() =>
+            DecideAsync(approvalRequestId, reservationId, ApprovalDecision.Approved));
+        Assert.That(error!.Message, Does.Contain("not awaiting approval"));
+        Assert.That(await ApprovalStateAsync(approvalRequestId), Is.InstanceOf<ApprovalRequestState.ApprovalRequestPending>());
+        Assert.That(await ReservationStateAsync(reservationId), Is.InstanceOf<ReservationState.ReservationCancelled>());
+    }
+
+    [Test]
+    public async Task ApprovedDecision_ConfirmsReservation_InTheSameCommand()
+    {
+        var (reservationId, approvalRequestId) = await QuickReserveWithApprovalAsync();
+        await DecideAsync(approvalRequestId, reservationId, ApprovalDecision.Approved, "Enjoy");
+
+        Assert.That(await ApprovalStateAsync(approvalRequestId), Is.InstanceOf<ApprovalRequestState.ApprovalRequestApproved>());
+        var confirmed = await ReservationStateAsync(reservationId) as ReservationState.ReservationConfirmed;
+        Assert.That(confirmed, Is.Not.Null);
+        Assert.That(confirmed!.ApprovalDecisionComment, Is.EqualTo("Enjoy"));
+    }
+
+    [Test]
+    public async Task RejectedDecision_RejectsReservation_InTheSameCommand()
+    {
+        var (reservationId, approvalRequestId) = await QuickReserveWithApprovalAsync();
+        await DecideAsync(approvalRequestId, reservationId, ApprovalDecision.Rejected, "No");
+
+        Assert.That(await ApprovalStateAsync(approvalRequestId), Is.InstanceOf<ApprovalRequestState.ApprovalRequestRejected>());
+        Assert.That(await ReservationStateAsync(reservationId), Is.InstanceOf<ReservationState.ReservationRejected>());
     }
 
     [Test]
@@ -154,6 +211,14 @@ public class ReservationAuthorizationTests
         var (reservationId, approvalRequestId) = await QuickReserveWithApprovalAsync();
         await RejectAsync(reservationId, approvalRequestId);
         Assert.That(await ReservationStateAsync(reservationId), Is.InstanceOf<ReservationState.ReservationRejected>());
+
+        // Rejecting also closes the approval request, so it does not stay pending
+        var approval = await ApprovalStateAsync(approvalRequestId) as ApprovalRequestState.ApprovalRequestRejected;
+        Assert.That(approval, Is.Not.Null);
+        Assert.That(approval!.ApproverId, Is.EqualTo(_adminId));
+        Assert.That(approval.Comment, Is.EqualTo("Not available"));
+        Assert.That((await InboxAsync()).Where(i => i.Status == "Pending").Select(i => i.ApprovalRequestId),
+            Does.Not.Contain(approvalRequestId));
     }
 
     // D-4: hold uses the draft's room and never trusts an arbitrary approval request id
@@ -391,8 +456,22 @@ public class ReservationAuthorizationTests
         _executor.ExecuteAsync(new RejectReservation
         {
             ReservationId = reservationId, RoomId = _approvalRoomId, ApprovalRequestId = approvalRequestId,
-            Reason = "Not available"
+            Reason = "Not available", RejectedByUserId = _adminId
         });
+
+    private Task DecideAsync(Guid approvalRequestId, Guid reservationId, ApprovalDecision decision, string? comment = null) =>
+        _executor.ExecuteAsync(new RecordApprovalDecision
+        {
+            ApprovalRequestId = approvalRequestId, ReservationId = reservationId, ApproverId = _adminId,
+            Decision = decision, Comment = comment
+        });
+
+    private async Task<ApprovalRequestState?> ApprovalStateAsync(Guid approvalRequestId)
+    {
+        var state = await _executor.GetTagStateAsync(
+            new TagStateId(new ApprovalRequestTag(approvalRequestId), nameof(ApprovalRequestProjector)));
+        return state.Payload as ApprovalRequestState;
+    }
 
     private async Task<ReservationState?> ReservationStateAsync(Guid reservationId)
     {
@@ -416,6 +495,7 @@ public class ReservationAuthorizationTests
         api.MapRoomEndpoints();
         api.MapReservationEndpoints();
         api.MapApprovalEndpoints();
+        api.MapTestDataEndpoints();
 
         var endpoint = ((IEndpointRouteBuilder)app).DataSources
             .SelectMany(source => source.Endpoints)

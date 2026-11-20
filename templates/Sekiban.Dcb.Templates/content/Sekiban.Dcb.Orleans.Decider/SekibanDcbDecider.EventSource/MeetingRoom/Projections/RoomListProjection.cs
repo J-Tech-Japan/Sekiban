@@ -17,7 +17,7 @@ public record RoomListProjection : IMultiProjector<RoomListProjection>
     public Dictionary<Guid, RoomState> Rooms { get; init; } = [];
 
     public static string MultiProjectorName => nameof(RoomListProjection);
-    public static string MultiProjectorVersion => "1.0.0";
+    public static string MultiProjectorVersion => "1.0.1";
 
     public static RoomListProjection GenerateInitialPayload() => new();
 

@@ -22,6 +22,10 @@ export default function Dashboard({ development }: { development: boolean }) {
   const { data: rooms } = trpc.rooms.list.useQuery({ pageNumber: 1, pageSize: 100 });
   const { data: reservations } = trpc.reservations.list.useQuery({ pageNumber: 1, pageSize: 100 });
 
+  // Test data creates rooms, which is an administrator action (the API enforces the same rule)
+  const { data: authStatus } = trpc.auth.status.useQuery();
+  const isAdmin = authStatus?.roles?.includes("Admin") ?? false;
+
   const generateTestData = trpc.testData.generate.useMutation({
     onSuccess: (data) => {
       setGenerationResult({
@@ -251,7 +255,7 @@ export default function Dashboard({ development }: { development: boolean }) {
       </div>
 
       {/* Test Data Generation */}
-      {development && (<Card className="border-dashed border-2">
+      {development && isAdmin && (<Card className="border-dashed border-2">
         <CardContent className="pt-6">
           <div className="flex items-center justify-between">
             <div className="flex items-start gap-4">
