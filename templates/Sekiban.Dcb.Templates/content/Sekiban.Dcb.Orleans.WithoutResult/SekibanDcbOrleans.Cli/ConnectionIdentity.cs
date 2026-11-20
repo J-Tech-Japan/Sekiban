@@ -5,29 +5,32 @@ using System.Text.Json;
 using Npgsql;
 
 /// <summary>
-///     Non-secret identity of a database connection, used for console output, cache metadata and the cache folder name.
-///     Only an allowlist of values is kept; everything else (passwords, account keys, shared access signatures, tokens,
-///     other Options switches, ...) is dropped from the description and from the hash input.
+///     Connection identity for the local cache, and its non-secret description.
+///     - The cache folder name is an HMAC-SHA256 (key stored in the cache root) of everything that can change the
+///       source: database type, the full connection string as given, the Cosmos database name or SQLite path, and the
+///       PG* environment variables that libpq-style clients read. Any difference gives a separate cache, including a
+///       password change. Secrets never appear in the folder name.
+///     - The description (console output, cache metadata) only contains allowlisted values; Options and secrets are
+///       never shown.
 /// </summary>
 internal static class ConnectionIdentity
 {
     private const string LegacySourceNotShown = "(legacy cache; source not shown)";
 
-    // Marker pair: the identity cannot be determined (Options / PGOPTIONS could not be parsed with certainty).
-    // Never part of a hash: a connection with this marker gets no cache.
-    private const string UndeterminedKey = "options";
-    private const string UndeterminedValue = "(not shown; not parsed)";
+    // Environment variables that can change the PostgreSQL target or session (Npgsql 10 reads PGAPPNAME,
+    // PGCLIENTENCODING, PGGSSENCMODE, PGOPTIONS, PGPASSFILE, PGPASSWORD, PGREQUIREAUTH, PGSSL*, PGTARGETSESSIONATTRS,
+    // PGTZ and PGUSER; the libpq ones PGHOST, PGPORT, PGDATABASE, PGSERVICE and PGSERVICEFILE are included as well).
+    private static readonly string[] PostgresEnvironmentVariables =
+    [
+        "PGAPPNAME", "PGCLIENTENCODING", "PGDATABASE", "PGGSSENCMODE", "PGHOST", "PGOPTIONS", "PGPASSFILE",
+        "PGPASSWORD", "PGPORT", "PGREQUIREAUTH", "PGSERVICE", "PGSERVICEFILE", "PGSSLCERT", "PGSSLKEY",
+        "PGSSLNEGOTIATION", "PGSSLROOTCERT", "PGTARGETSESSIONATTRS", "PGTZ", "PGUSER"
+    ];
 
     /// <summary>
-    ///     Allowlisted values as canonical key/value pairs, sorted by key. Throws <see cref="CliException" /> when the
-    ///     connection string cannot be parsed.
-    ///     Postgres: parsed by Npgsql itself, so aliases (Server/Host, DB/Database, User Id/Username, SearchPath) and
-    ///     repeated keys resolve exactly as the provider resolves them (the last one wins). The search path comes from
-    ///     Search Path, or else from a search_path switch in the effective options (Options, else the PGOPTIONS
-    ///     environment variable); Search Path wins because PostgreSQL applies startup parameters after the options.
-    ///     Options are only used when they parse with certainty (see <see cref="TryGetSearchPathFromOptions" />);
-    ///     otherwise the identity is "not determinable" (no cache is used) and no part of them is shown.
-    ///     Cosmos: only AccountEndpoint (scheme, host, port and path; no user info, query or fragment).
+    ///     Allowlisted values for display, sorted by key. Throws <see cref="CliException" /> when the connection string
+    ///     cannot be parsed. Postgres: resolved by Npgsql (host, port, database, username, search path); Options are
+    ///     never shown. Cosmos: AccountEndpoint as scheme://host:port/path (no user info, query or fragment).
     /// </summary>
     public static IReadOnlyList<KeyValuePair<string, string>> GetPublicParts(string databaseType, string connectionString)
     {
@@ -52,24 +55,14 @@ internal static class ConnectionIdentity
             throw new CliException("The PostgreSQL connection string could not be parsed.");
         }
 
-        var parts = new List<KeyValuePair<string, string>>
-        {
+        return
+        [
             new("host", builder.Host ?? ""),
             new("port", builder.Port.ToString(System.Globalization.CultureInfo.InvariantCulture)),
             new("database", builder.Database ?? ""),
-            new("username", builder.Username ?? "")
-        };
-
-        // Npgsql sends PGOPTIONS when the connection string has no Options.
-        var options = !string.IsNullOrEmpty(builder.Options)
-            ? builder.Options
-            : Environment.GetEnvironmentVariable("PGOPTIONS");
-        if (!TryGetSearchPathFromOptions(options, out var optionsSearchPath))
-        {
-            parts.Add(new(UndeterminedKey, UndeterminedValue));
-        }
-        parts.Add(new("searchpath", !string.IsNullOrEmpty(builder.SearchPath) ? builder.SearchPath : optionsSearchPath ?? ""));
-        return parts;
+            new("username", builder.Username ?? ""),
+            new("searchpath", builder.SearchPath ?? "")
+        ];
     }
 
     private static IEnumerable<KeyValuePair<string, string>> GetGenericParts(string connectionString)
@@ -91,51 +84,6 @@ internal static class ConnectionIdentity
         return [];
     }
 
-    // Fail-safe parser for the (libpq style) options string. It succeeds only when the string has no backslash and
-    // consists solely of whitespace-separated "-c name=value" or "--name=value" switches; searchPath is the last
-    // search_path value (null when none). Anything else returns false, so the identity is treated as undeterminable.
-    private static bool TryGetSearchPathFromOptions(string? options, out string? searchPath)
-    {
-        searchPath = null;
-        if (string.IsNullOrWhiteSpace(options))
-        {
-            return true;
-        }
-        if (options.Contains('\\'))
-        {
-            return false;
-        }
-
-        var tokens = options.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
-        for (var i = 0; i < tokens.Length; i++)
-        {
-            string setting;
-            if (tokens[i] == "-c" && i + 1 < tokens.Length)
-            {
-                setting = tokens[++i];
-            }
-            else if (tokens[i].StartsWith("--", StringComparison.Ordinal) && tokens[i].Length > 2)
-            {
-                setting = tokens[i][2..];
-            }
-            else
-            {
-                return false;
-            }
-
-            var eq = setting.IndexOf('=');
-            if (eq <= 0 || setting.StartsWith('-'))
-            {
-                return false;
-            }
-            if (setting[..eq].Replace('-', '_').Equals("search_path", StringComparison.OrdinalIgnoreCase))
-            {
-                searchPath = setting[(eq + 1)..];
-            }
-        }
-        return true;
-    }
-
     // scheme://host[:port]/path of an absolute URI; null (value dropped) when it is not one.
     private static string? NormalizeEndpoint(string? value)
     {
@@ -144,38 +92,6 @@ internal static class ConnectionIdentity
             return null;
         }
         return uri.GetComponents(UriComponents.SchemeAndServer | UriComponents.Path, UriFormat.UriEscaped);
-    }
-
-    /// <summary>True when the connection names what it reads (Postgres: a database; Cosmos: an account endpoint).</summary>
-    public static bool IdentifiesDatabase(string databaseType, string connectionString)
-    {
-        var required = databaseType switch
-        {
-            "postgres" => "database",
-            "cosmos" => "accountendpoint",
-            _ => null
-        };
-        if (required == null)
-        {
-            return true;
-        }
-        var parts = GetPublicParts(databaseType, connectionString);
-        return parts.Any(pair => pair.Key == required) && !parts.Any(pair => pair.Key == UndeterminedKey);
-    }
-
-    /// <summary>Throws unless <see cref="IdentifiesDatabase" />; required before a cache is read or written.</summary>
-    public static void EnsureIdentifiesDatabase(string databaseType, string connectionString)
-    {
-        if (!IdentifiesDatabase(databaseType, connectionString))
-        {
-            var undetermined = GetPublicParts(databaseType, connectionString).Any(pair => pair.Key == UndeterminedKey);
-            throw new CliException(undetermined
-                ? "The connection's Options (or the PGOPTIONS environment variable) cannot be parsed with certainty, " +
-                  "so its cache cannot be identified. Use only '-c name=value' / '--name=value' switches without backslashes, " +
-                  "or use --cache-mode off."
-                : $"The {databaseType} connection string has no {(databaseType == "postgres" ? "Database (or DB)" : "AccountEndpoint")} value, " +
-                  "so its cache cannot be identified. Add it to the connection string or use --cache-mode off.");
-        }
     }
 
     /// <summary>
@@ -248,26 +164,23 @@ internal static class ConnectionIdentity
     }
 
     /// <summary>
-    ///     Cache folder name: "&lt;database type&gt;-&lt;16 hex&gt;". The hash input is a JSON array of [key, value] pairs built
-    ///     from the resolved, allowlisted values, so quoting cannot make two different connections collide.
+    ///     Cache folder name "&lt;database type&gt;-&lt;16 hex&gt;": HMAC-SHA256 with <paramref name="key" /> over a JSON array
+    ///     of [name, value] pairs (database type, connection string as given, Cosmos database name or SQLite path, and
+    ///     for Postgres the PG* environment variables).
     /// </summary>
-    public static string ComputeKey(string databaseType, string connectionString, string cosmosDatabaseName)
+    public static string ComputeKey(string databaseType, string connectionString, string cosmosDatabaseName, byte[] key)
     {
-        var pairs = new List<string[]> { new[] { "type", databaseType } };
-        if (databaseType == "sqlite")
+        var pairs = new List<string?[]> { new[] { "type", databaseType }, new[] { "connection", connectionString } };
+        if (databaseType == "cosmos")
         {
-            pairs.Add(["path", connectionString]);
+            pairs.Add(["cosmosdatabase", cosmosDatabaseName]);
         }
-        else
+        if (databaseType == "postgres")
         {
-            pairs.AddRange(GetPublicParts(databaseType, connectionString).Select(pair => new[] { pair.Key, pair.Value }));
-            if (databaseType == "cosmos")
-            {
-                pairs.Add(["cosmosdatabase", cosmosDatabaseName]);
-            }
+            pairs.AddRange(PostgresEnvironmentVariables.Select(name => new[] { $"env:{name}", Environment.GetEnvironmentVariable(name) }));
         }
 
-        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(pairs)));
+        var hash = HMACSHA256.HashData(key, Encoding.UTF8.GetBytes(JsonSerializer.Serialize(pairs)));
         return $"{databaseType}-{Convert.ToHexString(hash)[..16].ToLowerInvariant()}";
     }
 }

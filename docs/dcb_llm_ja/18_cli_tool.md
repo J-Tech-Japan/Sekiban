@@ -327,6 +327,8 @@ Tags: 150 total across 5 groups
   Product: 20 tags
 ```
 
+`Source` 行は保存された、秘密情報を含まない接続の説明です。フォルダ名（`cosmos-…`）は鍵付きハッシュで、キャッシュルートごとに異なります。
+
 ### cache-clear
 
 ローカルキャッシュをクリア：
@@ -336,7 +338,7 @@ dotnet run -- cache-clear --cache-dir ./cache
 dotnet run -- cache-clear --cache-dir ./cache --yes
 ```
 
-キャッシュは接続ごとに保存されます（`<cache-dir>/<service id>/<database>-<hash>/events.db`。ハッシュにパスワードやキーは含めません）。ある DB から同期したキャッシュが別の DB に使われることはありません。キャッシュを使うには接続にデータベースが明示されている必要があります（Postgres は `Database`/`DB`、Cosmos は `AccountEndpoint`）。ない場合、`auto` は警告を出してキャッシュなしで DB を直接読み、`cache-only` と `cache-sync` は失敗します。Postgres の値は Npgsql と同じく解決されます（`Database`/`DB`、`Host`/`Server` などは最後の指定が有効）。search path も識別に含まれます：`Search Path`、なければ実効オプション（`Options`、未設定なら環境変数 `PGOPTIONS`）内の `search_path` 指定。PostgreSQL はオプションの後に起動パラメータを適用するため `Search Path` が優先です。オプションはバックスラッシュを含まず `-c name=value` / `--name=value` だけで構成される場合にのみ使い、それ以外は識別不能として `auto` は警告してキャッシュなしで実行、`cache-only` / `cache-sync` は失敗します。解析した search path 以外のオプション内容は表示しません。キャッシュは `cache-sync` が成功したもの（cache-sync メタデータあり）だけを使います。初回の同期に失敗した場合はキャッシュファイルを残さず、メタデータを読めないキャッシュは使いません（`auto` は警告、`cache-only` は失敗、`cache-stats` は終了コード 1）。キャッシュルート直下の旧形式 `events.db` は、cache-sync のメタデータでキャッシュと判定できる場合だけ表示・削除します。`cache-stats` と `cache-clear` はディレクトリ配下のすべてのキャッシュが対象です。
+キャッシュは接続ごとに保存されます（`<cache-dir>/<service id>/<database>-<hash>/events.db`）。フォルダ名は、ソースを変えうるすべての値の HMAC-SHA256 です：データベース種別、指定された接続文字列そのもの、Cosmos のデータベース名または SQLite のパス、PostgreSQL ではクライアントが読む `PG*` 環境変数（`PGOPTIONS`、`PGUSER`、`PGPASSWORD`、`PGPASSFILE`、`PGHOST`、`PGPORT`、`PGDATABASE`、`PGSERVICE`、`PGSERVICEFILE`、`PGSSL*` など）。どれかが違えば別のキャッシュになります（パスワード変更も含む）。HMAC キーはキャッシュルートに一度だけ作られるランダムな 32 バイトの `.cache-key` ファイル（OS が許す範囲で本人のみ読み取り可）なので、フォルダ名から接続の情報は分かりません。キーを読めない場合、`auto` は警告してキャッシュなしで実行し、`cache-only` / `cache-sync` は失敗します。コンソール出力とキャッシュのメタデータには許可リストの値（host、port、database、username、search path、account endpoint）だけを出し、パスワード・キー・トークン・`Options` は表示しません。`cache-sync` はキャッシュフォルダ内の一時ファイルに同期し（既存キャッシュのコピーから始めるので再同期は新しいイベントだけを取得）、同期が成功して完了マーカーを書いた後にだけ `events.db` を置き換えます。失敗・中断した同期が途中のキャッシュを残したり、前のキャッシュを壊したりすることはありません。残った一時ファイルは次の `cache-sync` か `cache-clear` が削除します。完了マーカーのないキャッシュは使いません（`auto` は警告、`cache-only` は失敗、`cache-stats` は終了コード 1）。キャッシュルート直下の旧形式 `events.db` は、cache-sync のメタデータでキャッシュと判定できる場合だけ表示・削除します。`cache-stats` と `cache-clear` はディレクトリ配下のすべてのキャッシュが対象です。
 
 ## サービスのビルド
 
@@ -400,4 +402,4 @@ dotnet run --framework net9.0 -- tag-list -d sqlite --sqlite-path "../MyApp.ApiS
 完全なリファレンス実装については、以下を参照してください：
 - `dcb/internalUsages/DcbOrleans.Cli/Program.cs`
 
-この実装には、すべてのコマンド、プロファイルサポート、キャッシュ管理機能が含まれています。テンプレートの CLI（`templates/Sekiban.Dcb.Templates/content/*/*.Cli`）も同じコードですが、キャッシュは service id フォルダの下（`<cache-dir>/<service id>/<database>-<hash>/events.db`）に置かれ、内部 CLI は `<cache-dir>/<database>-<hash>/events.db` を使います。
+この実装には、すべてのコマンド、プロファイルサポート、キャッシュ管理機能が含まれています。フル機能のテンプレート CLI（`Sekiban.Dcb.Orleans`、`Sekiban.Dcb.Orleans.WithoutResult`、`Sekiban.Dcb.Orleans.Decider`。AWS テンプレートの CLI は `list` のみ）も同じコードですが、キャッシュは service id フォルダの下（`<cache-dir>/<service id>/<database>-<hash>/events.db`）に置かれ、内部 CLI は `<cache-dir>/<database>-<hash>/events.db` を使います。

@@ -20,6 +20,9 @@ using Sekiban.Dcb.Storage;
 using System.Text.Encodings.Web;
 
 
+// dcb_meta key of the CLI's cache completion marker (written only after a successful cache-sync)
+const string CacheCompletionKey = "cli:cacheComplete";
+
 // Build configuration from environment variables and user secrets
 var configuration = new ConfigurationBuilder()
     .AddEnvironmentVariables()
@@ -345,7 +348,8 @@ cacheSyncCommand.SetAction((parseResult, cancellationToken) => RunAsync(async ()
         target,
         parseResult.GetValue(cacheDirOption) ?? "./cache",
         parseResult.GetValue(safeWindowOption),
-        parseResult.GetValue(verboseOption));
+        parseResult.GetValue(verboseOption),
+        cancellationToken);
 }));
 
 // Cache-stats command - show cache statistics
@@ -407,6 +411,11 @@ static async Task<int> RunAsync(Func<Task<int>> action)
     {
         WriteError(ex.Message);
         return 1;
+    }
+    catch (OperationCanceledException)
+    {
+        WriteError("Cancelled.");
+        return 130;
     }
     catch (Exception ex)
     {
@@ -670,14 +679,60 @@ static string ResolveConnectionString(IConfiguration config, string databaseType
 static string DescribeConnection(ConnectionTarget target) =>
     ConnectionIdentity.Describe(target.DatabaseType, target.ConnectionString, target.CosmosDatabaseName);
 
-// Cache sub directory name for a connection: "<database type>-<16 hex>" (see ConnectionIdentity.ComputeKey).
-static string ComputeConnectionKey(ConnectionTarget target) =>
-    ConnectionIdentity.ComputeKey(target.DatabaseType, target.ConnectionString, target.CosmosDatabaseName);
-
-static string GetCachePath(string cacheDir, ConnectionTarget target)
+// Random 32-byte HMAC key for cache folder names, stored once in the cache root (readable by the user only where the OS
+// allows). Returns null when it does not exist and create is false. Throws CliException when it cannot be created/read.
+static byte[]? ReadOrCreateCacheKey(string cacheRoot, bool create)
 {
-    ConnectionIdentity.EnsureIdentifiesDatabase(target.DatabaseType, target.ConnectionString);
-    return Path.Combine(GetCacheRoot(cacheDir), ComputeConnectionKey(target), "events.db");
+    var keyPath = Path.Combine(cacheRoot, ".cache-key");
+    try
+    {
+        if (!File.Exists(keyPath))
+        {
+            if (!create)
+            {
+                return null;
+            }
+            Directory.CreateDirectory(cacheRoot);
+            var newKey = System.Security.Cryptography.RandomNumberGenerator.GetBytes(32);
+            var fileOptions = new FileStreamOptions { Mode = FileMode.CreateNew, Access = FileAccess.Write };
+            if (!OperatingSystem.IsWindows())
+            {
+                fileOptions.UnixCreateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite;
+            }
+            try
+            {
+                using var stream = new FileStream(keyPath, fileOptions);
+                stream.Write(newKey);
+                return newKey;
+            }
+            catch (IOException) when (File.Exists(keyPath))
+            {
+                // Created concurrently by another run: read it below.
+            }
+        }
+
+        var key = File.ReadAllBytes(keyPath);
+        if (key.Length != 32)
+        {
+            throw new CliException($"Cache key file {keyPath} is invalid (expected 32 bytes). Delete it together with the cache folders.");
+        }
+        return key;
+    }
+    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+    {
+        throw new CliException($"Cache key file {keyPath} could not be {(create ? "created or read" : "read")}: {ex.Message}");
+    }
+}
+
+// <cache root>/<database type>-<16 hex>/events.db (see ConnectionIdentity.ComputeKey). Null when no key exists yet
+// (then no cache exists either) and create is false.
+static string? GetCachePath(string cacheDir, ConnectionTarget target, bool createKey)
+{
+    var cacheRoot = GetCacheRoot(cacheDir);
+    var key = ReadOrCreateCacheKey(cacheRoot, createKey);
+    return key == null
+        ? null
+        : Path.Combine(cacheRoot, ConnectionIdentity.ComputeKey(target.DatabaseType, target.ConnectionString, target.CosmosDatabaseName, key), "events.db");
 }
 
 static CacheOptions BuildCacheOptions(string? cacheMode, string? cacheDir, ConnectionTarget target)
@@ -697,28 +752,24 @@ static CacheOptions BuildCacheOptions(string? cacheMode, string? cacheDir, Conne
         return new CacheOptions(resolvedMode, resolvedCacheDir, "");
     }
 
-    // A cache is keyed by the database the connection names. Without one, cache-only cannot work; the other modes
-    // read the remote store directly without any cache.
-    if (!ConnectionIdentity.IdentifiesDatabase(target.DatabaseType, target.ConnectionString))
+    try
     {
-        if (resolvedMode == SimpleCacheMode.CacheOnly)
-        {
-            ConnectionIdentity.EnsureIdentifiesDatabase(target.DatabaseType, target.ConnectionString);
-        }
+        // Read commands never create the key: without a key no cache exists for any connection.
+        return new CacheOptions(resolvedMode, resolvedCacheDir, GetCachePath(resolvedCacheDir, target, createKey: false) ?? "");
+    }
+    catch (CliException ex) when (resolvedMode != SimpleCacheMode.CacheOnly)
+    {
         Console.Out.Flush();
-        Console.Error.WriteLine(
-            "Warning: the connection string does not name its database (Database / AccountEndpoint); " +
-            "the local cache is not used for this command.");
+        Console.Error.WriteLine($"Warning: the local cache is not used for this command: {ex.Message}");
         return new CacheOptions(SimpleCacheMode.Off, resolvedCacheDir, "");
     }
-    return new CacheOptions(resolvedMode, resolvedCacheDir, GetCachePath(resolvedCacheDir, target));
 }
 
 static bool TryResolveCachePath(CacheOptions cacheOptions, out string? cachePath)
 {
     var resolvedPath = cacheOptions.CachePath;
 
-    if (cacheOptions.Mode == SimpleCacheMode.Clear && File.Exists(resolvedPath))
+    if (cacheOptions.Mode == SimpleCacheMode.Clear && resolvedPath.Length > 0 && File.Exists(resolvedPath))
     {
         Console.WriteLine("Clearing existing cache...");
         DeleteCacheFiles(resolvedPath);
@@ -726,14 +777,14 @@ static bool TryResolveCachePath(CacheOptions cacheOptions, out string? cachePath
 
     var useCache = false;
     string? notUsableReason = null;
-    if (cacheOptions.Mode is SimpleCacheMode.Auto or SimpleCacheMode.CacheOnly && File.Exists(resolvedPath))
+    if (cacheOptions.Mode is SimpleCacheMode.Auto or SimpleCacheMode.CacheOnly && resolvedPath.Length > 0 && File.Exists(resolvedPath))
     {
-        // Only a cache that a successful cache-sync completed (it carries cache-sync metadata) is used.
-        var (isCache, error) = GetCacheSyncStatus(resolvedPath);
-        useCache = isCache;
+        // Only a cache that a successful cache-sync completed (it carries the CLI completion marker) is used.
+        var (isComplete, error) = GetCacheCompletionStatus(resolvedPath);
+        useCache = isComplete;
         notUsableReason = error != null
             ? $"the cache could not be read ({error})"
-            : isCache ? null : "the cache has no cache-sync metadata (incomplete sync)";
+            : isComplete ? null : "the cache has no completion marker (incomplete or old sync)";
     }
 
     if (notUsableReason != null)
@@ -751,7 +802,7 @@ static bool TryResolveCachePath(CacheOptions cacheOptions, out string? cachePath
     if (cacheOptions.Mode == SimpleCacheMode.CacheOnly && !useCache)
     {
         throw new CliException(
-            $"SQLite cache for this connection not found: {resolvedPath}\n" +
+            $"SQLite cache for this connection not found{(resolvedPath.Length > 0 ? ": " + resolvedPath : "")}\n" +
             "Run 'cache-sync' with the same connection settings first to create the cache.");
     }
 
@@ -845,10 +896,14 @@ static void EnsureSekibanSqliteStore(string path)
 
 // SQLite "database path" for the Sekiban stores that opens the file read-only. The stores build
 // "Data Source={path}", so the read-only mode is appended as another connection string keyword.
-static string ToReadOnlySqlitePath(string path) =>
-    TryToReadOnlySqlitePath(path) ?? throw new CliException(
-        $"Cannot open SQLite file '{path}' read-only: the path contains ';', '=' or a quote, which cannot be passed to " +
-        "the Sekiban SQLite stores. Move or rename the file (or use a symbolic link) to a path without these characters.");
+static string ToReadOnlySqlitePath(string path) => ValidateSqliteStorePath(path) + ";Mode=ReadOnly";
+
+static string ValidateSqliteStorePath(string path) =>
+    TryToReadOnlySqlitePath(path) is null
+        ? throw new CliException(
+        $"Cannot open SQLite file '{path}': the path contains ';', '=' or a quote, which cannot be passed to " +
+        "the Sekiban SQLite stores. Move or rename the file (or use a symbolic link) to a path without these characters.")
+        : path;
 
 static string? TryToReadOnlySqlitePath(string path) =>
     path.IndexOfAny([';', '"', '\'', '=']) >= 0 ? null : $"{path};Mode=ReadOnly";
@@ -1711,7 +1766,8 @@ static ServiceProvider BuildServices(
         // SQLite event store written by the ApiService (Sekiban:Database=sqlite); connectionString is the file path.
         // It must already be a Sekiban store: the CLI never creates one.
         EnsureSekibanSqliteStore(connectionString);
-        var storePath = readOnly ? ToReadOnlySqlitePath(connectionString) : connectionString;
+        // The Sekiban SQLite stores interpolate the path into a connection string: the same path rule for all commands.
+        var storePath = readOnly ? ToReadOnlySqlitePath(connectionString) : ValidateSqliteStorePath(connectionString);
         if (!useCache)
         {
             services.AddSingleton<IEventStore>(sp =>
@@ -1834,7 +1890,7 @@ static async Task<int> ListTagsAsync(
     return 0;
 }
 
-static async Task<int> SyncCacheAsync(ConnectionTarget target, string cacheDir, int safeWindowMinutes, bool verbose)
+static async Task<int> SyncCacheAsync(ConnectionTarget target, string cacheDir, int safeWindowMinutes, bool verbose, CancellationToken cancellationToken)
 {
     Console.WriteLine("=== Cache Sync ===\n");
     PrintTarget(target);
@@ -1843,36 +1899,72 @@ static async Task<int> SyncCacheAsync(ConnectionTarget target, string cacheDir, 
     Console.WriteLine();
 
     // One cache per connection: <cache-dir>/<database type>-<connection hash>/events.db
-    var cachePath = GetCachePath(cacheDir, target);
+    var cachePath = GetCachePath(cacheDir, target, createKey: true)!;
     var cacheFolder = Path.GetDirectoryName(cachePath)!;
-    var cacheExisted = File.Exists(cachePath);
     Directory.CreateDirectory(cacheFolder);
+    DeleteSyncTempFiles(cacheFolder);
+
+    // Sync into a temporary file and replace events.db only after a complete, successful sync, so a failed or
+    // interrupted sync never leaves a partial cache and never destroys the previous good cache.
+    var tempPath = Path.Combine(cacheFolder, $"events.db.sync-{Guid.NewGuid():N}.tmp");
+    var incremental = File.Exists(cachePath) && GetCacheCompletionStatus(cachePath) is (true, null);
+    if (incremental)
+    {
+        File.Copy(cachePath, tempPath);
+    }
+
     try
     {
-        return await SyncCacheFileAsync(target, cachePath, safeWindowMinutes);
-    }
-    catch when (!cacheExisted)
-    {
-        // A failed first sync must not leave a cache file behind.
+        var result = await SyncIntoFileAsync(target, tempPath, existingCache: incremental, safeWindowMinutes, cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        // Make the temp file a single self-contained file, then atomically move it over events.db.
         SqliteConnection.ClearAllPools();
-        DeleteCacheFiles(cachePath);
-        if (Directory.Exists(cacheFolder) && !Directory.EnumerateFileSystemEntries(cacheFolder).Any())
+        using (var connection = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = tempPath, Pooling = false }.ToString()))
+        {
+            connection.Open();
+            using var command = connection.CreateCommand();
+            command.CommandText = "PRAGMA wal_checkpoint(TRUNCATE); PRAGMA journal_mode=DELETE;";
+            command.ExecuteNonQuery();
+        }
+        DeleteFileIfExists(cachePath + "-wal");
+        DeleteFileIfExists(cachePath + "-shm");
+        File.Move(tempPath, cachePath, overwrite: true);
+
+        Console.WriteLine($"Sync completed:");
+        Console.WriteLine($"  Mode: {(incremental ? "incremental (existing cache)" : "full (new cache)")}");
+        Console.WriteLine($"  Action: {result.Action}");
+        Console.WriteLine($"  Events synced: {result.EventsSynced:N0}");
+        Console.WriteLine($"  Total events in cache: {result.TotalEventsInCache:N0}");
+        Console.WriteLine($"  Duration: {result.Duration.TotalSeconds:F2}s");
+        Console.WriteLine($"\nCache file: {cachePath}");
+        return 0;
+    }
+    finally
+    {
+        SqliteConnection.ClearAllPools();
+        DeleteSyncTempFiles(cacheFolder);
+        if (!File.Exists(cachePath) && !Directory.EnumerateFileSystemEntries(cacheFolder).Any())
         {
             Directory.Delete(cacheFolder);
         }
-        throw;
     }
 }
 
-static async Task<int> SyncCacheFileAsync(ConnectionTarget target, string cachePath, int safeWindowMinutes)
+static async Task<CacheSyncResult> SyncIntoFileAsync(ConnectionTarget target, string path, bool existingCache, int safeWindowMinutes, CancellationToken cancellationToken)
 {
     // Build remote services
     var services = BuildServices(target);
     var remoteStore = services.GetRequiredService<IEventStore>();
     var domainTypes = services.GetRequiredService<DcbDomainTypes>();
 
-    // Create local SQLite cache
-    var localStore = new SqliteEventStore(cachePath, domainTypes.EventTypes, serviceIdProvider: CreateServiceIdProvider());
+    // A copy of an existing cache is opened without schema initialization, which would rewrite the schema version and
+    // make the sync discard the cache (full re-download) instead of syncing incrementally.
+    var localStore = new SqliteEventStore(
+        path,
+        domainTypes.EventTypes,
+        new SqliteEventStoreOptions { AutoCreateDatabase = !existingCache },
+        serviceIdProvider: CreateServiceIdProvider());
 
     // Cache metadata records a redacted description of the source (no passwords or keys)
     var syncOptions = new CacheSyncOptions
@@ -1886,14 +1978,13 @@ static async Task<int> SyncCacheFileAsync(ConnectionTarget target, string cacheP
     // Perform sync
     Console.WriteLine("Syncing events from remote to local cache...\n");
 
-    var result = await cacheSync.SyncAsync();
+    var result = await cacheSync.SyncAsync(cancellationToken);
     if (!result.IsSuccess)
     {
         throw new CliException($"Cache sync failed: {result.ErrorMessage}");
     }
 
-    // The library writes metadata only when it cached events. Mark every successful sync, so that a cache is
-    // recognized as complete even when the source had no events yet.
+    // The library writes metadata only when it cached events; write it for every successful sync.
     if (await localStore.GetMetadataAsync() is null)
     {
         var now = DateTime.UtcNow;
@@ -1908,13 +1999,48 @@ static async Task<int> SyncCacheFileAsync(ConnectionTarget target, string cacheP
         });
     }
 
-    Console.WriteLine($"Sync completed:");
-    Console.WriteLine($"  Action: {result.Action}");
-    Console.WriteLine($"  Events synced: {result.EventsSynced:N0}");
-    Console.WriteLine($"  Total events in cache: {result.TotalEventsInCache:N0}");
-    Console.WriteLine($"  Duration: {result.Duration.TotalSeconds:F2}s");
-    Console.WriteLine($"\nCache file: {cachePath}");
-    return 0;
+    // CLI-owned completion marker, written only after a successful sync.
+    using (var connection = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = path, Pooling = false }.ToString()))
+    {
+        connection.Open();
+        using var command = connection.CreateCommand();
+        command.CommandText = "INSERT OR REPLACE INTO dcb_meta (Key, Value) VALUES ($key, $value)";
+        command.Parameters.AddWithValue("$key", CacheCompletionKey);
+        command.Parameters.AddWithValue("$value", DateTime.UtcNow.ToString("O"));
+        command.ExecuteNonQuery();
+    }
+    return result;
+}
+
+static void DeleteFileIfExists(string path)
+{
+    if (File.Exists(path))
+    {
+        File.Delete(path);
+    }
+}
+
+// Leftovers of failed or interrupted syncs (events.db.sync-*.tmp and their -wal/-shm/-journal files).
+static void DeleteSyncTempFiles(string cacheFolder)
+{
+    if (!Directory.Exists(cacheFolder))
+    {
+        return;
+    }
+    foreach (var file in Directory.GetFiles(cacheFolder, "events.db.sync-*.tmp*"))
+    {
+        File.Delete(file);
+    }
+}
+
+// CLI-owned cache folders <root>/<database>-<16 hex>
+static List<string> GetCacheFolders(string cacheDir)
+{
+    var cacheRoot = GetCacheRoot(cacheDir);
+    var cacheFolderPattern = new Regex("^(postgres|cosmos|sqlite)-[0-9a-f]{16}$");
+    return Directory.Exists(cacheRoot)
+        ? Directory.GetDirectories(cacheRoot).Where(dir => cacheFolderPattern.IsMatch(Path.GetFileName(dir))).ToList()
+        : [];
 }
 
 // Cache files of this CLI only: <root>/<database>-<16 hex>/events.db, plus the legacy <root>/events.db when it
@@ -1928,9 +2054,7 @@ static List<CacheFile> FindCacheFiles(string cacheDir)
     }
 
     // <root>/<database>-<16 hex>/events.db: CLI-owned cache folders (listed even when unreadable)
-    var cacheFolderPattern = new Regex("^(postgres|cosmos|sqlite)-[0-9a-f]{16}$");
-    var files = Directory.GetDirectories(cacheRoot)
-        .Where(dir => cacheFolderPattern.IsMatch(Path.GetFileName(dir)))
+    var files = GetCacheFolders(cacheDir)
         .Select(dir => Path.Combine(dir, "events.db"))
         .Where(File.Exists)
         .Select(path => new CacheFile(path, IsLegacy: false))
@@ -1945,10 +2069,16 @@ static List<CacheFile> FindCacheFiles(string cacheDir)
     return files.OrderBy(f => f.Path, StringComparer.Ordinal).ToList();
 }
 
-// True when the file is a Sekiban SQLite store that cache-sync wrote metadata to (read-only check).
-// A file is a usable cache only when a successful cache-sync wrote metadata to it (read-only check). IsCache is false
-// for any other file; Error is set when the file or its metadata cannot be read.
-static (bool IsCache, string? Error) GetCacheSyncStatus(string path)
+// Legacy <root>/events.db (older CLI versions): a cache only when cache-sync wrote metadata to it (read-only check).
+// IsCache is false for any other file; Error is set when the file or its metadata cannot be read.
+static (bool IsCache, string? Error) GetCacheSyncStatus(string path) =>
+    QueryCacheMeta(path, "Key = 'remoteEndpoint' OR Key LIKE '%:remoteEndpoint'");
+
+// A cache folder file is complete only when a successful cache-sync of this CLI wrote the completion marker.
+static (bool IsComplete, string? Error) GetCacheCompletionStatus(string path) =>
+    QueryCacheMeta(path, $"Key = '{CacheCompletionKey}'");
+
+static (bool Found, string? Error) QueryCacheMeta(string path, string keyCondition)
 {
     try
     {
@@ -1960,7 +2090,7 @@ static (bool IsCache, string? Error) GetCacheSyncStatus(string path)
         using var connection = new SqliteConnection(connectionString);
         connection.Open();
         using var command = connection.CreateCommand();
-        command.CommandText = "SELECT COUNT(*) FROM dcb_meta WHERE Key = 'remoteEndpoint' OR Key LIKE '%:remoteEndpoint'";
+        command.CommandText = $"SELECT COUNT(*) FROM dcb_meta WHERE {keyCondition}";
         return (Convert.ToInt64(command.ExecuteScalar()) > 0, null);
     }
     catch (SqliteException ex)
@@ -1988,7 +2118,8 @@ static async Task<int> ShowCacheStatsAsync(string cacheDir)
     var shown = 0;
     foreach (var (cachePath, isLegacy) in cacheFiles)
     {
-        var (isCache, statusError) = GetCacheSyncStatus(cachePath);
+        // Cache folders: complete when the CLI completion marker exists; legacy root file: cache-sync metadata
+        var (isCache, statusError) = isLegacy ? GetCacheSyncStatus(cachePath) : GetCacheCompletionStatus(cachePath);
         if (isLegacy)
         {
             if (statusError != null)
@@ -2038,7 +2169,7 @@ static async Task<int> ShowCacheStatsAsync(string cacheDir)
         }
         else if (!isCache)
         {
-            Console.Error.WriteLine($"  Error: {cachePath} has no cache-sync metadata (incomplete sync); it is not used.");
+            Console.Error.WriteLine($"  Error: {cachePath} has no completion marker (incomplete or old sync); it is not used.");
             failures++;
         }
         var metadata = statusError == null && isCache ? await localStore.GetMetadataAsync() : null;
@@ -2123,6 +2254,12 @@ static Task<int> ClearCacheAsync(string cacheDir, bool assumeYes)
         }
     }
 
+    // Leftover temp files of failed or interrupted syncs in the cache folders
+    var tempFiles = GetCacheFolders(cacheDir)
+        .SelectMany(folder => Directory.GetFiles(folder, "events.db.sync-*.tmp*"))
+        .ToList();
+    toDelete.AddRange(tempFiles);
+
     if (toDelete.Count == 0)
     {
         Console.WriteLine("No cache file found. Nothing to clear.");
@@ -2147,6 +2284,10 @@ static Task<int> ClearCacheAsync(string cacheDir, bool assumeYes)
     foreach (var cachePath in toDelete)
     {
         DeleteCacheFiles(cachePath);
+    }
+    foreach (var folder in GetCacheFolders(cacheDir).Where(folder => !Directory.EnumerateFileSystemEntries(folder).Any()))
+    {
+        Directory.Delete(folder);
     }
     Console.WriteLine("\nCache cleared successfully.");
     if (unreadableLegacy > 0)

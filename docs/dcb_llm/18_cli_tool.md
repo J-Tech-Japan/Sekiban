@@ -327,6 +327,8 @@ Tags: 150 total across 5 groups
   Product: 20 tags
 ```
 
+The `Source` line is the stored, secret-free description of the connection. The folder name (`cosmos-…`) is a keyed hash and differs for every cache root.
+
 ### cache-clear
 
 Clear the local cache:
@@ -336,7 +338,7 @@ dotnet run -- cache-clear --cache-dir ./cache
 dotnet run -- cache-clear --cache-dir ./cache --yes
 ```
 
-Caches are stored per connection (`<cache-dir>/<service id>/<database>-<hash>/events.db`; the hash excludes passwords and keys), so a cache synced from one database is never read for another. A cache is only used when the connection names its database (Postgres `Database`/`DB`, Cosmos `AccountEndpoint`): without one, `auto` writes a warning and reads the database directly, while `cache-only` and `cache-sync` fail. Postgres values are resolved as Npgsql does (the last of `Database`/`DB`, `Host`/`Server`, ... wins). The search path is part of the identity: `Search Path`, or else a `search_path` switch in the effective options (`Options`, or the `PGOPTIONS` environment variable when `Options` is not set). `Search Path` wins, as PostgreSQL applies startup parameters after the options. The options are only used when they contain no backslash and consist solely of `-c name=value` / `--name=value` switches; otherwise the identity cannot be determined, so `auto` warns and runs without cache and `cache-only` / `cache-sync` fail. No part of the options is ever shown except the parsed search path. A cache is only used after a successful `cache-sync` (it carries cache-sync metadata); a failed first sync leaves no cache file, and a cache without readable metadata is not used (`auto` warns, `cache-only` fails, `cache-stats` exits 1). A legacy `events.db` directly in the cache root is only shown or deleted when cache-sync metadata identifies it as a cache. `cache-stats` and `cache-clear` cover every cache under the directory.
+Caches are stored per connection (`<cache-dir>/<service id>/<database>-<hash>/events.db`). The folder name is an HMAC-SHA256 of everything that can change the source: the database type, the full connection string as given, the Cosmos database name or SQLite path, and (for PostgreSQL) the `PG*` environment variables the client reads (`PGOPTIONS`, `PGUSER`, `PGPASSWORD`, `PGPASSFILE`, `PGHOST`, `PGPORT`, `PGDATABASE`, `PGSERVICE`, `PGSERVICEFILE`, `PGSSL*`, ...). Any difference gives a separate cache, including a password change. The HMAC key is a random 32-byte `.cache-key` file created once in the cache root (readable by the user only where the OS allows), so the folder name reveals nothing about the connection; if the key cannot be read, `auto` warns and runs without cache and `cache-only` / `cache-sync` fail. Console output and cache metadata only show allowlisted values (host, port, database, username, search path, account endpoint); passwords, keys, tokens and `Options` are never shown. `cache-sync` writes into a temporary file in the cache folder (starting from a copy of the existing cache, so a re-sync only downloads new events) and replaces `events.db` only after the sync succeeded and a completion marker was written. A failed or interrupted sync never leaves a partial cache or destroys the previous one; leftover temporary files are removed by the next `cache-sync` or `cache-clear`. A cache without the completion marker is not used (`auto` warns, `cache-only` fails, `cache-stats` exits 1). A legacy `events.db` directly in the cache root is only shown or deleted when cache-sync metadata identifies it as a cache. `cache-stats` and `cache-clear` cover every cache under the directory.
 
 ## Building Services
 
@@ -400,4 +402,4 @@ dotnet run --framework net9.0 -- tag-list -d sqlite --sqlite-path "../MyApp.ApiS
 For a complete reference implementation, see:
 - `dcb/internalUsages/DcbOrleans.Cli/Program.cs`
 
-This implementation includes all commands, profile support, and cache management features. The template CLIs (`templates/Sekiban.Dcb.Templates/content/*/*.Cli`) use the same code, except that their cache folders sit under a service-id folder (`<cache-dir>/<service id>/<database>-<hash>/events.db`) while the internal CLI uses `<cache-dir>/<database>-<hash>/events.db`.
+This implementation includes all commands, profile support, and cache management features. The full template CLIs (`Sekiban.Dcb.Orleans`, `Sekiban.Dcb.Orleans.WithoutResult` and `Sekiban.Dcb.Orleans.Decider`; the AWS templates only have a `list` command) use the same code, except that their cache folders sit under a service-id folder (`<cache-dir>/<service id>/<database>-<hash>/events.db`) while the internal CLI uses `<cache-dir>/<database>-<hash>/events.db`.
