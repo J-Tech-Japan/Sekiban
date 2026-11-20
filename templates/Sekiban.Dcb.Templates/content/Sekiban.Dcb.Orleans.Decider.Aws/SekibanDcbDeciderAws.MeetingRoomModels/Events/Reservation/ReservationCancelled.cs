@@ -16,7 +16,7 @@ public record ReservationCancelled(
         var tags = new List<ITag>
         {
             new ReservationTag(ReservationId),
-            new RoomTag(RoomId)
+            new RoomReservationTag(RoomId)
         };
 
         // Add RoomDailyActivityTag for each day to update the daily state

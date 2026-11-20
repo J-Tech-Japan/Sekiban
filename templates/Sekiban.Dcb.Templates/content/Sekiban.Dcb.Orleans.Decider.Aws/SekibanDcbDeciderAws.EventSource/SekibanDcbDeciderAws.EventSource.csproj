@@ -12,9 +12,9 @@
     <ProjectReference Include="..\SekibanDcbDeciderAws.MeetingRoomModels\SekibanDcbDeciderAws.MeetingRoomModels.csproj" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="Sekiban.Dcb.WithoutResult" Version="$(SekibanDcbVersion)" />
-    <PackageReference Include="Sekiban.Dcb.MaterializedView" Version="$(SekibanDcbVersion)" />
     <PackageReference Include="Microsoft.Orleans.Serialization" Version="$(MicrosoftOrleansVersion)" />
     <PackageReference Update="Microsoft.SourceLink.GitHub" Version="10.0.103" />
+    <PackageReference Include="Sekiban.Dcb.WithoutResult" Version="$(SekibanDcbVersion)" />
+    <PackageReference Include="Sekiban.Dcb.MaterializedView" Version="$(SekibanDcbVersion)" />
   </ItemGroup>
 </Project>

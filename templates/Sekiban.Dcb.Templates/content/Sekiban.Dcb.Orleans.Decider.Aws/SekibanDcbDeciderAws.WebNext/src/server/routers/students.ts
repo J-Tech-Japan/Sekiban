@@ -21,6 +21,7 @@ export const studentsRouter = router({
         pageNumber: z.number().default(1),
         pageSize: z.number().default(10),
         waitForSortableUniqueId: z.string().optional(),
+        // "memory" → in-memory MultiProjection; "materialized" → SQL materialized view
         queryMode: z.enum(["memory", "materialized"]).default("memory"),
       })
     )

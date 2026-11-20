@@ -53,7 +53,8 @@ public record CommitReservationHold : ICommandWithHandler<CommitReservationHold>
             throw new ApplicationException("Approval request is required for this room");
         }
 
-        var roomReservationsStateTyped = await context.GetStateAsync<RoomReservationsProjector>(roomTag);
+        var roomReservationTag = new RoomReservationTag(command.RoomId);
+        var roomReservationsStateTyped = await context.GetStateAsync<RoomReservationsProjector>(roomReservationTag);
         var roomReservationsState = roomReservationsStateTyped.Payload as RoomReservationsState
             ?? RoomReservationsState.Empty;
 

@@ -34,7 +34,7 @@ public class EventTests
     }
 
     [Fact]
-    public void ReservationDraftCreated_Should_Have_ReservationTag_And_RoomTag()
+    public void ReservationDraftCreated_Should_Have_ReservationTag_And_UserMonthlyReservationTag()
     {
         var reservationId = Guid.NewGuid();
         var roomId = Guid.NewGuid();
@@ -50,14 +50,13 @@ public class EventTests
 
         var eventWithTags = ev.GetEventWithTags();
 
-        Assert.Equal(3, eventWithTags.Tags.Count);
+        Assert.Equal(2, eventWithTags.Tags.Count);
         Assert.Contains(eventWithTags.Tags, t => t is ReservationTag rt && rt.ReservationId == reservationId);
-        Assert.Contains(eventWithTags.Tags, t => t is RoomTag rt && rt.RoomId == roomId);
         Assert.Contains(eventWithTags.Tags, t => t is UserMonthlyReservationTag);
     }
 
     [Fact]
-    public void ReservationHoldCommitted_Should_Have_ReservationTag_And_RoomTag()
+    public void ReservationHoldCommitted_Should_Have_ReservationTag_And_RoomReservationTag()
     {
         var reservationId = Guid.NewGuid();
         var roomId = Guid.NewGuid();
@@ -77,11 +76,11 @@ public class EventTests
 
         Assert.Equal(2, eventWithTags.Tags.Count);
         Assert.Contains(eventWithTags.Tags, t => t is ReservationTag rt && rt.ReservationId == reservationId);
-        Assert.Contains(eventWithTags.Tags, t => t is RoomTag rt && rt.RoomId == roomId);
+        Assert.Contains(eventWithTags.Tags, t => t is RoomReservationTag rt && rt.RoomId == roomId);
     }
 
     [Fact]
-    public void ReservationConfirmed_Should_Have_ReservationTag_RoomTag_And_RoomDailyActivityTag()
+    public void ReservationConfirmed_Should_Have_ReservationTag_RoomReservationTag_And_RoomDailyActivityTag()
     {
         var reservationId = Guid.NewGuid();
         var roomId = Guid.NewGuid();
@@ -92,15 +91,14 @@ public class EventTests
 
         var eventWithTags = ev.GetEventWithTags();
 
-        // Should have ReservationTag, RoomTag, and RoomDailyActivityTag(s)
         Assert.True(eventWithTags.Tags.Count >= 3);
         Assert.Contains(eventWithTags.Tags, t => t is ReservationTag rt && rt.ReservationId == reservationId);
-        Assert.Contains(eventWithTags.Tags, t => t is RoomTag rt && rt.RoomId == roomId);
+        Assert.Contains(eventWithTags.Tags, t => t is RoomReservationTag rt && rt.RoomId == roomId);
         Assert.Contains(eventWithTags.Tags, t => t is RoomDailyActivityTag);
     }
 
     [Fact]
-    public void ReservationCancelled_Should_Have_ReservationTag_RoomTag_And_RoomDailyActivityTag()
+    public void ReservationCancelled_Should_Have_ReservationTag_RoomReservationTag_And_RoomDailyActivityTag()
     {
         var reservationId = Guid.NewGuid();
         var roomId = Guid.NewGuid();
@@ -110,15 +108,14 @@ public class EventTests
 
         var eventWithTags = ev.GetEventWithTags();
 
-        // Should have ReservationTag, RoomTag, and RoomDailyActivityTag(s)
         Assert.True(eventWithTags.Tags.Count >= 3);
         Assert.Contains(eventWithTags.Tags, t => t is ReservationTag rt && rt.ReservationId == reservationId);
-        Assert.Contains(eventWithTags.Tags, t => t is RoomTag rt && rt.RoomId == roomId);
+        Assert.Contains(eventWithTags.Tags, t => t is RoomReservationTag rt && rt.RoomId == roomId);
         Assert.Contains(eventWithTags.Tags, t => t is RoomDailyActivityTag);
     }
 
     [Fact]
-    public void ReservationRejected_Should_Have_ReservationTag_And_RoomTag()
+    public void ReservationRejected_Should_Have_ReservationTag_And_RoomReservationTag()
     {
         var reservationId = Guid.NewGuid();
         var roomId = Guid.NewGuid();
@@ -128,6 +125,8 @@ public class EventTests
         var eventWithTags = ev.GetEventWithTags();
 
         Assert.Equal(2, eventWithTags.Tags.Count);
+        Assert.Contains(eventWithTags.Tags, t => t is ReservationTag rt && rt.ReservationId == reservationId);
+        Assert.Contains(eventWithTags.Tags, t => t is RoomReservationTag rt && rt.RoomId == roomId);
     }
 
     [Fact]
