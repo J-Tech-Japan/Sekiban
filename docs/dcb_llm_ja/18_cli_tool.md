@@ -103,8 +103,8 @@ CLIは複数のプロファイルをサポートし、異なる環境（開発�
 ### User Secretsでプロファイルを設定
 
 ```bash
-# User Secretsを初期化
-dotnet user-secrets init
+# テンプレートの CLI プロジェクトには生成アプリごとに一意な UserSecretsId が入っているため、
+# `dotnet user-secrets init` は不要です（自作の CLI プロジェクトでは上記のように <UserSecretsId> を設定）。
 
 # "dev"プロファイルをセットアップ
 dotnet user-secrets set "Profiles:dev:Database" "postgres"
@@ -154,80 +154,18 @@ dotnet user-secrets set "DefaultProfile" "dev"
 | `PostgresConnectionString` | `ConnectionStrings:DcbPostgres` |
 | `CosmosConnectionString` | `ConnectionStrings:SekibanDcbCosmos` |
 | `CosmosDatabase` | `CosmosDb:DatabaseName` |
+| `SqlitePath` | `Sekiban:SqlitePath` |
 
 ### プロファイル解決の実装
 
-```csharp
-static IConfiguration? ResolveProfile(IConfiguration configuration, string? profileName)
-{
-    var profilesSection = configuration.GetSection("Profiles");
-    var profileEntries = profilesSection.GetChildren().ToList();
-    var hasProfiles = profileEntries.Count > 0;
+`ResolveProfile`（リファレンス実装を参照）の動作：
 
-    var resolvedProfile = profileName;
-    if (string.IsNullOrWhiteSpace(resolvedProfile))
-    {
-        var defaultProfile = configuration["DefaultProfile"];
-        if (!string.IsNullOrWhiteSpace(defaultProfile))
-        {
-            resolvedProfile = defaultProfile;
-        }
-        else if (hasProfiles)
-        {
-            Console.WriteLine("Error: プロファイルが指定されていません。--profileオプションを使用してください。");
-            Console.WriteLine($"利用可能なプロファイル: {string.Join(", ", profileEntries.Select(p => p.Key))}");
-            return null;
-        }
-        else
-        {
-            return configuration;
-        }
-    }
+1. `--profile` を使い、未指定なら `DefaultProfile` を使います。
+2. どちらもなく `Profiles` セクションもなければ、ルート設定（オプション・環境変数・User Secrets）を使います。
+3. プロファイルがあるのに選択されていない、または選択したプロファイルが存在しない場合は、エラーと利用可能なプロファイル名を stderr に出力し、終了コード 1 で終了します。
+4. それ以外はプロファイルのキーをルート設定に重ね、上の表のエイリアスキーを対応付けます（プロファイル内で標準キーが明示されていればエイリアスより優先）。
 
-    if (!hasProfiles)
-    {
-        Console.WriteLine($"Error: プロファイル '{resolvedProfile}' が定義されていません。");
-        return null;
-    }
-
-    var profileSection = profilesSection.GetSection(resolvedProfile!);
-    if (!profileSection.Exists())
-    {
-        Console.WriteLine($"Error: プロファイル '{resolvedProfile}' が見つかりません。");
-        return null;
-    }
-
-    // プロファイルオーバーライドで設定をビルド
-    var prefix = $"Profiles:{resolvedProfile}:";
-    var overrides = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
-
-    foreach (var pair in profileSection.AsEnumerable())
-    {
-        if (pair.Value == null) continue;
-        var key = pair.Key.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
-            ? pair.Key[prefix.Length..]
-            : pair.Key;
-        overrides[key] = pair.Value;
-    }
-
-    // エイリアスをマップ
-    void MapAlias(string aliasKey, string targetKey)
-    {
-        if (overrides.TryGetValue(aliasKey, out var value) && !overrides.ContainsKey(targetKey))
-            overrides[targetKey] = value;
-    }
-
-    MapAlias("Database", "Sekiban:Database");
-    MapAlias("CosmosConnectionString", "ConnectionStrings:SekibanDcbCosmos");
-    MapAlias("CosmosDatabase", "CosmosDb:DatabaseName");
-    MapAlias("ConnectionString", "ConnectionStrings:DcbPostgres");
-
-    return new ConfigurationBuilder()
-        .AddConfiguration(configuration)
-        .AddInMemoryCollection(overrides!)
-        .Build();
-}
-```
+コマンドラインオプション（例: `-d`、`-c`）はプロファイルの値より優先されます。
 
 ## 利用可能なコマンド
 
@@ -258,10 +196,11 @@ dotnet run -- status --profile dev
 
 オプション：
 - `--profile, -P` - プロファイル名
-- `--database, -d` - データベースタイプ（postgres/cosmos）
+- `--database, -d` - データベースタイプ（postgres/cosmos/sqlite）
 - `--connection-string, -c` - PostgreSQL接続文字列
 - `--cosmos-connection-string` - Cosmos DB接続文字列
 - `--cosmos-database` - Cosmos DBデータベース名
+- `--sqlite-path` - `-d sqlite` で読む SQLite イベントストアのファイル（ApiService が `Sekiban:Database=sqlite` で書く `events.db`）。読み取り系コマンドは読み取り専用で開き、作成・マイグレーション・WAL 切り替えをしません。ファイルには `dcb_events` テーブルが必要です。パスは接続文字列の値として Sekiban の SQLite ストアに渡されるため、`;`・`=`・引用符を含められません
 
 ### build
 
@@ -292,7 +231,12 @@ dotnet run -- save --profile dev --projector MyProjector --output-dir ./output
 
 ```bash
 dotnet run -- delete --profile dev --projector MyProjector
+
+# 非対話（スクリプト / CI）: 確認プロンプトを省略
+dotnet run -- delete --profile dev --projector MyProjector --yes
 ```
+
+`--yes`（`-y`）なしで stdin が対話的でない場合、入力待ちにならず終了コード 1 で失敗します。
 
 ### tag-events
 
@@ -367,23 +311,23 @@ dotnet run -- cache-stats --cache-dir ./cache
 
 Cache Directory: ./cache
 
-Cache File: ./cache/events.db
+Cache File: ./cache/sekiban-app/cosmos-a2c654a1c5976b56/events.db
 File Size: 15.2 MB
 Last Modified: 2025-01-17 09:30:45 UTC
-
 Total Events: 42,000
-
 Cache Metadata:
-  Remote Endpoint: https://myaccount.documents.azure.com
+  Source: accountendpoint=https://myaccount.documents.azure.com/;database=SekibanDcb
   Database Name: SekibanDcb
   Last Sync: 2025-01-17 09:30:45 UTC
+  Last SortableUniqueId: 063870000000000000000000000000
   Schema Version: 1.0
-
 Tags: 150 total across 5 groups
   User: 100 tags
   Order: 30 tags
   Product: 20 tags
 ```
+
+`Source` 行は保存された、秘密情報を含まない接続の説明です。フォルダ名（`cosmos-…`）は鍵付きハッシュで、キャッシュルートごとに異なります。
 
 ### cache-clear
 
@@ -391,7 +335,10 @@ Tags: 150 total across 5 groups
 
 ```bash
 dotnet run -- cache-clear --cache-dir ./cache
+dotnet run -- cache-clear --cache-dir ./cache --yes
 ```
+
+キャッシュは接続ごとに保存されます（`<cache-dir>/<service id>/<database>-<hash>/events.db`）。フォルダ名は、ソースを変えうるすべての値の HMAC-SHA256 です：データベース種別、指定された接続文字列そのもの、Cosmos のデータベース名または SQLite のパス、PostgreSQL ではクライアントが読む `PG*` 環境変数（`PGOPTIONS`、`PGUSER`、`PGPASSWORD`、`PGPASSFILE`、`PGHOST`、`PGPORT`、`PGDATABASE`、`PGSERVICE`、`PGSERVICEFILE`、`PGSSL*` など）。どれかが違えば別のキャッシュになります（パスワード変更も含む）。HMAC キーはキャッシュルートに一度だけ作られるランダムな 32 バイトの `.cache-key` ファイル（OS が許す範囲で本人のみ読み取り可）なので、フォルダ名から接続の情報は分かりません。キーを読めない場合、`auto` は警告してキャッシュなしで実行し、`cache-only` / `cache-sync` は失敗します。コンソール出力とキャッシュのメタデータには許可リストの値（host、port、database、username、search path、account endpoint）だけを出し、パスワード・キー・トークン・`Options` は表示しません。`cache-sync` はキャッシュフォルダ内の一時ファイルに同期し（既存キャッシュのコピーから始めるので再同期は新しいイベントだけを取得）、同期が成功して完了マーカーを書いた後にだけ `events.db` を置き換えます。失敗・中断した同期が途中のキャッシュを残したり、前のキャッシュを壊したりすることはありません。残った一時ファイルは次の `cache-sync` か `cache-clear` が削除します。各キャッシュフォルダの `.sync.lock` で同期を直列化します。同じ接続の `cache-sync` が実行中なら 2 つ目は終了コード 1 で失敗し、`cache-clear` は同期中のフォルダをスキップして報告します。完了マーカーのないキャッシュは使いません（`auto` は警告、`cache-only` は失敗、`cache-stats` は終了コード 1）。キャッシュルート直下の旧形式 `events.db` は、cache-sync のメタデータでキャッシュと判定できる場合だけ表示・削除します。`cache-stats` と `cache-clear` はディレクトリ配下のすべてのキャッシュが対象です。
 
 ## サービスのビルド
 
@@ -446,8 +393,8 @@ dotnet run --framework net9.0 -- build --profile dev -f -v
 # ローカルキャッシュに同期
 dotnet run --framework net9.0 -- cache-sync --profile prod
 
-# ローカルキャッシュでオフライン作業
-dotnet run --framework net9.0 -- tag-list -d sqlite -c "./cache/events.db"
+# ローカル ApiService の SQLite イベントストアを読む（Sekiban:Database=sqlite）
+dotnet run --framework net9.0 -- tag-list -d sqlite --sqlite-path "../MyApp.ApiService/events.db"
 ```
 
 ## リファレンス実装
@@ -455,4 +402,4 @@ dotnet run --framework net9.0 -- tag-list -d sqlite -c "./cache/events.db"
 完全なリファレンス実装については、以下を参照してください：
 - `dcb/internalUsages/DcbOrleans.Cli/Program.cs`
 
-この実装には、すべてのコマンド、プロファイルサポート、キャッシュ管理機能が含まれています。
+この実装には、すべてのコマンド、プロファイルサポート、キャッシュ管理機能が含まれています。フル機能のテンプレート CLI（`Sekiban.Dcb.Orleans`、`Sekiban.Dcb.Orleans.WithoutResult`、`Sekiban.Dcb.Orleans.Decider`。AWS テンプレートの CLI は `list` のみ）も同じコードですが、キャッシュは service id フォルダの下（`<cache-dir>/<service id>/<database>-<hash>/events.db`）に置かれ、内部 CLI は `<cache-dir>/<database>-<hash>/events.db` を使います。

@@ -6,6 +6,7 @@
         <TargetFramework>net10.0</TargetFramework>
         <Nullable>enable</Nullable>
         <ImplicitUsings>enable</ImplicitUsings>
+        <UserSecretsId>de180821-cdc3-4caa-b4d3-264001d99ad3</UserSecretsId>
         <RootNamespace>SekibanDcbOrleans.Cli</RootNamespace>
     </PropertyGroup>
 

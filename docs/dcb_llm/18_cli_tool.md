@@ -103,8 +103,8 @@ The CLI supports multiple profiles for connecting to different environments (dev
 ### Setting Up Profiles with User Secrets
 
 ```bash
-# Initialize user secrets
-dotnet user-secrets init
+# Template CLI projects already declare a UserSecretsId that is unique to each generated app,
+# so no `dotnet user-secrets init` is needed. (For a hand-made CLI project, set <UserSecretsId> as above.)
 
 # Set up a "dev" profile
 dotnet user-secrets set "Profiles:dev:Database" "postgres"
@@ -154,80 +154,18 @@ The following aliases are supported for convenience:
 | `PostgresConnectionString` | `ConnectionStrings:DcbPostgres` |
 | `CosmosConnectionString` | `ConnectionStrings:SekibanDcbCosmos` |
 | `CosmosDatabase` | `CosmosDb:DatabaseName` |
+| `SqlitePath` | `Sekiban:SqlitePath` |
 
 ### Implementing Profile Resolution
 
-```csharp
-static IConfiguration? ResolveProfile(IConfiguration configuration, string? profileName)
-{
-    var profilesSection = configuration.GetSection("Profiles");
-    var profileEntries = profilesSection.GetChildren().ToList();
-    var hasProfiles = profileEntries.Count > 0;
+`ResolveProfile` (see the reference implementation) works like this:
 
-    var resolvedProfile = profileName;
-    if (string.IsNullOrWhiteSpace(resolvedProfile))
-    {
-        var defaultProfile = configuration["DefaultProfile"];
-        if (!string.IsNullOrWhiteSpace(defaultProfile))
-        {
-            resolvedProfile = defaultProfile;
-        }
-        else if (hasProfiles)
-        {
-            Console.WriteLine("Error: No profile specified. Use --profile option.");
-            Console.WriteLine($"Available profiles: {string.Join(", ", profileEntries.Select(p => p.Key))}");
-            return null;
-        }
-        else
-        {
-            return configuration;
-        }
-    }
+1. Use `--profile`; if it is not given, use `DefaultProfile`.
+2. If neither is set and no `Profiles` section exists, use the root configuration (options, environment variables, user secrets).
+3. If profiles exist but none is selected, or the selected profile does not exist, write the error and the available profile names to stderr and exit with code 1.
+4. Otherwise overlay the profile's keys on the root configuration and map the alias keys from the table above (an explicit standard key in the profile wins over its alias).
 
-    if (!hasProfiles)
-    {
-        Console.WriteLine($"Error: Profile '{resolvedProfile}' is not defined.");
-        return null;
-    }
-
-    var profileSection = profilesSection.GetSection(resolvedProfile!);
-    if (!profileSection.Exists())
-    {
-        Console.WriteLine($"Error: Profile '{resolvedProfile}' not found.");
-        return null;
-    }
-
-    // Build configuration with profile overrides
-    var prefix = $"Profiles:{resolvedProfile}:";
-    var overrides = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
-
-    foreach (var pair in profileSection.AsEnumerable())
-    {
-        if (pair.Value == null) continue;
-        var key = pair.Key.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
-            ? pair.Key[prefix.Length..]
-            : pair.Key;
-        overrides[key] = pair.Value;
-    }
-
-    // Map aliases
-    void MapAlias(string aliasKey, string targetKey)
-    {
-        if (overrides.TryGetValue(aliasKey, out var value) && !overrides.ContainsKey(targetKey))
-            overrides[targetKey] = value;
-    }
-
-    MapAlias("Database", "Sekiban:Database");
-    MapAlias("CosmosConnectionString", "ConnectionStrings:SekibanDcbCosmos");
-    MapAlias("CosmosDatabase", "CosmosDb:DatabaseName");
-    MapAlias("ConnectionString", "ConnectionStrings:DcbPostgres");
-
-    return new ConfigurationBuilder()
-        .AddConfiguration(configuration)
-        .AddInMemoryCollection(overrides!)
-        .Build();
-}
-```
+Command-line options still take priority over profile values (for example `-d` and `-c`).
 
 ## Available Commands
 
@@ -258,10 +196,11 @@ dotnet run -- status --profile dev
 
 Options:
 - `--profile, -P` - Profile name
-- `--database, -d` - Database type (postgres/cosmos)
+- `--database, -d` - Database type (postgres/cosmos/sqlite)
 - `--connection-string, -c` - PostgreSQL connection string
 - `--cosmos-connection-string` - Cosmos DB connection string
 - `--cosmos-database` - Cosmos DB database name
+- `--sqlite-path` - SQLite event store file for `-d sqlite` (the `events.db` the ApiService writes with `Sekiban:Database=sqlite`). Read commands open it read-only and never create, migrate or switch it to WAL; the file must already contain the `dcb_events` table. The path must not contain `;`, `=` or quotes, because it is passed to the Sekiban SQLite stores as a connection-string value
 
 ### build
 
@@ -292,7 +231,12 @@ Delete projection states:
 
 ```bash
 dotnet run -- delete --profile dev --projector MyProjector
+
+# Non-interactive (scripts / CI): skip the prompt
+dotnet run -- delete --profile dev --projector MyProjector --yes
 ```
+
+Without `--yes` (`-y`) and with a non-interactive stdin, the command fails with exit code 1 instead of waiting for input.
 
 ### tag-events
 
@@ -367,23 +311,23 @@ Output:
 
 Cache Directory: ./cache
 
-Cache File: ./cache/events.db
+Cache File: ./cache/sekiban-app/cosmos-a2c654a1c5976b56/events.db
 File Size: 15.2 MB
 Last Modified: 2025-01-17 09:30:45 UTC
-
 Total Events: 42,000
-
 Cache Metadata:
-  Remote Endpoint: https://myaccount.documents.azure.com
+  Source: accountendpoint=https://myaccount.documents.azure.com/;database=SekibanDcb
   Database Name: SekibanDcb
   Last Sync: 2025-01-17 09:30:45 UTC
+  Last SortableUniqueId: 063870000000000000000000000000
   Schema Version: 1.0
-
 Tags: 150 total across 5 groups
   User: 100 tags
   Order: 30 tags
   Product: 20 tags
 ```
+
+The `Source` line is the stored, secret-free description of the connection. The folder name (`cosmos-…`) is a keyed hash and differs for every cache root.
 
 ### cache-clear
 
@@ -391,7 +335,10 @@ Clear the local cache:
 
 ```bash
 dotnet run -- cache-clear --cache-dir ./cache
+dotnet run -- cache-clear --cache-dir ./cache --yes
 ```
+
+Caches are stored per connection (`<cache-dir>/<service id>/<database>-<hash>/events.db`). The folder name is an HMAC-SHA256 of everything that can change the source: the database type, the full connection string as given, the Cosmos database name or SQLite path, and (for PostgreSQL) the `PG*` environment variables the client reads (`PGOPTIONS`, `PGUSER`, `PGPASSWORD`, `PGPASSFILE`, `PGHOST`, `PGPORT`, `PGDATABASE`, `PGSERVICE`, `PGSERVICEFILE`, `PGSSL*`, ...). Any difference gives a separate cache, including a password change. The HMAC key is a random 32-byte `.cache-key` file created once in the cache root (readable by the user only where the OS allows), so the folder name reveals nothing about the connection; if the key cannot be read, `auto` warns and runs without cache and `cache-only` / `cache-sync` fail. Console output and cache metadata only show allowlisted values (host, port, database, username, search path, account endpoint); passwords, keys, tokens and `Options` are never shown. `cache-sync` writes into a temporary file in the cache folder (starting from a copy of the existing cache, so a re-sync only downloads new events) and replaces `events.db` only after the sync succeeded and a completion marker was written. A failed or interrupted sync never leaves a partial cache or destroys the previous one; leftover temporary files are removed by the next `cache-sync` or `cache-clear`. A `.sync.lock` file in each cache folder serializes syncs: a second `cache-sync` for the same connection fails with exit code 1 while one is running, and `cache-clear` skips (and reports) a folder that is being synced. A cache without the completion marker is not used (`auto` warns, `cache-only` fails, `cache-stats` exits 1). A legacy `events.db` directly in the cache root is only shown or deleted when cache-sync metadata identifies it as a cache. `cache-stats` and `cache-clear` cover every cache under the directory.
 
 ## Building Services
 
@@ -446,8 +393,8 @@ dotnet run --framework net9.0 -- build --profile dev -f -v
 # Sync to local cache
 dotnet run --framework net9.0 -- cache-sync --profile prod
 
-# Work offline with local cache
-dotnet run --framework net9.0 -- tag-list -d sqlite -c "./cache/events.db"
+# Read the SQLite event store of a local ApiService (Sekiban:Database=sqlite)
+dotnet run --framework net9.0 -- tag-list -d sqlite --sqlite-path "../MyApp.ApiService/events.db"
 ```
 
 ## Reference Implementation
@@ -455,4 +402,4 @@ dotnet run --framework net9.0 -- tag-list -d sqlite -c "./cache/events.db"
 For a complete reference implementation, see:
 - `dcb/internalUsages/DcbOrleans.Cli/Program.cs`
 
-This implementation includes all commands, profile support, and cache management features.
+This implementation includes all commands, profile support, and cache management features. The full template CLIs (`Sekiban.Dcb.Orleans`, `Sekiban.Dcb.Orleans.WithoutResult` and `Sekiban.Dcb.Orleans.Decider`; the AWS templates only have a `list` command) use the same code, except that their cache folders sit under a service-id folder (`<cache-dir>/<service id>/<database>-<hash>/events.db`) while the internal CLI uses `<cache-dir>/<database>-<hash>/events.db`.
