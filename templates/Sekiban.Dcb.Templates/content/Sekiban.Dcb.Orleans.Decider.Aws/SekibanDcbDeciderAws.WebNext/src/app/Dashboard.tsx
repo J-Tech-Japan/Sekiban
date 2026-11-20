@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { trpc } from "@/lib/trpc";
+import { useAuthStatus } from "@/components/auth/use-auth-status";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -21,6 +22,10 @@ export default function Dashboard({ development }: { development: boolean }) {
   const { data: enrollments } = trpc.enrollments.list.useQuery({});
   const { data: rooms } = trpc.rooms.list.useQuery({ pageNumber: 1, pageSize: 100 });
   const { data: reservations } = trpc.reservations.list.useQuery({ pageNumber: 1, pageSize: 100 });
+
+  // Test data creates rooms, which is an administrator action (the API enforces the same rule)
+  const { data: authStatus } = useAuthStatus();
+  const isAdmin = authStatus?.roles?.includes("Admin") ?? false;
 
   const generateTestData = trpc.testData.generate.useMutation({
     onSuccess: (data) => {
@@ -251,7 +256,7 @@ export default function Dashboard({ development }: { development: boolean }) {
       </div>
 
       {/* Test Data Generation */}
-      {development && (<Card className="border-dashed border-2">
+      {development && isAdmin && (<Card className="border-dashed border-2">
         <CardContent className="pt-6">
           <div className="flex items-center justify-between">
             <div className="flex items-start gap-4">

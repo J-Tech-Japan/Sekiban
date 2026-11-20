@@ -1,3 +1,4 @@
+import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 
 // ProblemDetails schema for RFC 7807 error responses. `errors` carries per-field validation
@@ -39,4 +40,37 @@ export async function extractErrorMessage(res: Response, fallback: string): Prom
   } catch {
     return fallback;
   }
+}
+
+type TrpcErrorCode = ConstructorParameters<typeof TRPCError>[0]["code"];
+
+const trpcCodeByStatus: Record<number, TrpcErrorCode> = {
+  400: "BAD_REQUEST",
+  401: "UNAUTHORIZED",
+  403: "FORBIDDEN",
+  404: "NOT_FOUND",
+  409: "CONFLICT",
+  429: "TOO_MANY_REQUESTS",
+  503: "SERVICE_UNAVAILABLE",
+};
+
+/**
+ * Build a tRPC error that keeps the API's HTTP status (for example 503 while the API is still
+ * starting) instead of turning every upstream failure into a 500.
+ */
+export function apiStatusError(status: number, message: string): TRPCError {
+  return new TRPCError({ code: trpcCodeByStatus[status] ?? "INTERNAL_SERVER_ERROR", message });
+}
+
+export const CONFLICT_MESSAGE = "This was changed by someone else. Reload and try again.";
+
+/**
+ * Turn a failed API response into a tRPC error that keeps the HTTP status. A 409 (another user or
+ * request changed the same data first) gets a "reload and try again" message.
+ */
+export async function apiFailure(res: Response, fallback: string): Promise<TRPCError> {
+  if (res.status === 409) {
+    return apiStatusError(409, CONFLICT_MESSAGE);
+  }
+  return apiStatusError(res.status, await extractErrorMessage(res, fallback));
 }

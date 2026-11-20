@@ -1,5 +1,4 @@
 using Dcb.EventSource.MeetingRoom.User;
-using Dcb.MeetingRoomModels.States.UserAccess;
 using Dcb.MeetingRoomModels.States.UserDirectory;
 using Dcb.MeetingRoomModels.States.UserMonthlyReservation;
 using Dcb.MeetingRoomModels.Tags;
@@ -9,10 +8,13 @@ namespace Dcb.EventSource.MeetingRoom.Reservation;
 
 internal static class ReservationCreationRules
 {
-    internal static async Task ValidateAsync(ICommandContext context, Guid organizerId, DateTime startTime)
+    /// <param name="organizerIsAdmin">
+    ///     Whether the organizer (the acting user) is an administrator, from the authenticated role.
+    ///     Administrators are exempt from the booking window and the monthly limit.
+    /// </param>
+    internal static async Task ValidateAsync(ICommandContext context, Guid organizerId, DateTime startTime, bool organizerIsAdmin)
     {
-        var isAdmin = await IsAdminAsync(context, organizerId);
-        if (!isAdmin)
+        if (!organizerIsAdmin)
         {
             ValidateReservationMonth(startTime, DateTime.UtcNow);
 
@@ -25,12 +27,6 @@ internal static class ReservationCreationRules
                 throw new ApplicationException($"Monthly reservation limit exceeded ({monthlyLimit}).");
             }
         }
-    }
-
-    private static async Task<bool> IsAdminAsync(ICommandContext context, Guid userId)
-    {
-        var accessState = await context.GetStateAsync<UserAccessProjector>(new UserAccessTag(userId));
-        return accessState.Payload is UserAccessState.UserAccessActive active && active.HasRole("Admin");
     }
 
     private static async Task<int> GetMonthlyReservationLimitAsync(ICommandContext context, Guid userId)

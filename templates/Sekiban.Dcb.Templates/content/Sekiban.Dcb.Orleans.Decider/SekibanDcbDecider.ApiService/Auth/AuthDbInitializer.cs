@@ -147,6 +147,10 @@ public class AuthDbInitializer : BackgroundService
         if (tableExists)
         {
             _logger.LogInformation("Identity tables already exist");
+            // Columns added after the tables were first created
+            await context.Database.ExecuteSqlRawAsync(
+                "ALTER TABLE identity.\"RefreshTokens\" ADD COLUMN IF NOT EXISTS \"ReplacedByToken\" text NULL",
+                cancellationToken);
             return;
         }
 

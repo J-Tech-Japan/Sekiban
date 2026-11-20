@@ -1,6 +1,6 @@
 "use client";
 
-import { trpc } from "@/lib/trpc";
+import { useAuthStatus } from "./use-auth-status";
 import Link from "next/link";
 
 interface RequireAuthProps {
@@ -8,10 +8,27 @@ interface RequireAuthProps {
 }
 
 export function RequireAuth({ children }: RequireAuthProps) {
-  const { data: authStatus, isLoading, isFetching } = trpc.auth.status.useQuery(undefined, {
-    staleTime: 0,
-    refetchOnMount: "always",
-  });
+  const { data: authStatus, isLoading, isFetching, serviceUnavailable, refetch } = useAuthStatus();
+
+  // The auth service is temporarily unavailable: keep retrying instead of asking the user to log in
+  if (serviceUnavailable) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="flex flex-col items-center gap-4 text-center max-w-md">
+          <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+          <h2 className="text-xl font-semibold">Service unavailable</h2>
+          <p className="text-muted-foreground">The server is not responding right now. Retrying automatically...</p>
+          <button
+            type="button"
+            onClick={() => refetch()}
+            className="rounded-lg border px-4 py-2 text-sm font-medium hover:bg-muted transition-colors"
+          >
+            Retry now
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   // Show loading state during initial load OR during refetch when not yet authenticated
   // This prevents showing "Authentication Required" briefly while refetching after login

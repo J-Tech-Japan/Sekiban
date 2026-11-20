@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
+using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Validation;
 
 namespace SekibanDcbDeciderAws.ApiService.Exceptions;
@@ -63,6 +64,17 @@ public class GlobalExceptionHandler : IExceptionHandler
                 Type = "https://tools.ietf.org/html/rfc7231#section-6.5.8"
             },
 
+            // Optimistic concurrency: another command wrote to a tag this command read (for example a
+            // reservation cancelled while an approval decision was being recorded). Retrying with fresh
+            // state is safe.
+            Exception concurrency when IsConcurrencyConflict(concurrency) => new ProblemDetails
+            {
+                Status = StatusCodes.Status409Conflict,
+                Title = "Conflict",
+                Detail = "The data was changed by someone else. Reload and try again.",
+                Type = "https://tools.ietf.org/html/rfc7231#section-6.5.8"
+            },
+
             UnauthorizedException unauthorized => new ProblemDetails
             {
                 Status = StatusCodes.Status401Unauthorized,
@@ -99,6 +111,16 @@ public class GlobalExceptionHandler : IExceptionHandler
                 }
             },
 
+            // Thrown by command handlers when the acting user may not perform the action
+            // (for example cancelling someone else's reservation).
+            UnauthorizedAccessException forbidden => new ProblemDetails
+            {
+                Status = StatusCodes.Status403Forbidden,
+                Title = "Forbidden",
+                Detail = forbidden.Message,
+                Type = "https://tools.ietf.org/html/rfc7231#section-6.5.3"
+            },
+
             ApplicationException appEx => new ProblemDetails
             {
                 Status = StatusCodes.Status400BadRequest,
@@ -127,6 +149,16 @@ public class GlobalExceptionHandler : IExceptionHandler
 
         return true; // Exception was handled
     }
+
+    /// <summary>
+    ///     The library reports a tag consistency conflict as an InvalidOperationException whose message starts
+    ///     with "Failed to reserve tags:" (the tag was modified after the command read it), and a store-side
+    ///     conditional append conflict as <see cref="ExpectedTagPositionConflictException" />.
+    /// </summary>
+    internal static bool IsConcurrencyConflict(Exception exception) =>
+        exception is ExpectedTagPositionConflictException
+        || (exception is InvalidOperationException invalid
+            && invalid.Message.StartsWith("Failed to reserve tags:", StringComparison.Ordinal));
 
     private void LogException(Exception exception, int statusCode)
     {

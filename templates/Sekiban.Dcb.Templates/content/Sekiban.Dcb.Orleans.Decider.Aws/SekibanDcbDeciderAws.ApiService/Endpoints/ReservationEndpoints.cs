@@ -26,6 +26,7 @@ public static class ReservationEndpoints
         group.MapPost("/draft", CreateReservationDraftAsync)
             .WithName("CreateReservationDraft");
 
+        // Only the draft's organizer or an administrator may hold it; the command handler enforces it
         group.MapPost("/{reservationId:guid}/hold", CommitReservationHoldAsync)
             .WithName("CommitReservationHold");
 
@@ -33,11 +34,14 @@ public static class ReservationEndpoints
             .WithName("ConfirmReservation")
             .RequireAuthorization("AdminOnly");
 
+        // Only the organizer or an administrator may cancel; the command handler enforces it
         group.MapPost("/{reservationId:guid}/cancel", CancelReservationAsync)
             .WithName("CancelReservation");
 
+        // Rejecting is an approval decision, so it uses the same policy as /approvals
         group.MapPost("/{reservationId:guid}/reject", RejectReservationAsync)
-            .WithName("RejectReservation");
+            .WithName("RejectReservation")
+            .RequireAuthorization("AdminOnly");
 
         // Workflow endpoints
         group.MapPost("/quick", QuickReservationAsync)
@@ -96,12 +100,8 @@ public static class ReservationEndpoints
         }
 
         var organizer = organizerResult.Organizer!.Value;
-        var updatedCommand = command with
-        {
-            OrganizerId = organizer.OrganizerId,
-            OrganizerName = organizer.DisplayName
-        };
-        var result = await executor.ExecuteAsync(updatedCommand);
+        var updatedCommand = ActingUserCommands.ForActingUser(command, organizer);
+        var result = await executor.ExecuteAsync(updatedCommand, CancellationToken.None);
         var createdEvent = result.Events.FirstOrDefault(m => m.Payload is ReservationDraftCreated)?.Payload.As<ReservationDraftCreated>();
         return Results.Ok(new
         {
@@ -117,17 +117,28 @@ public static class ReservationEndpoints
     private static async Task<IResult> CommitReservationHoldAsync(
         Guid reservationId,
         [FromBody] CommitReservationHoldRequest request,
+        HttpContext httpContext,
         [FromServices] ISekibanExecutor executor)
     {
+        var requesterResult = ReservationOrganizerResolver.Resolve(httpContext);
+        if (!requesterResult.IsSuccess)
+        {
+            return Results.Problem(
+                detail: requesterResult.Error,
+                statusCode: StatusCodes.Status401Unauthorized);
+        }
+
         var command = new CommitReservationHold
         {
+            RequestedByUserId = requesterResult.Organizer!.Value.OrganizerId,
+            ActingUserIsAdmin = requesterResult.Organizer!.Value.IsAdmin,
             ReservationId = reservationId,
             RoomId = request.RoomId,
             RequiresApproval = request.RequiresApproval,
             ApprovalRequestId = request.ApprovalRequestId,
             ApprovalRequestComment = request.ApprovalRequestComment
         };
-        var result = await executor.ExecuteAsync(command);
+        var result = await executor.ExecuteAsync(command, CancellationToken.None);
         return Results.Ok(new
         {
             success = true,
@@ -147,7 +158,7 @@ public static class ReservationEndpoints
             ReservationId = reservationId,
             RoomId = request.RoomId
         };
-        var result = await executor.ExecuteAsync(command);
+        var result = await executor.ExecuteAsync(command, CancellationToken.None);
         return Results.Ok(new
         {
             success = true,
@@ -160,15 +171,26 @@ public static class ReservationEndpoints
     private static async Task<IResult> CancelReservationAsync(
         Guid reservationId,
         [FromBody] CancelReservationRequest request,
+        HttpContext httpContext,
         [FromServices] ISekibanExecutor executor)
     {
+        var requesterResult = ReservationOrganizerResolver.Resolve(httpContext);
+        if (!requesterResult.IsSuccess)
+        {
+            return Results.Problem(
+                detail: requesterResult.Error,
+                statusCode: StatusCodes.Status401Unauthorized);
+        }
+
         var command = new CancelReservation
         {
             ReservationId = reservationId,
             RoomId = request.RoomId,
-            Reason = request.Reason
+            Reason = request.Reason,
+            RequestedByUserId = requesterResult.Organizer!.Value.OrganizerId,
+            ActingUserIsAdmin = requesterResult.Organizer!.Value.IsAdmin
         };
-        var result = await executor.ExecuteAsync(command);
+        var result = await executor.ExecuteAsync(command, CancellationToken.None);
         return Results.Ok(new
         {
             success = true,
@@ -181,16 +203,27 @@ public static class ReservationEndpoints
     private static async Task<IResult> RejectReservationAsync(
         Guid reservationId,
         [FromBody] RejectReservationRequest request,
+        HttpContext httpContext,
         [FromServices] ISekibanExecutor executor)
     {
+        var rejecterResult = ReservationOrganizerResolver.Resolve(httpContext);
+        if (!rejecterResult.IsSuccess)
+        {
+            return Results.Problem(
+                detail: rejecterResult.Error,
+                statusCode: StatusCodes.Status401Unauthorized);
+        }
+
+        // Rejecting also records the Rejected approval decision, so the approval request does not stay pending.
         var command = new RejectReservation
         {
+            RejectedByUserId = rejecterResult.Organizer!.Value.OrganizerId,
             ReservationId = reservationId,
             RoomId = request.RoomId,
             ApprovalRequestId = request.ApprovalRequestId,
             Reason = request.Reason
         };
-        var result = await executor.ExecuteAsync(command);
+        var result = await executor.ExecuteAsync(command, CancellationToken.None);
         return Results.Ok(new
         {
             success = true,
@@ -224,7 +257,8 @@ public static class ReservationEndpoints
             request.EndTime,
             request.Purpose,
             request.SelectedEquipment,
-            request.ApprovalRequestComment);
+            request.ApprovalRequestComment,
+            organizer.IsAdmin);
 
         return Results.Ok(new
         {

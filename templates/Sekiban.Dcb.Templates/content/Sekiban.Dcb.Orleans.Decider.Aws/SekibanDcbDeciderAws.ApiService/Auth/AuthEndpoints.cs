@@ -232,12 +232,12 @@ public static class AuthEndpoints
         var storedToken = await dbContext.RefreshTokens
             .FirstOrDefaultAsync(t => t.Token == request.RefreshToken && t.UserId == userId);
 
-        if (storedToken == null || !storedToken.IsValid)
+        if (storedToken == null)
         {
             return Results.Unauthorized();
         }
 
-        // Get user and generate new tokens
+        // Get user
         var user = await userManager.FindByIdAsync(userId);
         if (user == null)
         {
@@ -245,21 +245,43 @@ public static class AuthEndpoints
         }
 
         var roles = await userManager.GetRolesAsync(user);
+        var now = DateTime.UtcNow;
 
-        // Revoke old refresh token
-        storedToken.IsRevoked = true;
-        storedToken.RevokedAt = DateTime.UtcNow;
+        if (!storedToken.IsValid)
+        {
+            // Another frontend instance may have rotated this token a moment ago. Within the grace period,
+            // hand out a new access token with the successor refresh token instead of failing.
+            var successor = await RefreshTokenRotation.FindGraceSuccessorAsync(
+                storedToken,
+                token => dbContext.RefreshTokens.FirstOrDefaultAsync(t => t.Token == token && t.UserId == userId),
+                now);
+            if (successor == null)
+            {
+                return Results.Unauthorized();
+            }
+
+            return Results.Ok(new TokenResponse(
+                tokenService.GenerateAccessToken(user, roles),
+                successor.Token,
+                now.AddMinutes(jwtSettings.Value.AccessTokenExpirationMinutes),
+                successor.ExpiresAt));
+        }
 
         // Generate new tokens
         var newAccessToken = tokenService.GenerateAccessToken(user, roles);
         var newRefreshToken = tokenService.GenerateRefreshToken();
+
+        // Revoke (rotate) the old refresh token and remember its successor
+        storedToken.IsRevoked = true;
+        storedToken.RevokedAt = now;
+        storedToken.ReplacedByToken = newRefreshToken;
 
         // Store new refresh token
         var newRefreshTokenEntity = new RefreshToken
         {
             Token = newRefreshToken,
             UserId = user.Id,
-            ExpiresAt = DateTime.UtcNow.AddDays(jwtSettings.Value.RefreshTokenExpirationDays)
+            ExpiresAt = now.AddDays(jwtSettings.Value.RefreshTokenExpirationDays)
         };
         dbContext.RefreshTokens.Add(newRefreshTokenEntity);
         await dbContext.SaveChangesAsync();
@@ -267,7 +289,7 @@ public static class AuthEndpoints
         return Results.Ok(new TokenResponse(
             newAccessToken,
             newRefreshToken,
-            DateTime.UtcNow.AddMinutes(jwtSettings.Value.AccessTokenExpirationMinutes),
+            now.AddMinutes(jwtSettings.Value.AccessTokenExpirationMinutes),
             newRefreshTokenEntity.ExpiresAt));
     }
 

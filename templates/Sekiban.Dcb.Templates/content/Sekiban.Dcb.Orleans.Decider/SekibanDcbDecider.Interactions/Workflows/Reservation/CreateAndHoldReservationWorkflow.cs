@@ -22,6 +22,7 @@ public class CreateAndHoldReservationWorkflow(ISekibanExecutor executor)
     /// <param name="selectedEquipment">Optional list of room equipment to reserve for use</param>
     /// <param name="requiresApproval">Whether the reservation requires approval</param>
     /// <param name="approvalRequestComment">Optional comment for approval request</param>
+    /// <param name="organizerIsAdmin">Whether the organizer is an administrator (from the authenticated role)</param>
     /// <returns>The reservation ID</returns>
     public async Task<Guid> ExecuteAsync(
         Guid roomId,
@@ -32,7 +33,8 @@ public class CreateAndHoldReservationWorkflow(ISekibanExecutor executor)
         string purpose,
         IReadOnlyList<string>? selectedEquipment = null,
         bool requiresApproval = false,
-        string? approvalRequestComment = null)
+        string? approvalRequestComment = null,
+        bool organizerIsAdmin = false)
     {
         var reservationId = Guid.CreateVersion7();
 
@@ -43,6 +45,7 @@ public class CreateAndHoldReservationWorkflow(ISekibanExecutor executor)
             RoomId = roomId,
             OrganizerId = organizerId,
             OrganizerName = organizerName,
+            ActingUserIsAdmin = organizerIsAdmin,
             StartTime = startTime,
             EndTime = endTime,
             Purpose = purpose,
@@ -56,7 +59,9 @@ public class CreateAndHoldReservationWorkflow(ISekibanExecutor executor)
             RoomId = roomId,
             RequiresApproval = requiresApproval,
             ApprovalRequestId = null,
-            ApprovalRequestComment = approvalRequestComment
+            ApprovalRequestComment = approvalRequestComment,
+            RequestedByUserId = organizerId,
+            ActingUserIsAdmin = organizerIsAdmin
         });
 
         return reservationId;

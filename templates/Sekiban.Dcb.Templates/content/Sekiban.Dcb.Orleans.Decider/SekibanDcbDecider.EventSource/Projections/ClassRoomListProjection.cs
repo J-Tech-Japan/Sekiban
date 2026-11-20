@@ -15,10 +15,13 @@ namespace Dcb.EventSource.Projections;
 /// </summary>
 public record ClassRoomListProjection : IMultiProjector<ClassRoomListProjection>
 {
-    public Dictionary<Guid, ITagStatePayload> ClassRooms { get; init; } = [];
+    // Concrete state types (not ITagStatePayload) so the projection snapshot can be serialized and
+    // restored; an interface-typed dictionary cannot be deserialized and forces a full replay.
+    public Dictionary<Guid, AvailableClassRoomState> AvailableClassRooms { get; init; } = [];
+    public Dictionary<Guid, FilledClassRoomState> FilledClassRooms { get; init; } = [];
 
     public static string MultiProjectorName => nameof(ClassRoomListProjection);
-    public static string MultiProjectorVersion => "1.0.0";
+    public static string MultiProjectorVersion => "2.0.0";
 
     public static ClassRoomListProjection GenerateInitialPayload() => new();
 
@@ -32,14 +35,17 @@ public record ClassRoomListProjection : IMultiProjector<ClassRoomListProjection>
         var classRoomTags = tags.OfType<ClassRoomTag>().ToList();
         if (classRoomTags.Count == 0) return payload;
 
-        var updatedClassRooms = new Dictionary<Guid, ITagStatePayload>(payload.ClassRooms);
+        var available = new Dictionary<Guid, AvailableClassRoomState>(payload.AvailableClassRooms);
+        var filled = new Dictionary<Guid, FilledClassRoomState>(payload.FilledClassRooms);
 
         foreach (var tag in classRoomTags)
         {
             var classRoomId = tag.ClassRoomId;
-            var currentState = updatedClassRooms.TryGetValue(classRoomId, out var existing)
-                ? existing
-                : new EmptyTagStatePayload();
+            ITagStatePayload currentState = available.TryGetValue(classRoomId, out var availableState)
+                ? availableState
+                : filled.TryGetValue(classRoomId, out var filledState)
+                    ? filledState
+                    : new EmptyTagStatePayload();
 
             ITagStatePayload newState = (currentState, ev.Payload) switch
             {
@@ -65,23 +71,23 @@ public record ClassRoomListProjection : IMultiProjector<ClassRoomListProjection>
 
             switch (newState)
             {
-                case EmptyTagStatePayload:
+                case AvailableClassRoomState nextAvailable:
+                    filled.Remove(classRoomId);
+                    available[classRoomId] = nextAvailable;
                     break;
-                case AvailableClassRoomState available:
-                    updatedClassRooms[classRoomId] = available;
-                    break;
-                case FilledClassRoomState filled:
-                    updatedClassRooms[classRoomId] = filled;
+                case FilledClassRoomState nextFilled:
+                    available.Remove(classRoomId);
+                    filled[classRoomId] = nextFilled;
                     break;
             }
         }
 
-        return payload with { ClassRooms = updatedClassRooms };
+        return payload with { AvailableClassRooms = available, FilledClassRooms = filled };
     }
 
     /// <summary>
-    ///     Get all class rooms
+    ///     Get all class rooms (available and filled)
     /// </summary>
     public IReadOnlyList<ITagStatePayload> GetAllClassRooms() =>
-        [.. ClassRooms.Values.Where(s => s is not EmptyTagStatePayload)];
+        [.. AvailableClassRooms.Values.Cast<ITagStatePayload>(), .. FilledClassRooms.Values];
 }

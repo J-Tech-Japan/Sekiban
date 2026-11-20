@@ -10,6 +10,7 @@ namespace Dcb.MeetingRoomModels.States.ApprovalRequest;
 [JsonDerivedType(typeof(ApprovalRequestPending), nameof(ApprovalRequestPending))]
 [JsonDerivedType(typeof(ApprovalRequestApproved), nameof(ApprovalRequestApproved))]
 [JsonDerivedType(typeof(ApprovalRequestRejected), nameof(ApprovalRequestRejected))]
+[JsonDerivedType(typeof(ApprovalRequestWithdrawn), nameof(ApprovalRequestWithdrawn))]
 public abstract record ApprovalRequestState : ITagStatePayload
 {
     public static ApprovalRequestState Empty => new ApprovalRequestEmpty();
@@ -46,9 +47,10 @@ public abstract record ApprovalRequestState : ITagStatePayload
         Guid ApproverId,
         string? Comment,
         DateTime DecidedAt,
-        string? RequestComment) : ApprovalRequestState
+        string? RequestComment,
+        DateTime RequestedAt = default) : ApprovalRequestState
     {
-        public ApprovalRequestApproved() : this(Guid.Empty, Guid.Empty, Guid.Empty, Guid.Empty, [], Guid.Empty, null, DateTime.MinValue, null) { }
+        public ApprovalRequestApproved() : this(Guid.Empty, Guid.Empty, Guid.Empty, Guid.Empty, [], Guid.Empty, null, DateTime.MinValue, null, DateTime.MinValue) { }
     }
 
     /// <summary>
@@ -63,8 +65,26 @@ public abstract record ApprovalRequestState : ITagStatePayload
         Guid ApproverId,
         string? Comment,
         DateTime DecidedAt,
-        string? RequestComment) : ApprovalRequestState
+        string? RequestComment,
+        DateTime RequestedAt = default) : ApprovalRequestState
     {
-        public ApprovalRequestRejected() : this(Guid.Empty, Guid.Empty, Guid.Empty, Guid.Empty, [], Guid.Empty, null, DateTime.MinValue, null) { }
+        public ApprovalRequestRejected() : this(Guid.Empty, Guid.Empty, Guid.Empty, Guid.Empty, [], Guid.Empty, null, DateTime.MinValue, null, DateTime.MinValue) { }
+    }
+
+    /// <summary>
+    ///     Withdrawn state - the reservation was cancelled before a decision was made
+    /// </summary>
+    public record ApprovalRequestWithdrawn(
+        Guid ApprovalRequestId,
+        Guid ReservationId,
+        Guid RoomId,
+        Guid RequesterId,
+        List<Guid> ApproverIds,
+        DateTime RequestedAt,
+        string? RequestComment,
+        string Reason,
+        DateTime WithdrawnAt) : ApprovalRequestState
+    {
+        public ApprovalRequestWithdrawn() : this(Guid.Empty, Guid.Empty, Guid.Empty, Guid.Empty, [], DateTime.MinValue, null, string.Empty, DateTime.MinValue) { }
     }
 }

@@ -1,8 +1,10 @@
+import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { router, publicProcedure } from "../api/trpc";
 import {
   clearSessionCookies,
   getSessionTokens,
+  refreshSessionTokens,
   setSessionCookies,
 } from "../lib/auth-helpers";
 
@@ -176,36 +178,32 @@ export const authRouter = router({
         return userInfoSchema.parse(await res.json());
       }
 
-      // Token might be expired, try to refresh
-      const refreshRes = await fetch(`${process.env.API_BASE_URL}/auth/refresh`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          accessToken: session.accessToken,
-          refreshToken: session.refreshToken,
-        }),
-      });
+      if (res.status !== 401) {
+        // The API is unavailable or failed; the session may still be fine, so keep the cookies.
+        throw new TRPCError({ code: "SERVICE_UNAVAILABLE", message: "Authentication service unavailable" });
+      }
 
-      if (refreshRes.ok) {
-        const newTokens = tokenResponseSchema.parse(await refreshRes.json());
-        await setSessionCookies({
-          accessToken: newTokens.accessToken,
-          refreshToken: newTokens.refreshToken,
-          refreshExpiresAt: new Date(newTokens.refreshTokenExpires),
-        });
+      // The access token expired: refresh (shared with the SSE proxies; see refreshSessionTokens)
+      const refreshed = await refreshSessionTokens();
+      if (refreshed.status === "unavailable") {
+        throw new TRPCError({ code: "SERVICE_UNAVAILABLE", message: "Authentication service unavailable" });
+      }
 
-        // Retry getting user info
+      if (refreshed.status === "ok") {
         const retryRes = await fetch(`${process.env.API_BASE_URL}/auth/me`, {
-          headers: { Authorization: `Bearer ${newTokens.accessToken}` },
+          headers: { Authorization: `Bearer ${refreshed.accessToken}` },
         });
 
         if (retryRes.ok) {
           return userInfoSchema.parse(await retryRes.json());
         }
+        if (retryRes.status !== 401) {
+          throw new TRPCError({ code: "SERVICE_UNAVAILABLE", message: "Authentication service unavailable" });
+        }
       }
 
-      // Failed to refresh, clean up
-      await clearSessionCookies();
+      // No usable session (the refresh token was rejected, or the new token is not accepted).
+      // The cookies are not cleared here; a later login overwrites them and logout clears them.
       return {
         id: "",
         email: "",
@@ -213,14 +211,12 @@ export const authRouter = router({
         roles: [] as string[],
         isAuthenticated: false,
       };
-    } catch {
-      return {
-        id: "",
-        email: "",
-        displayName: null,
-        roles: [] as string[],
-        isAuthenticated: false,
-      };
+    } catch (error) {
+      if (error instanceof TRPCError) {
+        throw error;
+      }
+      // Network error reaching the API: report it as retryable and keep the cookies.
+      throw new TRPCError({ code: "SERVICE_UNAVAILABLE", message: "Authentication service unavailable" });
     }
   }),
 });

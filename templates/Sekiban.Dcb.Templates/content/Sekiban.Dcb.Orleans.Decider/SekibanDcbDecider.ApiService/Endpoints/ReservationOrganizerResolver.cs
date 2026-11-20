@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using Dcb.EventSource.MeetingRoom.Reservation;
 
 namespace SekibanDcbDecider.ApiService.Endpoints;
 
@@ -16,8 +17,26 @@ internal static class ReservationOrganizerResolver
             ?? httpContext.User.FindFirstValue(ClaimTypes.Name)
             ?? "Unknown User";
 
-        return OrganizerResolutionResult.Success(new OrganizerContext(organizerId, displayName));
+        // The JWT/cookie Identity role is the only source for "administrator"
+        var isAdmin = httpContext.User.IsInRole("Admin");
+
+        return OrganizerResolutionResult.Success(new OrganizerContext(organizerId, displayName, isAdmin));
     }
+}
+
+internal static class ActingUserCommands
+{
+    /// <summary>
+    ///     The draft command is bound from the request body, so every acting-user field is overwritten here:
+    ///     a client cannot choose the organizer or claim to be an administrator.
+    /// </summary>
+    internal static CreateReservationDraft ForActingUser(CreateReservationDraft command, OrganizerContext organizer) =>
+        command with
+        {
+            OrganizerId = organizer.OrganizerId,
+            OrganizerName = organizer.DisplayName,
+            ActingUserIsAdmin = organizer.IsAdmin
+        };
 }
 
 internal readonly record struct OrganizerResolutionResult(OrganizerContext? Organizer, string? Error)
@@ -29,4 +48,4 @@ internal readonly record struct OrganizerResolutionResult(OrganizerContext? Orga
     internal static OrganizerResolutionResult Invalid(string error) => new(null, error);
 }
 
-internal readonly record struct OrganizerContext(Guid OrganizerId, string DisplayName);
+internal readonly record struct OrganizerContext(Guid OrganizerId, string DisplayName, bool IsAdmin);

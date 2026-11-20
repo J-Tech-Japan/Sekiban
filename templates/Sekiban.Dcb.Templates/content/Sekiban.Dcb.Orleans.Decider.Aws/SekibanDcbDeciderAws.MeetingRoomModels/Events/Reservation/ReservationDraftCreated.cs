@@ -18,7 +18,6 @@ public record ReservationDraftCreated(
         var tags = new List<ITag>
         {
             new ReservationTag(ReservationId),
-            new RoomTag(RoomId),
             UserMonthlyReservationTag.FromStartTime(OrganizerId, StartTime)
         };
 

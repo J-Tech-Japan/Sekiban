@@ -152,7 +152,9 @@ public static class ApprovalEndpoints
                 endTime,
                 item.ApproverIds,
                 item.RequestedAt,
-                status));
+                status,
+                item.DecidedAt,
+                item.DecisionComment));
         }
 
         return Results.Ok(items);
@@ -170,6 +172,8 @@ public static class ApprovalEndpoints
             return Results.BadRequest("Approver identity is invalid");
         }
 
+        // Only used to find the reservation; the command re-checks the approval request and the
+        // reservation inside its own consistency boundary.
         var tag = new ApprovalRequestTag(approvalRequestId);
         var approvalState = await executor.GetTagStateAsync(new TagStateId(tag, nameof(ApprovalRequestProjector)));
         if (approvalState.Payload is not ApprovalRequestState.ApprovalRequestPending pending)
@@ -177,38 +181,15 @@ public static class ApprovalEndpoints
             return Results.BadRequest("Approval request is not pending");
         }
 
-        var recordResult = await executor.ExecuteAsync(new RecordApprovalDecision
+        // Records the decision and confirms or rejects the reservation in one command.
+        var result = await executor.ExecuteAsync(new RecordApprovalDecision
         {
             ApprovalRequestId = approvalRequestId,
             ReservationId = pending.ReservationId,
             ApproverId = approverId,
             Decision = request.Decision,
             Comment = request.Comment
-        });
-
-        var approvalSortableUniqueId = recordResult.SortableUniqueId;
-        string? reservationSortableUniqueId = null;
-
-        if (request.Decision == ApprovalDecision.Approved)
-        {
-            var confirmResult = await executor.ExecuteAsync(new ConfirmReservation
-            {
-                ReservationId = pending.ReservationId,
-                RoomId = pending.RoomId
-            });
-            reservationSortableUniqueId = confirmResult.SortableUniqueId;
-        }
-        else if (request.Decision == ApprovalDecision.Rejected)
-        {
-            var rejectResult = await executor.ExecuteAsync(new RejectReservation
-            {
-                ReservationId = pending.ReservationId,
-                RoomId = pending.RoomId,
-                ApprovalRequestId = approvalRequestId,
-                Reason = request.Comment ?? "Rejected"
-            });
-            reservationSortableUniqueId = rejectResult.SortableUniqueId;
-        }
+        }, CancellationToken.None);
 
         return Results.Ok(new
         {
@@ -216,8 +197,9 @@ public static class ApprovalEndpoints
             approvalRequestId,
             reservationId = pending.ReservationId,
             decision = request.Decision.ToString(),
-            sortableUniqueId = approvalSortableUniqueId,
-            reservationSortableUniqueId
+            sortableUniqueId = result.SortableUniqueId,
+            // Same write as the decision; kept for clients that read this field.
+            reservationSortableUniqueId = result.SortableUniqueId
         });
     }
 }
@@ -236,7 +218,9 @@ public record ApprovalInboxViewItem(
     DateTime? EndTime,
     List<Guid> ApproverIds,
     DateTime RequestedAt,
-    string Status);
+    string Status,
+    DateTime? DecidedAt,
+    string? DecisionComment);
 
 public record ApprovalDecisionRequest(
     [property: JsonConverter(typeof(JsonStringEnumConverter))] ApprovalDecision Decision,

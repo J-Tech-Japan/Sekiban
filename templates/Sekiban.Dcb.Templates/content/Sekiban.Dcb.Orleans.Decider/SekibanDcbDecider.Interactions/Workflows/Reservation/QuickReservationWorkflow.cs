@@ -29,6 +29,7 @@ public class QuickReservationWorkflow(ISekibanExecutor executor)
     /// <param name="purpose">Purpose of the reservation</param>
     /// <param name="selectedEquipment">Optional list of room equipment to reserve for use</param>
     /// <param name="approvalRequestComment">Optional comment for approval request</param>
+    /// <param name="organizerIsAdmin">Whether the organizer is an administrator (from the authenticated role)</param>
     /// <returns>The reservation result including ID and sortable unique ID</returns>
     public async Task<QuickReservationResult> ExecuteAsync(
         Guid roomId,
@@ -38,7 +39,8 @@ public class QuickReservationWorkflow(ISekibanExecutor executor)
         DateTime endTime,
         string purpose,
         IReadOnlyList<string>? selectedEquipment = null,
-        string? approvalRequestComment = null)
+        string? approvalRequestComment = null,
+        bool organizerIsAdmin = false)
     {
         var reservationId = Guid.CreateVersion7();
         var approvalRequestId = Guid.CreateVersion7();
@@ -50,6 +52,7 @@ public class QuickReservationWorkflow(ISekibanExecutor executor)
             ApprovalRequestId = approvalRequestId,
             OrganizerId = organizerId,
             OrganizerName = organizerName,
+            ActingUserIsAdmin = organizerIsAdmin,
             StartTime = startTime,
             EndTime = endTime,
             Purpose = purpose,

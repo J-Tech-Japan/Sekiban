@@ -81,7 +81,8 @@ function ApprovalsContent() {
     },
   });
 
-  const pendingCount = approvals?.length ?? 0;
+  // Count only pending requests; with "All requests" the list also contains decided ones.
+  const pendingCount = approvals?.filter((item) => item.status === "Pending").length ?? 0;
 
   useEffect(() => {
     if (!lastSortableUniqueId) return;
@@ -262,14 +263,24 @@ function ApprovalsContent() {
                         <Badge variant={statusStyle.variant}>{statusStyle.label}</Badge>
                       </TableCell>
                       <TableCell>
-                        <Input
-                          value={commentValue}
-                          onChange={(e) =>
-                            setComments((prev) => ({ ...prev, [item.approvalRequestId]: e.target.value }))
-                          }
-                          placeholder="Optional comment"
-                          disabled={!isPending}
-                        />
+                        {isPending ? (
+                          <Input
+                            value={commentValue}
+                            onChange={(e) =>
+                              setComments((prev) => ({ ...prev, [item.approvalRequestId]: e.target.value }))
+                            }
+                            placeholder="Optional comment"
+                          />
+                        ) : (
+                          <>
+                            <div className="text-sm">{item.decisionComment || "—"}</div>
+                            {item.decidedAt && (
+                              <div className="text-xs text-muted-foreground">
+                                Decided {formatDateTime(item.decidedAt)}
+                              </div>
+                            )}
+                          </>
+                        )}
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-2">
