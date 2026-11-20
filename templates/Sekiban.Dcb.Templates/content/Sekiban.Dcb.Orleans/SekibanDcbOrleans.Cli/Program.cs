@@ -735,9 +735,29 @@ static bool TryResolveCachePath(CacheOptions cacheOptions, out string? cachePath
         DeleteCacheFiles(resolvedPath);
     }
 
-    var useCache = cacheOptions.Mode != SimpleCacheMode.Off &&
-                   cacheOptions.Mode != SimpleCacheMode.Clear &&
-                   File.Exists(resolvedPath);
+    var useCache = false;
+    string? notUsableReason = null;
+    if (cacheOptions.Mode is SimpleCacheMode.Auto or SimpleCacheMode.CacheOnly && File.Exists(resolvedPath))
+    {
+        // Only a cache that a successful cache-sync completed (it carries cache-sync metadata) is used.
+        var (isCache, error) = GetCacheSyncStatus(resolvedPath);
+        useCache = isCache;
+        notUsableReason = error != null
+            ? $"the cache could not be read ({error})"
+            : isCache ? null : "the cache has no cache-sync metadata (incomplete sync)";
+    }
+
+    if (notUsableReason != null)
+    {
+        if (cacheOptions.Mode == SimpleCacheMode.CacheOnly)
+        {
+            throw new CliException(
+                $"SQLite cache for this connection is not usable: {resolvedPath}: {notUsableReason}.\n" +
+                "Run 'cache-sync' with the same connection settings again.");
+        }
+        Console.Out.Flush();
+        Console.Error.WriteLine($"Warning: {resolvedPath}: {notUsableReason}; reading the database without cache.");
+    }
 
     if (cacheOptions.Mode == SimpleCacheMode.CacheOnly && !useCache)
     {
@@ -1835,8 +1855,28 @@ static async Task<int> SyncCacheAsync(ConnectionTarget target, string cacheDir, 
 
     // One cache per connection: <cache-dir>/<service id>/<database type>-<connection hash>/events.db
     var cachePath = GetCachePath(cacheDir, target);
-    Directory.CreateDirectory(Path.GetDirectoryName(cachePath)!);
+    var cacheFolder = Path.GetDirectoryName(cachePath)!;
+    var cacheExisted = File.Exists(cachePath);
+    Directory.CreateDirectory(cacheFolder);
+    try
+    {
+        return await SyncCacheFileAsync(target, cachePath, safeWindowMinutes);
+    }
+    catch when (!cacheExisted)
+    {
+        // A failed first sync must not leave a cache file behind.
+        SqliteConnection.ClearAllPools();
+        DeleteCacheFiles(cachePath);
+        if (Directory.Exists(cacheFolder) && !Directory.EnumerateFileSystemEntries(cacheFolder).Any())
+        {
+            Directory.Delete(cacheFolder);
+        }
+        throw;
+    }
+}
 
+static async Task<int> SyncCacheFileAsync(ConnectionTarget target, string cachePath, int safeWindowMinutes)
+{
     // Build remote services
     var services = BuildServices(target);
     var remoteStore = services.GetRequiredService<IEventStore>();
@@ -1861,6 +1901,22 @@ static async Task<int> SyncCacheAsync(ConnectionTarget target, string cacheDir, 
     if (!result.IsSuccess)
     {
         throw new CliException($"Cache sync failed: {result.ErrorMessage}");
+    }
+
+    // The library writes metadata only when it cached events. Mark every successful sync, so that a cache is
+    // recognized as complete even when the source had no events yet.
+    if (await localStore.GetMetadataAsync() is null)
+    {
+        var now = DateTime.UtcNow;
+        await localStore.SetMetadataAsync(new CacheMetadata
+        {
+            RemoteEndpoint = syncOptions.RemoteEndpoint,
+            DatabaseName = syncOptions.DatabaseName,
+            SchemaVersion = syncOptions.SchemaVersion,
+            TotalCountAtFetch = result.TotalEventsInCache,
+            CreatedUtc = now,
+            UpdatedUtc = now
+        });
     }
 
     Console.WriteLine($"Sync completed:");
@@ -1891,7 +1947,7 @@ static List<CacheFile> FindCacheFiles(string cacheDir)
         .Select(path => new CacheFile(path, IsLegacy: false))
         .ToList();
 
-    // Legacy <root>/events.db: only a candidate; see GetLegacyCacheStatus
+    // Legacy <root>/events.db: only a candidate; see GetCacheSyncStatus
     var legacyPath = Path.Combine(cacheRoot, "events.db");
     if (File.Exists(legacyPath))
     {
@@ -1901,9 +1957,9 @@ static List<CacheFile> FindCacheFiles(string cacheDir)
 }
 
 // True when the file is a Sekiban SQLite store that cache-sync wrote metadata to (read-only check).
-// A legacy <root>/events.db is a cache only when cache-sync wrote metadata to it. IsCache is false for any other
-// file; Error is set when the file cannot be read (then it is neither shown nor deleted).
-static (bool IsCache, string? Error) GetLegacyCacheStatus(string path)
+// A file is a usable cache only when a successful cache-sync wrote metadata to it (read-only check). IsCache is false
+// for any other file; Error is set when the file or its metadata cannot be read.
+static (bool IsCache, string? Error) GetCacheSyncStatus(string path)
 {
     try
     {
@@ -1940,14 +1996,15 @@ static async Task<int> ShowCacheStatsAsync(string cacheDir)
 
     var domainTypes = DomainType.GetDomainTypes();
     var failures = 0;
+    var shown = 0;
     foreach (var (cachePath, isLegacy) in cacheFiles)
     {
+        var (isCache, statusError) = GetCacheSyncStatus(cachePath);
         if (isLegacy)
         {
-            var (isCache, error) = GetLegacyCacheStatus(cachePath);
-            if (error != null)
+            if (statusError != null)
             {
-                Console.Error.WriteLine($"  Error: Could not read legacy cache {cachePath}: {error}");
+                Console.Error.WriteLine($"  Error: Could not read legacy cache {cachePath}: {statusError}");
                 failures++;
                 continue;
             }
@@ -1956,6 +2013,7 @@ static async Task<int> ShowCacheStatsAsync(string cacheDir)
                 continue;
             }
         }
+        shown++;
 
         // Get file info
         var fileInfo = new FileInfo(cachePath);
@@ -1982,8 +2040,24 @@ static async Task<int> ShowCacheStatsAsync(string cacheDir)
             failures++;
         }
 
-        // Get metadata (the stored source is shown through the allowlist; legacy caches stored raw text)
-        var metadata = await localStore.GetMetadataAsync();
+        // Get metadata (the stored source is shown through the allowlist; legacy caches stored raw text).
+        // GetMetadataAsync hides read errors, so the read-only status check above decides whether it must exist.
+        if (statusError != null)
+        {
+            Console.Error.WriteLine($"  Error: Could not read cache metadata of {cachePath}: {statusError}");
+            failures++;
+        }
+        else if (!isCache)
+        {
+            Console.Error.WriteLine($"  Error: {cachePath} has no cache-sync metadata (incomplete sync); it is not used.");
+            failures++;
+        }
+        var metadata = statusError == null && isCache ? await localStore.GetMetadataAsync() : null;
+        if (statusError == null && isCache && metadata == null)
+        {
+            Console.Error.WriteLine($"  Error: Could not read cache metadata of {cachePath}.");
+            failures++;
+        }
         if (metadata != null)
         {
             Console.WriteLine("Cache Metadata:");
@@ -2020,6 +2094,10 @@ static async Task<int> ShowCacheStatsAsync(string cacheDir)
         Console.WriteLine();
     }
 
+    if (shown == 0 && failures == 0)
+    {
+        Console.WriteLine("No cache file found.");
+    }
     if (failures > 0)
     {
         throw new CliException($"{failures} cache read(s) failed.");
@@ -2044,7 +2122,7 @@ static Task<int> ClearCacheAsync(string cacheDir, bool assumeYes)
             toDelete.Add(path);
             continue;
         }
-        var (isCache, error) = GetLegacyCacheStatus(path);
+        var (isCache, error) = GetCacheSyncStatus(path);
         if (error != null)
         {
             Console.Error.WriteLine($"  Error: Could not read legacy cache {path} (not deleted): {error}");

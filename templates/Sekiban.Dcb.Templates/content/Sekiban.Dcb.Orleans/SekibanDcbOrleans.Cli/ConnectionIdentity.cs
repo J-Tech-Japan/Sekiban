@@ -13,13 +13,20 @@ internal static class ConnectionIdentity
 {
     private const string LegacySourceNotShown = "(legacy cache; source not shown)";
 
+    // Marker pair: the identity cannot be determined (Options / PGOPTIONS could not be parsed with certainty).
+    // Never part of a hash: a connection with this marker gets no cache.
+    private const string UndeterminedKey = "options";
+    private const string UndeterminedValue = "(not shown; not parsed)";
+
     /// <summary>
     ///     Allowlisted values as canonical key/value pairs, sorted by key. Throws <see cref="CliException" /> when the
     ///     connection string cannot be parsed.
     ///     Postgres: parsed by Npgsql itself, so aliases (Server/Host, DB/Database, User Id/Username, SearchPath) and
     ///     repeated keys resolve exactly as the provider resolves them (the last one wins). The search path comes from
-    ///     Search Path, or else from a search_path switch in Options; Search Path wins because PostgreSQL applies
-    ///     startup parameters after the Options switches. All other Options content is dropped.
+    ///     Search Path, or else from a search_path switch in the effective options (Options, else the PGOPTIONS
+    ///     environment variable); Search Path wins because PostgreSQL applies startup parameters after the options.
+    ///     Options are only used when they parse with certainty (see <see cref="TryGetSearchPathFromOptions" />);
+    ///     otherwise the identity is "not determinable" (no cache is used) and no part of them is shown.
     ///     Cosmos: only AccountEndpoint (scheme, host, port and path; no user info, query or fragment).
     /// </summary>
     public static IReadOnlyList<KeyValuePair<string, string>> GetPublicParts(string databaseType, string connectionString)
@@ -45,17 +52,24 @@ internal static class ConnectionIdentity
             throw new CliException("The PostgreSQL connection string could not be parsed.");
         }
 
-        var searchPath = !string.IsNullOrEmpty(builder.SearchPath)
-            ? builder.SearchPath
-            : GetSearchPathFromOptions(builder.Options);
-        return
-        [
+        var parts = new List<KeyValuePair<string, string>>
+        {
             new("host", builder.Host ?? ""),
             new("port", builder.Port.ToString(System.Globalization.CultureInfo.InvariantCulture)),
             new("database", builder.Database ?? ""),
-            new("username", builder.Username ?? ""),
-            new("searchpath", searchPath ?? "")
-        ];
+            new("username", builder.Username ?? "")
+        };
+
+        // Npgsql sends PGOPTIONS when the connection string has no Options.
+        var options = !string.IsNullOrEmpty(builder.Options)
+            ? builder.Options
+            : Environment.GetEnvironmentVariable("PGOPTIONS");
+        if (!TryGetSearchPathFromOptions(options, out var optionsSearchPath))
+        {
+            parts.Add(new(UndeterminedKey, UndeterminedValue));
+        }
+        parts.Add(new("searchpath", !string.IsNullOrEmpty(builder.SearchPath) ? builder.SearchPath : optionsSearchPath ?? ""));
+        return parts;
     }
 
     private static IEnumerable<KeyValuePair<string, string>> GetGenericParts(string connectionString)
@@ -77,36 +91,49 @@ internal static class ConnectionIdentity
         return [];
     }
 
-    // Last search_path set in an Npgsql Options string ("-c search_path=x", "-csearch_path=x" or "--search_path=x").
-    private static string? GetSearchPathFromOptions(string? options)
+    // Fail-safe parser for the (libpq style) options string. It succeeds only when the string has no backslash and
+    // consists solely of whitespace-separated "-c name=value" or "--name=value" switches; searchPath is the last
+    // search_path value (null when none). Anything else returns false, so the identity is treated as undeterminable.
+    private static bool TryGetSearchPathFromOptions(string? options, out string? searchPath)
     {
+        searchPath = null;
         if (string.IsNullOrWhiteSpace(options))
         {
-            return null;
+            return true;
+        }
+        if (options.Contains('\\'))
+        {
+            return false;
         }
 
-        string? result = null;
         var tokens = options.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
         for (var i = 0; i < tokens.Length; i++)
         {
-            string? setting = tokens[i] switch
+            string setting;
+            if (tokens[i] == "-c" && i + 1 < tokens.Length)
             {
-                "-c" when i + 1 < tokens.Length => tokens[++i],
-                var t when t.StartsWith("--", StringComparison.Ordinal) => t[2..],
-                var t when t.StartsWith("-c", StringComparison.Ordinal) => t[2..],
-                _ => null
-            };
-            if (setting is null)
-            {
-                continue;
+                setting = tokens[++i];
             }
-            var eq = setting.IndexOf('=');
-            if (eq > 0 && setting[..eq].Replace('-', '_').Equals("search_path", StringComparison.OrdinalIgnoreCase))
+            else if (tokens[i].StartsWith("--", StringComparison.Ordinal) && tokens[i].Length > 2)
             {
-                result = setting[(eq + 1)..];
+                setting = tokens[i][2..];
+            }
+            else
+            {
+                return false;
+            }
+
+            var eq = setting.IndexOf('=');
+            if (eq <= 0 || setting.StartsWith('-'))
+            {
+                return false;
+            }
+            if (setting[..eq].Replace('-', '_').Equals("search_path", StringComparison.OrdinalIgnoreCase))
+            {
+                searchPath = setting[(eq + 1)..];
             }
         }
-        return result;
+        return true;
     }
 
     // scheme://host[:port]/path of an absolute URI; null (value dropped) when it is not one.
@@ -128,7 +155,12 @@ internal static class ConnectionIdentity
             "cosmos" => "accountendpoint",
             _ => null
         };
-        return required == null || GetPublicParts(databaseType, connectionString).Any(pair => pair.Key == required);
+        if (required == null)
+        {
+            return true;
+        }
+        var parts = GetPublicParts(databaseType, connectionString);
+        return parts.Any(pair => pair.Key == required) && !parts.Any(pair => pair.Key == UndeterminedKey);
     }
 
     /// <summary>Throws unless <see cref="IdentifiesDatabase" />; required before a cache is read or written.</summary>
@@ -136,9 +168,13 @@ internal static class ConnectionIdentity
     {
         if (!IdentifiesDatabase(databaseType, connectionString))
         {
-            throw new CliException(
-                $"The {databaseType} connection string has no {(databaseType == "postgres" ? "Database (or DB)" : "AccountEndpoint")} value, " +
-                "so its cache cannot be identified. Add it to the connection string or use --cache-mode off.");
+            var undetermined = GetPublicParts(databaseType, connectionString).Any(pair => pair.Key == UndeterminedKey);
+            throw new CliException(undetermined
+                ? "The connection's Options (or the PGOPTIONS environment variable) cannot be parsed with certainty, " +
+                  "so its cache cannot be identified. Use only '-c name=value' / '--name=value' switches without backslashes, " +
+                  "or use --cache-mode off."
+                : $"The {databaseType} connection string has no {(databaseType == "postgres" ? "Database (or DB)" : "AccountEndpoint")} value, " +
+                  "so its cache cannot be identified. Add it to the connection string or use --cache-mode off.");
         }
     }
 
@@ -162,24 +198,37 @@ internal static class ConnectionIdentity
         {
             var text = stored.EndsWith("...", StringComparison.Ordinal) ? stored[..^3] : stored;
             var builder = new DbConnectionStringBuilder { ConnectionString = text };
-            var shown = new List<string>();
+            var shown = new List<KeyValuePair<string, string>>();
             foreach (var key in new[] { "host", "port", "database", "username", "searchpath" })
             {
                 if (builder.TryGetValue(key, out var value))
                 {
-                    shown.Add($"{key}={value}");
+                    shown.Add(new(key, Convert.ToString(value) ?? ""));
                 }
             }
             if (builder.TryGetValue("accountendpoint", out var endpoint) && NormalizeEndpoint(Convert.ToString(endpoint)) is { } safeEndpoint)
             {
-                shown.Add($"accountendpoint={safeEndpoint}");
+                shown.Add(new("accountendpoint", safeEndpoint));
             }
-            return shown.Count == 0 ? LegacySourceNotShown : string.Join(";", shown);
+            return shown.Count == 0
+                ? LegacySourceNotShown
+                : Serialize(shown.OrderBy(pair => pair.Key, StringComparer.Ordinal));
         }
         catch (ArgumentException)
         {
             return LegacySourceNotShown;
         }
+    }
+
+    // key=value pairs in the given order, quoted where needed (round-trips through DbConnectionStringBuilder).
+    private static string Serialize(IEnumerable<KeyValuePair<string, string>> pairs)
+    {
+        var builder = new DbConnectionStringBuilder();
+        foreach (var (key, value) in pairs)
+        {
+            builder[key] = value;
+        }
+        return builder.ConnectionString;
     }
 
     /// <summary>Human readable description without secrets (sqlite: the full file path).</summary>
@@ -190,12 +239,12 @@ internal static class ConnectionIdentity
             return connectionString;
         }
 
-        var description = string.Join(";", GetPublicParts(databaseType, connectionString).Select(pair => $"{pair.Key}={pair.Value}"));
-        if (databaseType != "cosmos")
+        var parts = GetPublicParts(databaseType, connectionString).ToList();
+        if (databaseType == "cosmos")
         {
-            return description;
+            parts.Add(new("database", cosmosDatabaseName));
         }
-        return description.Length == 0 ? $"database={cosmosDatabaseName}" : $"{description};database={cosmosDatabaseName}";
+        return Serialize(parts);
     }
 
     /// <summary>

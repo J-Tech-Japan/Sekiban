@@ -311,12 +311,12 @@ dotnet run -- cache-stats --cache-dir ./cache
 
 Cache Directory: ./cache
 
-Cache File: ./cache/sekiban-app/cosmos-3f9a1c2b7d4e8f60/events.db
+Cache File: ./cache/sekiban-app/cosmos-a2c654a1c5976b56/events.db
 File Size: 15.2 MB
 Last Modified: 2025-01-17 09:30:45 UTC
 Total Events: 42,000
 Cache Metadata:
-  Source: accountendpoint=https://myaccount.documents.azure.com:443/;database=SekibanDcb
+  Source: accountendpoint=https://myaccount.documents.azure.com/;database=SekibanDcb
   Database Name: SekibanDcb
   Last Sync: 2025-01-17 09:30:45 UTC
   Last SortableUniqueId: 063870000000000000000000000000
@@ -336,7 +336,7 @@ dotnet run -- cache-clear --cache-dir ./cache
 dotnet run -- cache-clear --cache-dir ./cache --yes
 ```
 
-キャッシュは接続ごとに保存されます（`<cache-dir>/<service id>/<database>-<hash>/events.db`。ハッシュにパスワードやキーは含めません）。ある DB から同期したキャッシュが別の DB に使われることはありません。キャッシュを使うには接続にデータベースが明示されている必要があります（Postgres は `Database`/`DB`、Cosmos は `AccountEndpoint`）。ない場合、`auto` は警告を出してキャッシュなしで DB を直接読み、`cache-only` と `cache-sync` は失敗します。Postgres の値は Npgsql と同じく解決されます（`Database`/`DB`、`Host`/`Server` などは最後の指定が有効）。search path も識別に含まれます：`Search Path`、なければ `Options` 内の `search_path` 指定（PostgreSQL は `Options` の後に起動パラメータを適用するため `Search Path` が優先）。`Options` のそれ以外は無視します。キャッシュルート直下の旧形式 `events.db` は、cache-sync のメタデータでキャッシュと判定できる場合だけ表示・削除します。`cache-stats` と `cache-clear` はディレクトリ配下のすべてのキャッシュが対象です。
+キャッシュは接続ごとに保存されます（`<cache-dir>/<service id>/<database>-<hash>/events.db`。ハッシュにパスワードやキーは含めません）。ある DB から同期したキャッシュが別の DB に使われることはありません。キャッシュを使うには接続にデータベースが明示されている必要があります（Postgres は `Database`/`DB`、Cosmos は `AccountEndpoint`）。ない場合、`auto` は警告を出してキャッシュなしで DB を直接読み、`cache-only` と `cache-sync` は失敗します。Postgres の値は Npgsql と同じく解決されます（`Database`/`DB`、`Host`/`Server` などは最後の指定が有効）。search path も識別に含まれます：`Search Path`、なければ実効オプション（`Options`、未設定なら環境変数 `PGOPTIONS`）内の `search_path` 指定。PostgreSQL はオプションの後に起動パラメータを適用するため `Search Path` が優先です。オプションはバックスラッシュを含まず `-c name=value` / `--name=value` だけで構成される場合にのみ使い、それ以外は識別不能として `auto` は警告してキャッシュなしで実行、`cache-only` / `cache-sync` は失敗します。解析した search path 以外のオプション内容は表示しません。キャッシュは `cache-sync` が成功したもの（cache-sync メタデータあり）だけを使います。初回の同期に失敗した場合はキャッシュファイルを残さず、メタデータを読めないキャッシュは使いません（`auto` は警告、`cache-only` は失敗、`cache-stats` は終了コード 1）。キャッシュルート直下の旧形式 `events.db` は、cache-sync のメタデータでキャッシュと判定できる場合だけ表示・削除します。`cache-stats` と `cache-clear` はディレクトリ配下のすべてのキャッシュが対象です。
 
 ## サービスのビルド
 

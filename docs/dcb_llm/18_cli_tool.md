@@ -311,12 +311,12 @@ Output:
 
 Cache Directory: ./cache
 
-Cache File: ./cache/sekiban-app/cosmos-3f9a1c2b7d4e8f60/events.db
+Cache File: ./cache/sekiban-app/cosmos-a2c654a1c5976b56/events.db
 File Size: 15.2 MB
 Last Modified: 2025-01-17 09:30:45 UTC
 Total Events: 42,000
 Cache Metadata:
-  Source: accountendpoint=https://myaccount.documents.azure.com:443/;database=SekibanDcb
+  Source: accountendpoint=https://myaccount.documents.azure.com/;database=SekibanDcb
   Database Name: SekibanDcb
   Last Sync: 2025-01-17 09:30:45 UTC
   Last SortableUniqueId: 063870000000000000000000000000
@@ -336,7 +336,7 @@ dotnet run -- cache-clear --cache-dir ./cache
 dotnet run -- cache-clear --cache-dir ./cache --yes
 ```
 
-Caches are stored per connection (`<cache-dir>/<service id>/<database>-<hash>/events.db`; the hash excludes passwords and keys), so a cache synced from one database is never read for another. A cache is only used when the connection names its database (Postgres `Database`/`DB`, Cosmos `AccountEndpoint`): without one, `auto` writes a warning and reads the database directly, while `cache-only` and `cache-sync` fail. Postgres values are resolved as Npgsql does (the last of `Database`/`DB`, `Host`/`Server`, ... wins). The search path is part of the identity: `Search Path`, or else a `search_path` switch in `Options` (`Search Path` wins, as PostgreSQL applies startup parameters after `Options`); the rest of `Options` is ignored. A legacy `events.db` directly in the cache root is only shown or deleted when cache-sync metadata identifies it as a cache. `cache-stats` and `cache-clear` cover every cache under the directory.
+Caches are stored per connection (`<cache-dir>/<service id>/<database>-<hash>/events.db`; the hash excludes passwords and keys), so a cache synced from one database is never read for another. A cache is only used when the connection names its database (Postgres `Database`/`DB`, Cosmos `AccountEndpoint`): without one, `auto` writes a warning and reads the database directly, while `cache-only` and `cache-sync` fail. Postgres values are resolved as Npgsql does (the last of `Database`/`DB`, `Host`/`Server`, ... wins). The search path is part of the identity: `Search Path`, or else a `search_path` switch in the effective options (`Options`, or the `PGOPTIONS` environment variable when `Options` is not set). `Search Path` wins, as PostgreSQL applies startup parameters after the options. The options are only used when they contain no backslash and consist solely of `-c name=value` / `--name=value` switches; otherwise the identity cannot be determined, so `auto` warns and runs without cache and `cache-only` / `cache-sync` fail. No part of the options is ever shown except the parsed search path. A cache is only used after a successful `cache-sync` (it carries cache-sync metadata); a failed first sync leaves no cache file, and a cache without readable metadata is not used (`auto` warns, `cache-only` fails, `cache-stats` exits 1). A legacy `events.db` directly in the cache root is only shown or deleted when cache-sync metadata identifies it as a cache. `cache-stats` and `cache-clear` cover every cache under the directory.
 
 ## Building Services
 
