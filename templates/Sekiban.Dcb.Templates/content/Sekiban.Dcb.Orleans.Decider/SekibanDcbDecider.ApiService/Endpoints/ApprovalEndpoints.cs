@@ -152,7 +152,9 @@ public static class ApprovalEndpoints
                 endTime,
                 item.ApproverIds,
                 item.RequestedAt,
-                status));
+                status,
+                item.DecidedAt,
+                item.DecisionComment));
         }
 
         return Results.Ok(items);
@@ -175,6 +177,15 @@ public static class ApprovalEndpoints
         if (approvalState.Payload is not ApprovalRequestState.ApprovalRequestPending pending)
         {
             return Results.BadRequest("Approval request is not pending");
+        }
+
+        // Do not record a decision for a reservation that is no longer waiting for approval
+        // (for example one the organizer cancelled); the reservation could not follow the decision.
+        var reservationState = await executor.GetTagStateAsync(
+            new TagStateId(new ReservationTag(pending.ReservationId), nameof(ReservationProjector)));
+        if (reservationState.Payload is not ReservationState.ReservationHeld { RequiresApproval: true })
+        {
+            return Results.BadRequest("Reservation is no longer awaiting approval");
         }
 
         var recordResult = await executor.ExecuteAsync(new RecordApprovalDecision
@@ -236,7 +247,9 @@ public record ApprovalInboxViewItem(
     DateTime? EndTime,
     List<Guid> ApproverIds,
     DateTime RequestedAt,
-    string Status);
+    string Status,
+    DateTime? DecidedAt,
+    string? DecisionComment);
 
 public record ApprovalDecisionRequest(
     [property: JsonConverter(typeof(JsonStringEnumConverter))] ApprovalDecision Decision,

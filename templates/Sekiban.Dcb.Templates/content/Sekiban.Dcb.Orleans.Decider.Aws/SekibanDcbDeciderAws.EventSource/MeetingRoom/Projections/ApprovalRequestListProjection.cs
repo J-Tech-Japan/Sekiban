@@ -17,7 +17,7 @@ public record ApprovalRequestListProjection : IMultiProjector<ApprovalRequestLis
     public Dictionary<Guid, ApprovalRequestState> ApprovalRequests { get; init; } = [];
 
     public static string MultiProjectorName => nameof(ApprovalRequestListProjection);
-    public static string MultiProjectorVersion => "1.0.0";
+    public static string MultiProjectorVersion => "1.1.0";
 
     public static ApprovalRequestListProjection GenerateInitialPayload() => new();
 

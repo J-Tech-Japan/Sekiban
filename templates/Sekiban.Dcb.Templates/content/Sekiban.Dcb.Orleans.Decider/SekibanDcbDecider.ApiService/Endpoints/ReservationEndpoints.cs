@@ -33,11 +33,14 @@ public static class ReservationEndpoints
             .WithName("ConfirmReservation")
             .RequireAuthorization("AdminOnly");
 
+        // Only the organizer or an administrator may cancel; the command handler enforces it
         group.MapPost("/{reservationId:guid}/cancel", CancelReservationAsync)
             .WithName("CancelReservation");
 
+        // Rejecting is an approval decision, so it uses the same policy as /approvals
         group.MapPost("/{reservationId:guid}/reject", RejectReservationAsync)
-            .WithName("RejectReservation");
+            .WithName("RejectReservation")
+            .RequireAuthorization("AdminOnly");
 
         // Workflow endpoints
         group.MapPost("/quick", QuickReservationAsync)
@@ -160,13 +163,23 @@ public static class ReservationEndpoints
     private static async Task<IResult> CancelReservationAsync(
         Guid reservationId,
         [FromBody] CancelReservationRequest request,
+        HttpContext httpContext,
         [FromServices] ISekibanExecutor executor)
     {
+        var requesterResult = ReservationOrganizerResolver.Resolve(httpContext);
+        if (!requesterResult.IsSuccess)
+        {
+            return Results.Problem(
+                detail: requesterResult.Error,
+                statusCode: StatusCodes.Status401Unauthorized);
+        }
+
         var command = new CancelReservation
         {
             ReservationId = reservationId,
             RoomId = request.RoomId,
-            Reason = request.Reason
+            Reason = request.Reason,
+            RequestedByUserId = requesterResult.Organizer!.Value.OrganizerId
         };
         var result = await executor.ExecuteAsync(command);
         return Results.Ok(new

@@ -55,7 +55,12 @@ public record CreateQuickReservation : ICommandWithHandler<CreateQuickReservatio
         await ReservationCreationRules.ValidateAsync(context, command.OrganizerId, command.StartTime);
 
         var roomTag = new RoomTag(command.RoomId);
-        var roomStateTyped = await context.GetStateAsync<RoomState, RoomProjector>(roomTag);
+        if (!await context.TagExistsAsync(roomTag))
+        {
+            throw new ApplicationException($"Room {command.RoomId} not found");
+        }
+
+        var roomStateTyped = await context.GetStateAsync<RoomProjector>(roomTag);
         if (roomStateTyped.Payload is not RoomState roomState || roomState.RoomId == Guid.Empty)
         {
             throw new ApplicationException($"Room {command.RoomId} not found");

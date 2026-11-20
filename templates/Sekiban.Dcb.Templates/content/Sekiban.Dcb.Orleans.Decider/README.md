@@ -15,6 +15,8 @@ Debug event inspection and projection persist, deactivate, refresh, snapshot and
 
 Sample users (including `admin@example.com`, password `Sekiban1234%`) and the fixed JWT signing key are Development-only. Identity tables and roles are initialized in every environment. Registration grants only User. The Blazor Web has no authentication client or login page; use WebNext for registration and login. The AppHost runs WebNext with `next dev`. Its server uses `NODE_ENV` to gate quick login and test-data controls and rejects test-data procedures outside development. Test-data API routes still require authentication in Development.
 
+Meeting-room rules: creating and updating rooms, confirming and rejecting reservations, and approval decisions require the Admin role. Only the organizer or an administrator can cancel a reservation. Holding a draft uses the draft's room; for a room that requires approval the hold starts the approval request itself (an explicit `approvalRequestId` must be a pending request for the same reservation).
+
 `Orleans:UseInMemoryStreams` selects memory streams locally. For deployed Azure Queue or Event Hub streams, supply the existing storage/queue configuration in the infrastructure guides; PubSubStore must be persistent.
 
 ## Before production

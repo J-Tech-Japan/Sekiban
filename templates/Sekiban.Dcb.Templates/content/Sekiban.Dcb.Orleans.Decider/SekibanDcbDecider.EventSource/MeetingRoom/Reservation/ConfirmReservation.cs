@@ -25,19 +25,23 @@ public record ConfirmReservation : ICommandWithHandler<ConfirmReservation>
     {
         // 1. Get the reservation state to get full details
         var reservationTag = new ReservationTag(command.ReservationId);
-        var reservationStateTyped = await context.GetStateAsync<ReservationState, ReservationProjector>(reservationTag);
-
-        if (reservationStateTyped.Payload is ReservationState.ReservationEmpty)
+        if (!await context.TagExistsAsync(reservationTag))
         {
             throw new ApplicationException($"Reservation {command.ReservationId} not found");
         }
 
+        var reservationStateTyped = await context.GetStateAsync<ReservationProjector>(reservationTag);
+        var reservationState = reservationStateTyped.Payload as ReservationState ?? ReservationState.Empty;
+
         // 2. Extract reservation details
-        if (reservationStateTyped.Payload is not ReservationState.ReservationHeld held)
+        if (reservationState is not ReservationState.ReservationHeld held)
         {
             throw new ApplicationException(
-                $"Reservation {command.ReservationId} is in invalid state for confirmation: {reservationStateTyped.Payload.GetType().Name}");
+                $"Reservation {command.ReservationId} is in invalid state for confirmation: {reservationState.GetType().Name}");
         }
+
+        // The room always comes from the reservation, not from the request.
+        var roomId = held.RoomId;
 
         var startTime = held.StartTime;
         var endTime = held.EndTime;
@@ -63,13 +67,13 @@ public record ConfirmReservation : ICommandWithHandler<ConfirmReservation>
         }
 
         // 3. Get room name for user-friendly error messages
-        var roomTag = new RoomTag(command.RoomId);
+        var roomTag = new RoomTag(roomId);
         var roomStateTyped = await context.GetStateAsync<RoomProjector>(roomTag);
         var roomState = roomStateTyped.Payload as RoomState ?? RoomState.Empty;
-        var roomName = !string.IsNullOrEmpty(roomState.Name) ? roomState.Name : $"Room {command.RoomId}";
+        var roomName = !string.IsNullOrEmpty(roomState.Name) ? roomState.Name : $"Room {roomId}";
 
         // 4. Check for conflicts on each day the reservation spans
-        var dailyTags = RoomDailyActivityTag.CreateTagsForTimeRange(command.RoomId, startTime, endTime).ToList();
+        var dailyTags = RoomDailyActivityTag.CreateTagsForTimeRange(roomId, startTime, endTime).ToList();
 
         foreach (var dailyTag in dailyTags)
         {
@@ -93,7 +97,7 @@ public record ConfirmReservation : ICommandWithHandler<ConfirmReservation>
         // 5. Create confirmed event with all details for projectors
         return new ReservationConfirmed(
             command.ReservationId,
-            command.RoomId,
+            roomId,
             organizerId,
             startTime,
             endTime,

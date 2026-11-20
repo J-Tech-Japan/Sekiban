@@ -19,11 +19,14 @@ public static class RoomEndpoints
             .WithName("GetRooms");
 
         // Command endpoints
+        // Room management is limited to administrators (same policy as user management and approvals)
         group.MapPost("/", CreateRoomAsync)
-            .WithName("CreateRoom");
+            .WithName("CreateRoom")
+            .RequireAuthorization("AdminOnly");
 
         group.MapPut("/{roomId:guid}", UpdateRoomAsync)
-            .WithName("UpdateRoom");
+            .WithName("UpdateRoom")
+            .RequireAuthorization("AdminOnly");
     }
 
     private static async Task<IResult> GetRoomListAsync(

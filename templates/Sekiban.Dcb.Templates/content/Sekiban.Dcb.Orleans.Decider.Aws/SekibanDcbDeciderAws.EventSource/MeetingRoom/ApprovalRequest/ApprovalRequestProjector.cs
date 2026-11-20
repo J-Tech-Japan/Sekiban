@@ -7,7 +7,7 @@ namespace Dcb.EventSource.MeetingRoom.ApprovalRequest;
 
 public class ApprovalRequestProjector : ITagProjector<ApprovalRequestProjector>
 {
-    public static string ProjectorVersion => "1.0.0";
+    public static string ProjectorVersion => "1.1.0";
     public static string ProjectorName => nameof(ApprovalRequestProjector);
 
     public static ITagStatePayload Project(ITagStatePayload current, Event ev)

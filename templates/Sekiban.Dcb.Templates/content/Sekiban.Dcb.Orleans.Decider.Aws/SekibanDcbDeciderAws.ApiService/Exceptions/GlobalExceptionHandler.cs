@@ -99,6 +99,16 @@ public class GlobalExceptionHandler : IExceptionHandler
                 }
             },
 
+            // Thrown by command handlers when the acting user may not perform the action
+            // (for example cancelling someone else's reservation).
+            UnauthorizedAccessException forbidden => new ProblemDetails
+            {
+                Status = StatusCodes.Status403Forbidden,
+                Title = "Forbidden",
+                Detail = forbidden.Message,
+                Type = "https://tools.ietf.org/html/rfc7231#section-6.5.3"
+            },
+
             ApplicationException appEx => new ProblemDetails
             {
                 Status = StatusCodes.Status400BadRequest,

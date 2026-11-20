@@ -11,7 +11,7 @@ internal static class ReservationCreationRules
 {
     internal static async Task ValidateAsync(ICommandContext context, Guid organizerId, DateTime startTime)
     {
-        var isAdmin = await IsAdminAsync(context, organizerId);
+        var isAdmin = await ReservationAccessRules.IsAdminAsync(context, organizerId);
         if (!isAdmin)
         {
             ValidateReservationMonth(startTime, DateTime.UtcNow);
@@ -25,12 +25,6 @@ internal static class ReservationCreationRules
                 throw new ApplicationException($"Monthly reservation limit exceeded ({monthlyLimit}).");
             }
         }
-    }
-
-    private static async Task<bool> IsAdminAsync(ICommandContext context, Guid userId)
-    {
-        var accessState = await context.GetStateAsync<UserAccessProjector>(new UserAccessTag(userId));
-        return accessState.Payload is UserAccessState.UserAccessActive active && active.HasRole("Admin");
     }
 
     private static async Task<int> GetMonthlyReservationLimitAsync(ICommandContext context, Guid userId)

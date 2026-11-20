@@ -46,9 +46,10 @@ public abstract record ApprovalRequestState : ITagStatePayload
         Guid ApproverId,
         string? Comment,
         DateTime DecidedAt,
-        string? RequestComment) : ApprovalRequestState
+        string? RequestComment,
+        DateTime RequestedAt = default) : ApprovalRequestState
     {
-        public ApprovalRequestApproved() : this(Guid.Empty, Guid.Empty, Guid.Empty, Guid.Empty, [], Guid.Empty, null, DateTime.MinValue, null) { }
+        public ApprovalRequestApproved() : this(Guid.Empty, Guid.Empty, Guid.Empty, Guid.Empty, [], Guid.Empty, null, DateTime.MinValue, null, DateTime.MinValue) { }
     }
 
     /// <summary>
@@ -63,8 +64,9 @@ public abstract record ApprovalRequestState : ITagStatePayload
         Guid ApproverId,
         string? Comment,
         DateTime DecidedAt,
-        string? RequestComment) : ApprovalRequestState
+        string? RequestComment,
+        DateTime RequestedAt = default) : ApprovalRequestState
     {
-        public ApprovalRequestRejected() : this(Guid.Empty, Guid.Empty, Guid.Empty, Guid.Empty, [], Guid.Empty, null, DateTime.MinValue, null) { }
+        public ApprovalRequestRejected() : this(Guid.Empty, Guid.Empty, Guid.Empty, Guid.Empty, [], Guid.Empty, null, DateTime.MinValue, null, DateTime.MinValue) { }
     }
 }

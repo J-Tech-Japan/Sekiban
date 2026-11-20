@@ -49,7 +49,9 @@ public record RoomListProjection : IMultiProjector<RoomListProjection>
                 _ => currentState
             };
 
-            if (newState != RoomState.Empty)
+            // RoomState.Empty creates a new instance (with a new list) on every call, so record equality
+            // with it never holds. Only keep states that belong to an actual room.
+            if (newState.RoomId != Guid.Empty)
             {
                 updatedRooms[roomId] = newState;
             }

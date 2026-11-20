@@ -34,7 +34,8 @@ public static class ApprovalDecisionRecordedDecider
                     recorded.ApproverId,
                     recorded.Comment,
                     recorded.DecidedAt,
-                    pending.RequestComment),
+                    pending.RequestComment,
+                    pending.RequestedAt),
                 ApprovalDecision.Rejected => new ApprovalRequestState.ApprovalRequestRejected(
                     pending.ApprovalRequestId,
                     pending.ReservationId,
@@ -44,7 +45,8 @@ public static class ApprovalDecisionRecordedDecider
                     recorded.ApproverId,
                     recorded.Comment,
                     recorded.DecidedAt,
-                    pending.RequestComment),
+                    pending.RequestComment,
+                    pending.RequestedAt),
                 _ => state
             },
             _ => state // Idempotency: ignore if not in pending state

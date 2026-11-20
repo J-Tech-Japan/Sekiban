@@ -112,7 +112,9 @@ public static class TestDataEndpoints
     {
         var userId = Guid.CreateVersion7();
         var displayName = "Sample User";
-        var email = $"sample.user.{userId.ToString()[..8]}@example.com";
+        // The leading characters of a version 7 GUID are a timestamp, so they repeat for about a minute.
+        // Use the time to the second plus the random tail of the id to keep generated emails unique.
+        var email = $"sample.user.{DateTime.UtcNow:yyyyMMddHHmmss}.{userId.ToString("N")[^8..]}@example.com";
 
         try
         {

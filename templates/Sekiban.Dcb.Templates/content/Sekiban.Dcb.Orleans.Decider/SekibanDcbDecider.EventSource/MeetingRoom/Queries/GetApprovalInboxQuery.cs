@@ -14,7 +14,9 @@ public record ApprovalInboxItem(
     string? RequestComment,
     List<Guid> ApproverIds,
     DateTime RequestedAt,
-    string Status);
+    string Status,
+    DateTime? DecidedAt = null,
+    string? DecisionComment = null);
 
 public record GetApprovalInboxQuery :
     IMultiProjectionListQuery<ApprovalRequestListProjection, GetApprovalInboxQuery, ApprovalInboxItem>,
@@ -60,8 +62,10 @@ public record GetApprovalInboxQuery :
                 approved.RequesterId,
                 approved.RequestComment,
                 approved.ApproverIds,
+                approved.RequestedAt,
+                "Approved",
                 approved.DecidedAt,
-                "Approved"),
+                approved.Comment),
             ApprovalRequestState.ApprovalRequestRejected rejected => new ApprovalInboxItem(
                 rejected.ApprovalRequestId,
                 rejected.ReservationId,
@@ -69,8 +73,10 @@ public record GetApprovalInboxQuery :
                 rejected.RequesterId,
                 rejected.RequestComment,
                 rejected.ApproverIds,
+                rejected.RequestedAt,
+                "Rejected",
                 rejected.DecidedAt,
-                "Rejected"),
+                rejected.Comment),
             _ => null
         })
         .Where(x => x != null)

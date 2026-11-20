@@ -34,14 +34,29 @@ public record RejectReservation : ICommandWithHandler<RejectReservation>
             throw new ApplicationException($"Reservation {command.ReservationId} not found");
         }
 
+
         var reservationState = await context.GetStateAsync<ReservationProjector>(tag);
         var payloadState = reservationState.Payload as ReservationState ?? ReservationState.Empty;
-        var (organizerId, startTime) = GetOrganizerAndStartTime(payloadState);
-        var monthlyTag = UserMonthlyReservationTag.FromStartTime(organizerId, startTime);
+
+        // Only a held reservation that is waiting for approval can be rejected.
+        // Drafts, confirmed, cancelled, rejected and expired reservations are not part of an approval decision.
+        if (payloadState is not ReservationState.ReservationHeld { RequiresApproval: true } held)
+        {
+            throw new ApplicationException(
+                $"Reservation {command.ReservationId} cannot be rejected from state: {payloadState.GetType().Name}");
+        }
+
+        if (held.ApprovalRequestId != command.ApprovalRequestId)
+        {
+            throw new ApplicationException(
+                $"Approval request {command.ApprovalRequestId} does not belong to reservation {command.ReservationId}");
+        }
+
+        var monthlyTag = UserMonthlyReservationTag.FromStartTime(held.OrganizerId, held.StartTime);
 
         var payload = new ReservationRejected(
             command.ReservationId,
-            command.RoomId,
+            held.RoomId,
             command.ApprovalRequestId,
             command.Reason,
             DateTime.UtcNow);
@@ -49,21 +64,10 @@ public record RejectReservation : ICommandWithHandler<RejectReservation>
         var tags = new List<ITag>
         {
             new ReservationTag(command.ReservationId),
-            new RoomReservationTag(command.RoomId),
+            new RoomReservationTag(held.RoomId),
             monthlyTag
         };
 
         return new EventPayloadWithTags(payload, tags);
     }
-
-    private static (Guid OrganizerId, DateTime StartTime) GetOrganizerAndStartTime(ReservationState state) =>
-        state switch
-        {
-            ReservationState.ReservationDraft draft => (draft.OrganizerId, draft.StartTime),
-            ReservationState.ReservationHeld held => (held.OrganizerId, held.StartTime),
-            ReservationState.ReservationConfirmed confirmed => (confirmed.OrganizerId, confirmed.StartTime),
-            ReservationState.ReservationCancelled cancelled => (cancelled.OrganizerId, cancelled.StartTime),
-            ReservationState.ReservationRejected rejected => (rejected.OrganizerId, rejected.StartTime),
-            _ => throw new ApplicationException("Reservation does not include organizer details.")
-        };
 }
