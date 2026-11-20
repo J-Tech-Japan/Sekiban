@@ -164,6 +164,7 @@ public class ReservationAuthorizationTests
         var reservationId = await CreateDraftAsync(_approvalRoomId);
         var error = Assert.ThrowsAsync<ApplicationException>(() => _executor.ExecuteAsync(new CommitReservationHold
         {
+            RequestedByUserId = _organizerId,
             ReservationId = reservationId, RoomId = _openRoomId, RequiresApproval = false
         }));
         Assert.That(error!.Message, Does.Contain("is not for room"));
@@ -176,6 +177,7 @@ public class ReservationAuthorizationTests
         var reservationId = await CreateDraftAsync(_approvalRoomId);
         var error = Assert.ThrowsAsync<ApplicationException>(() => _executor.ExecuteAsync(new CommitReservationHold
         {
+            RequestedByUserId = _organizerId,
             ReservationId = reservationId, RoomId = _approvalRoomId, ApprovalRequestId = Guid.CreateVersion7()
         }));
         Assert.That(error!.Message, Does.Contain("not found"));
@@ -188,6 +190,7 @@ public class ReservationAuthorizationTests
         var reservationId = await CreateDraftAsync(_approvalRoomId, NextMonthAt(14));
         var error = Assert.ThrowsAsync<ApplicationException>(() => _executor.ExecuteAsync(new CommitReservationHold
         {
+            RequestedByUserId = _organizerId,
             ReservationId = reservationId, RoomId = _approvalRoomId, ApprovalRequestId = otherApprovalRequestId
         }));
         Assert.That(error!.Message, Does.Contain("does not belong"));
@@ -200,6 +203,7 @@ public class ReservationAuthorizationTests
         await _executor.ExecuteAsync(new CommitReservationHold
         {
             // RequiresApproval from the client is ignored; the room decides.
+            RequestedByUserId = _organizerId,
             ReservationId = reservationId, RequiresApproval = false, ApprovalRequestComment = "Board meeting"
         });
 
@@ -228,11 +232,50 @@ public class ReservationAuthorizationTests
         });
         await _executor.ExecuteAsync(new CommitReservationHold
         {
+            RequestedByUserId = _organizerId,
             ReservationId = reservationId, ApprovalRequestId = approvalRequestId
         });
         var held = await ReservationStateAsync(reservationId) as ReservationState.ReservationHeld;
         Assert.That(held?.ApprovalRequestId, Is.EqualTo(approvalRequestId));
     }
+
+    // Hold is limited to the draft's organizer or an administrator
+
+    [Test]
+    public async Task Hold_ByAnotherUser_IsForbidden()
+    {
+        var reservationId = await CreateDraftAsync(_openRoomId);
+        var error = Assert.ThrowsAsync<UnauthorizedAccessException>(() => HoldAsync(reservationId, _otherUserId));
+        Assert.That(error!.Message, Does.Contain("organizer or an administrator"));
+        Assert.That(await ReservationStateAsync(reservationId), Is.InstanceOf<ReservationState.ReservationDraft>());
+    }
+
+    [Test]
+    public async Task Hold_WithoutActingUser_IsForbidden()
+    {
+        var reservationId = await CreateDraftAsync(_openRoomId);
+        Assert.ThrowsAsync<UnauthorizedAccessException>(() => HoldAsync(reservationId, Guid.Empty));
+    }
+
+    [Test]
+    public async Task Hold_ByOrganizer_Succeeds()
+    {
+        var reservationId = await CreateDraftAsync(_openRoomId);
+        await HoldAsync(reservationId, _organizerId);
+        Assert.That(await ReservationStateAsync(reservationId), Is.InstanceOf<ReservationState.ReservationHeld>());
+    }
+
+    [Test]
+    public async Task Hold_ByAdministrator_Succeeds()
+    {
+        var reservationId = await CreateDraftAsync(_openRoomId);
+        await HoldAsync(reservationId, _adminId);
+        Assert.That(await ReservationStateAsync(reservationId), Is.InstanceOf<ReservationState.ReservationHeld>());
+    }
+
+    [Test]
+    public void HoldEndpoint_DoesNotRequireAdminPolicy() =>
+        Assert.That(PoliciesFor("POST", "/api/reservations/{reservationId:guid}/hold"), Does.Not.Contain("AdminOnly"));
 
     // D-5: unknown ids are domain errors (400), not cast failures (500)
 
@@ -336,6 +379,12 @@ public class ReservationAuthorizationTests
         _executor.ExecuteAsync(new CancelReservation
         {
             ReservationId = reservationId, Reason = "No longer needed", RequestedByUserId = requestedBy
+        });
+
+    private Task HoldAsync(Guid reservationId, Guid requestedBy) =>
+        _executor.ExecuteAsync(new CommitReservationHold
+        {
+            ReservationId = reservationId, RequestedByUserId = requestedBy
         });
 
     private Task RejectAsync(Guid reservationId, Guid approvalRequestId) =>

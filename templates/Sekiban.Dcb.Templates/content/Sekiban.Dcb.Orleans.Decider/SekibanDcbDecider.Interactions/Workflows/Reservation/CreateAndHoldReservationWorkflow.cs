@@ -56,7 +56,8 @@ public class CreateAndHoldReservationWorkflow(ISekibanExecutor executor)
             RoomId = roomId,
             RequiresApproval = requiresApproval,
             ApprovalRequestId = null,
-            ApprovalRequestComment = approvalRequestComment
+            ApprovalRequestComment = approvalRequestComment,
+            RequestedByUserId = organizerId
         });
 
         return reservationId;

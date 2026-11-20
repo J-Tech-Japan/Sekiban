@@ -26,6 +26,7 @@ public static class ReservationEndpoints
         group.MapPost("/draft", CreateReservationDraftAsync)
             .WithName("CreateReservationDraft");
 
+        // Only the draft's organizer or an administrator may hold it; the command handler enforces it
         group.MapPost("/{reservationId:guid}/hold", CommitReservationHoldAsync)
             .WithName("CommitReservationHold");
 
@@ -120,10 +121,20 @@ public static class ReservationEndpoints
     private static async Task<IResult> CommitReservationHoldAsync(
         Guid reservationId,
         [FromBody] CommitReservationHoldRequest request,
+        HttpContext httpContext,
         [FromServices] ISekibanExecutor executor)
     {
+        var requesterResult = ReservationOrganizerResolver.Resolve(httpContext);
+        if (!requesterResult.IsSuccess)
+        {
+            return Results.Problem(
+                detail: requesterResult.Error,
+                statusCode: StatusCodes.Status401Unauthorized);
+        }
+
         var command = new CommitReservationHold
         {
+            RequestedByUserId = requesterResult.Organizer!.Value.OrganizerId,
             ReservationId = reservationId,
             RoomId = request.RoomId,
             RequiresApproval = request.RequiresApproval,

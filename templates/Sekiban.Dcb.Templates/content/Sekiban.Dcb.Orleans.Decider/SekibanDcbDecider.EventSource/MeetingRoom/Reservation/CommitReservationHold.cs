@@ -34,6 +34,12 @@ public record CommitReservationHold : ICommandWithHandler<CommitReservationHold>
 
     public string? ApprovalRequestComment { get; init; }
 
+    /// <summary>
+    ///     The user asking for the hold. Only the draft's organizer or an administrator may hold it.
+    ///     The API sets this from the authenticated user; it is not read from the request body.
+    /// </summary>
+    public Guid RequestedByUserId { get; init; }
+
     public static async Task<EventOrNone> HandleAsync(
         CommitReservationHold command,
         ICommandContext context)
@@ -50,6 +56,12 @@ public record CommitReservationHold : ICommandWithHandler<CommitReservationHold>
         if (reservationStateTyped.Payload is not ReservationState.ReservationDraft draft)
         {
             throw new ApplicationException($"Reservation {command.ReservationId} is not in draft state");
+        }
+
+        if (command.RequestedByUserId != draft.OrganizerId
+            && !await ReservationAccessRules.IsAdminAsync(context, command.RequestedByUserId))
+        {
+            throw new UnauthorizedAccessException("Only the organizer or an administrator can hold this reservation.");
         }
 
         if (command.RoomId != Guid.Empty && command.RoomId != draft.RoomId)
