@@ -450,6 +450,66 @@ public class GeneralSekibanExecutorDomainTests
     }
 
     [Fact]
+    public async Task EnrollStudent_Should_Fail_When_ClassRoom_Does_Not_Exist()
+    {
+        // Arrange - the student exists, the classroom was never created
+        var studentId = Guid.NewGuid();
+        var classRoomId = Guid.NewGuid();
+        await _commandExecutor.ExecuteAsync(new CreateStudent(studentId, "John Doe"));
+
+        // Act
+        var result = await _commandExecutor.ExecuteAsync(
+            new EnrollStudentInClassRoom(studentId, classRoomId),
+            EnrollStudentInClassRoomHandler.HandleAsync);
+
+        // Assert - rejected, and nothing was written for the enrollment
+        Assert.False(result.IsSuccess);
+        Assert.Contains("ClassRoom does not exist", result.GetException().Message);
+        Assert.False(await _eventStore.TagExistsAsync(new ClassRoomTag(classRoomId)));
+    }
+
+    [Fact]
+    public async Task EnrollStudent_Should_Fail_When_Student_Does_Not_Exist()
+    {
+        // Arrange - the classroom exists, the student was never created
+        var studentId = Guid.NewGuid();
+        var classRoomId = Guid.NewGuid();
+        await _commandExecutor.ExecuteAsync(
+            new CreateClassRoom(classRoomId, "Math 101"),
+            CreateClassRoomHandler.HandleAsync);
+
+        // Act
+        var result = await _commandExecutor.ExecuteAsync(
+            new EnrollStudentInClassRoom(studentId, classRoomId),
+            EnrollStudentInClassRoomHandler.HandleAsync);
+
+        // Assert
+        Assert.False(result.IsSuccess);
+        Assert.Contains("Student does not exist", result.GetException().Message);
+        Assert.False(await _eventStore.TagExistsAsync(new StudentTag(studentId)));
+    }
+
+    [Fact]
+    public async Task DropStudent_Should_Fail_When_Student_Does_Not_Exist()
+    {
+        // Arrange
+        var studentId = Guid.NewGuid();
+        var classRoomId = Guid.NewGuid();
+        await _commandExecutor.ExecuteAsync(
+            new CreateClassRoom(classRoomId, "Math 101"),
+            CreateClassRoomHandler.HandleAsync);
+
+        // Act
+        var result = await _commandExecutor.ExecuteAsync(
+            new DropStudentFromClassRoom(studentId, classRoomId),
+            DropStudentFromClassRoomHandler.HandleAsync);
+
+        // Assert
+        Assert.False(result.IsSuccess);
+        Assert.Contains("Student does not exist", result.GetException().Message);
+    }
+
+    [Fact]
     public async Task Complex_Scenario_Multiple_Students_And_ClassRooms()
     {
         // Arrange - Create 3 students and 2 classrooms

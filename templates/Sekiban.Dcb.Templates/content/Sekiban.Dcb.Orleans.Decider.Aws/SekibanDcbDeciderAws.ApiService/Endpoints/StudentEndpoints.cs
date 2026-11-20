@@ -4,6 +4,7 @@ using Dcb.ImmutableModels.Tags;
 using Microsoft.AspNetCore.Mvc;
 using Sekiban.Dcb;
 using Sekiban.Dcb.Tags;
+using SekibanDcbDeciderAws.ApiService.Exceptions;
 
 namespace SekibanDcbDeciderAws.ApiService.Endpoints;
 
@@ -60,6 +61,11 @@ public static class StudentEndpoints
     {
         var tag = new StudentTag(studentId);
         var state = await executor.GetTagStateAsync(new TagStateId(tag, nameof(StudentProjector)));
+        // A tag that was never written comes back as EmptyTagStatePayload: treat it as not found.
+        if (state.Payload is EmptyTagStatePayload)
+        {
+            throw new NotFoundException("Student", studentId);
+        }
 
         return Results.Ok(new
         {

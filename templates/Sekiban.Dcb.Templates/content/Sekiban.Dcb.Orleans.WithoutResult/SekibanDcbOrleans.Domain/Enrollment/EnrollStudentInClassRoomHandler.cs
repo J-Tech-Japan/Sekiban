@@ -2,6 +2,7 @@ using Dcb.Domain.WithoutResult.ClassRoom;
 using Dcb.Domain.WithoutResult.Student;
 using Sekiban.Dcb.Commands;
 using Sekiban.Dcb.Events;
+using Sekiban.Dcb.Tags;
 namespace Dcb.Domain.WithoutResult.Enrollment;
 
 
@@ -12,6 +13,11 @@ public class EnrollStudentInClassRoomHandler : ICommandHandler<EnrollStudentInCl
         ICommandContext context)
     {
         var studentTag = new StudentTag(command.StudentId);
+        if (!await context.TagExistsAsync(studentTag))
+        {
+            throw new ApplicationException("Student does not exist");
+        }
+
         var studentState = await context.GetStateAsync<StudentState, StudentProjector>(studentTag);
 
         if (studentState.Payload.GetRemaining() <= 0)
@@ -29,6 +35,8 @@ public class EnrollStudentInClassRoomHandler : ICommandHandler<EnrollStudentInCl
 
         switch (classRoomState.Payload)
         {
+            case EmptyTagStatePayload:
+                throw new ApplicationException("ClassRoom does not exist");
             case AvailableClassRoomState available when available.GetRemaining() <= 0:
                 throw new ApplicationException("ClassRoom is full");
             case AvailableClassRoomState available when available.EnrolledStudentIds.Contains(command.StudentId):

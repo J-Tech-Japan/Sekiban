@@ -636,9 +636,9 @@ apiRoute
             var tag = new StudentTag(studentId);
             var tagStateId = new TagStateId(tag, nameof(StudentProjector));
             var result = await executor.GetTagStateAsync(tagStateId);
-            if (result.IsSuccess)
+            // A tag that was never written comes back as EmptyTagStatePayload: treat it as not found.
+            if (result.IsSuccess && result.GetValue() is { Payload: not EmptyTagStatePayload } state)
             {
-                var state = result.GetValue();
                 return Results.Ok(
                     new
                     {
@@ -702,14 +702,14 @@ apiRoute
             var tag = new ClassRoomTag(classRoomId);
             var tagStateId = new TagStateId(tag, nameof(ClassRoomProjector));
             var result = await executor.GetTagStateAsync(tagStateId);
-            if (result.IsSuccess)
+            // A tag that was never written comes back as EmptyTagStatePayload: treat it as not found.
+            if (result.IsSuccess && result.GetValue() is { Payload: not EmptyTagStatePayload } state)
             {
-                var state = result.GetValue();
                 return Results.Ok(
                     new
                     {
                         classRoomId,
-                        payload = state.Payload,
+                        payload = state.Payload as dynamic,
                         version = state.Version
                     });
             }

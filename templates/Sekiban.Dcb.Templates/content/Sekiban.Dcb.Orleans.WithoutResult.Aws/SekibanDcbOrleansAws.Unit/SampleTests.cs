@@ -1,4 +1,6 @@
 using Dcb.Domain.WithoutResult;
+using Dcb.Domain.WithoutResult.ClassRoom;
+using Dcb.Domain.WithoutResult.Enrollment;
 using Dcb.Domain.WithoutResult.Student;
 using NUnit.Framework;
 using Sekiban.Dcb;
@@ -33,5 +35,39 @@ public class SampleTests
 
         var state = await executor.GetTagStateAsync<StudentProjector>(new StudentTag(studentId));
         Assert.That(state.Payload, Is.TypeOf<StudentState>());
+    }
+
+    [Test]
+    public async Task EnrollStudent_InClassRoomThatDoesNotExist_IsRejected()
+    {
+        var domainTypes = DomainType.GetDomainTypes();
+        ISekibanExecutor executor = new InMemoryDcbExecutorForTesting(
+            domainTypes,
+            new InMemoryEventStore(domainTypes.EventTypes));
+        var studentId = Guid.CreateVersion7();
+        await executor.ExecuteAsync(new CreateStudent(studentId, "Alice", 3));
+
+        var rejection = Assert.ThrowsAsync<ApplicationException>(() => executor.ExecuteAsync(
+            new EnrollStudentInClassRoom(studentId, Guid.CreateVersion7()),
+            EnrollStudentInClassRoomHandler.HandleAsync));
+
+        Assert.That(rejection!.Message, Does.Contain("ClassRoom does not exist"));
+    }
+
+    [Test]
+    public async Task EnrollStudent_ThatDoesNotExist_IsRejected()
+    {
+        var domainTypes = DomainType.GetDomainTypes();
+        ISekibanExecutor executor = new InMemoryDcbExecutorForTesting(
+            domainTypes,
+            new InMemoryEventStore(domainTypes.EventTypes));
+        var classRoomId = Guid.CreateVersion7();
+        await executor.ExecuteAsync(new CreateClassRoom(classRoomId, "Math 101"), CreateClassRoomHandler.HandleAsync);
+
+        var rejection = Assert.ThrowsAsync<ApplicationException>(() => executor.ExecuteAsync(
+            new EnrollStudentInClassRoom(Guid.CreateVersion7(), classRoomId),
+            EnrollStudentInClassRoomHandler.HandleAsync));
+
+        Assert.That(rejection!.Message, Does.Contain("Student does not exist"));
     }
 }
