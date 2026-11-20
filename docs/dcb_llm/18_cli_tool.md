@@ -103,8 +103,8 @@ The CLI supports multiple profiles for connecting to different environments (dev
 ### Setting Up Profiles with User Secrets
 
 ```bash
-# Initialize user secrets
-dotnet user-secrets init
+# Template CLI projects already declare a UserSecretsId that is unique to each generated app,
+# so no `dotnet user-secrets init` is needed. (For a hand-made CLI project, set <UserSecretsId> as above.)
 
 # Set up a "dev" profile
 dotnet user-secrets set "Profiles:dev:Database" "postgres"
@@ -258,10 +258,11 @@ dotnet run -- status --profile dev
 
 Options:
 - `--profile, -P` - Profile name
-- `--database, -d` - Database type (postgres/cosmos)
+- `--database, -d` - Database type (postgres/cosmos/sqlite)
 - `--connection-string, -c` - PostgreSQL connection string
 - `--cosmos-connection-string` - Cosmos DB connection string
 - `--cosmos-database` - Cosmos DB database name
+- `--sqlite-path` - SQLite event store file for `-d sqlite` (the `events.db` the ApiService writes with `Sekiban:Database=sqlite`). Read commands open it read-only and never create, migrate or switch it to WAL; the file must already contain the `dcb_events` table
 
 ### build
 
@@ -372,18 +373,16 @@ Output:
 
 Cache Directory: ./cache
 
-Cache File: ./cache/events.db
+Cache File: ./cache/sekiban-app/cosmos-3f9a1c2b7d4e8f60/events.db
 File Size: 15.2 MB
 Last Modified: 2025-01-17 09:30:45 UTC
-
 Total Events: 42,000
-
 Cache Metadata:
-  Remote Endpoint: https://myaccount.documents.azure.com
+  Source: accountendpoint=https://myaccount.documents.azure.com:443/;database=SekibanDcb
   Database Name: SekibanDcb
   Last Sync: 2025-01-17 09:30:45 UTC
+  Last SortableUniqueId: 063870000000000000000000000000
   Schema Version: 1.0
-
 Tags: 150 total across 5 groups
   User: 100 tags
   Order: 30 tags
@@ -463,4 +462,4 @@ dotnet run --framework net9.0 -- tag-list -d sqlite --sqlite-path "../MyApp.ApiS
 For a complete reference implementation, see:
 - `dcb/internalUsages/DcbOrleans.Cli/Program.cs`
 
-This implementation includes all commands, profile support, and cache management features.
+This implementation includes all commands, profile support, and cache management features. The template CLIs (`templates/Sekiban.Dcb.Templates/content/*/*.Cli`) use the same code, except that their cache folders sit under a service-id folder (`<cache-dir>/<service id>/<database>-<hash>/events.db`) while the internal CLI uses `<cache-dir>/<database>-<hash>/events.db`.

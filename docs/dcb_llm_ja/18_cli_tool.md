@@ -103,8 +103,8 @@ CLIは複数のプロファイルをサポートし、異なる環境（開発�
 ### User Secretsでプロファイルを設定
 
 ```bash
-# User Secretsを初期化
-dotnet user-secrets init
+# テンプレートの CLI プロジェクトには生成アプリごとに一意な UserSecretsId が入っているため、
+# `dotnet user-secrets init` は不要です（自作の CLI プロジェクトでは上記のように <UserSecretsId> を設定）。
 
 # "dev"プロファイルをセットアップ
 dotnet user-secrets set "Profiles:dev:Database" "postgres"
@@ -258,10 +258,11 @@ dotnet run -- status --profile dev
 
 オプション：
 - `--profile, -P` - プロファイル名
-- `--database, -d` - データベースタイプ（postgres/cosmos）
+- `--database, -d` - データベースタイプ（postgres/cosmos/sqlite）
 - `--connection-string, -c` - PostgreSQL接続文字列
 - `--cosmos-connection-string` - Cosmos DB接続文字列
 - `--cosmos-database` - Cosmos DBデータベース名
+- `--sqlite-path` - `-d sqlite` で読む SQLite イベントストアのファイル（ApiService が `Sekiban:Database=sqlite` で書く `events.db`）。読み取り系コマンドは読み取り専用で開き、作成・マイグレーション・WAL 切り替えをしません。ファイルには `dcb_events` テーブルが必要です
 
 ### build
 
@@ -372,18 +373,16 @@ dotnet run -- cache-stats --cache-dir ./cache
 
 Cache Directory: ./cache
 
-Cache File: ./cache/events.db
+Cache File: ./cache/sekiban-app/cosmos-3f9a1c2b7d4e8f60/events.db
 File Size: 15.2 MB
 Last Modified: 2025-01-17 09:30:45 UTC
-
 Total Events: 42,000
-
 Cache Metadata:
-  Remote Endpoint: https://myaccount.documents.azure.com
+  Source: accountendpoint=https://myaccount.documents.azure.com:443/;database=SekibanDcb
   Database Name: SekibanDcb
   Last Sync: 2025-01-17 09:30:45 UTC
+  Last SortableUniqueId: 063870000000000000000000000000
   Schema Version: 1.0
-
 Tags: 150 total across 5 groups
   User: 100 tags
   Order: 30 tags
@@ -463,4 +462,4 @@ dotnet run --framework net9.0 -- tag-list -d sqlite --sqlite-path "../MyApp.ApiS
 完全なリファレンス実装については、以下を参照してください：
 - `dcb/internalUsages/DcbOrleans.Cli/Program.cs`
 
-この実装には、すべてのコマンド、プロファイルサポート、キャッシュ管理機能が含まれています。
+この実装には、すべてのコマンド、プロファイルサポート、キャッシュ管理機能が含まれています。テンプレートの CLI（`templates/Sekiban.Dcb.Templates/content/*/*.Cli`）も同じコードですが、キャッシュは service id フォルダの下（`<cache-dir>/<service id>/<database>-<hash>/events.db`）に置かれ、内部 CLI は `<cache-dir>/<database>-<hash>/events.db` を使います。

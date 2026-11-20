@@ -76,8 +76,8 @@ dotnet run -- status -P local
 - `-c, --connection-string` : PostgreSQL connection string
 - `--cosmos-connection-string` : Cosmos DB connection string
 - `--cosmos-database` : Cosmos database name
-- `--sqlite-path` : SQLite event store file (for `-d sqlite`)
-- `-p, --projector` : Projector name. For `build` / `save` / `delete` / `projection` it is a multi-projector (see `list`); for `tag-state` it is a tag projector and is auto-detected from the tag group when omitted
+- `--sqlite-path` : SQLite event store file (for `-d sqlite`). It must already contain the `dcb_events` table. All commands except `build` and `delete` open it read-only and never create, migrate or switch it to WAL
+- `-p, --projector` : Projector name. For `build` it must be a registered multi-projector (see `list`); `save` / `delete` / `projection` also accept a name that only exists in stored states (e.g. a renamed projector); for `tag-state` it is a tag projector and is auto-detected from the tag group when omitted
 - `-o, --output-dir` : Output directory (default `./output`)
 - `-t, --tag` : Tag in `group:content` format
 - `-m, --min-events` : Min events before build (default from `MIN_EVENTS` or 3000)
@@ -127,7 +127,7 @@ dotnet run -- tag-events -t "WeatherForecast:00000000-0000-0000-0000-00000000000
 
 - Output files are written to `./output` unless overridden with `--output-dir`. `save` writes `<projector>_v<version>_<timestamp>_metadata.json` and `_state.json` per projector version.
 - Exit code is `0` on success and `1` on failure (connection error, unknown projector or tag projector, invalid option value, failed build). Errors are written to stderr.
-- Caches are kept per connection: `<cache-dir>/<database>-<hash>/events.db`, where the hash is computed from the connection without its password or key. A cache synced from one database is never used for another one.
+- Caches are kept per connection: `<cache-dir>/<database>-<hash>/events.db`, where the hash is computed only from non-secret connection values (host, port, database, user, endpoint without query string); passwords, keys and tokens are never shown, stored or hashed. `cache-stats` / `cache-clear` only touch files in this layout. A cache synced from one database is never used for another one.
 - When `--cache-mode` is `auto`, the CLI uses the cache of the selected connection if it exists, otherwise it reads the database directly.
 - `cache-only` requires an existing cache for the same connection (run `cache-sync` first).
 - Use `dotnet run -- <command> --help` to see command-specific options.

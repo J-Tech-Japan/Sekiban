@@ -1,10 +1,9 @@
 using Sekiban.Dcb.ServiceId;
 using System.CommandLine;
 using System.CommandLine.Parsing;
-using System.Data.Common;
 using System.Reflection;
-using System.Security.Cryptography;
-using System.Text;
+using System.Text.RegularExpressions;
+using Microsoft.Data.Sqlite;
 using Dcb.EventSource;
 using Microsoft.Azure.Cosmos;
 using Microsoft.EntityFrameworkCore;
@@ -22,7 +21,6 @@ using System.Text.Encodings.Web;
 
 // This identity partitions all data; it must match the API and stay stable.
 const string defaultServiceId = "sekiban-app";
-const string UnparsableConnection = "(unparsable connection string)";
 
 // Build configuration from environment variables and user secrets
 var configuration = new ConfigurationBuilder()
@@ -170,7 +168,10 @@ ConnectionTarget ResolveConnection(ParseResult parseResult)
         parseResult.GetValue(cosmosConnectionStringOption),
         parseResult.GetValue(sqlitePathOption));
     var cosmosDatabaseName = ResolveCosmosDatabaseName(profileConfig, parseResult.GetValue(cosmosDatabaseNameOption));
-    return new ConnectionTarget(databaseType, connectionString, cosmosDatabaseName);
+    var target = new ConnectionTarget(databaseType, connectionString, cosmosDatabaseName);
+    // Fails early (exit 1) when the connection string cannot be parsed.
+    _ = DescribeConnection(target);
+    return target;
 }
 
 // Build command
@@ -676,54 +677,13 @@ static string ResolveConnectionString(IConfiguration config, string databaseType
         "  3. Set environment variable: CONNECTION_STRING");
 }
 
-// Connection string with secrets (passwords, keys, tokens) removed; safe to print or store.
-static string DescribeConnection(ConnectionTarget target)
-{
-    if (target.DatabaseType == "sqlite")
-    {
-        return target.ConnectionString;
-    }
+// Connection without secrets (allowlisted keys only); safe to print or store in cache metadata.
+static string DescribeConnection(ConnectionTarget target) =>
+    ConnectionIdentity.Describe(target.DatabaseType, target.ConnectionString, target.CosmosDatabaseName);
 
-    string redacted;
-    try
-    {
-        var builder = new DbConnectionStringBuilder { ConnectionString = target.ConnectionString };
-        var parts = builder.Keys.Cast<string>()
-            .Where(key => !IsSecretKey(key))
-            .OrderBy(key => key, StringComparer.OrdinalIgnoreCase)
-            .Select(key => $"{key.ToLowerInvariant()}={builder[key]}");
-        redacted = string.Join(";", parts);
-    }
-    catch (ArgumentException)
-    {
-        redacted = UnparsableConnection;
-    }
-
-    return target.DatabaseType == "cosmos"
-        ? $"{redacted};database={target.CosmosDatabaseName}"
-        : redacted;
-}
-
-static bool IsSecretKey(string key)
-{
-    var normalized = key.Replace(" ", "").ToLowerInvariant();
-    return normalized is "password" or "pwd" or "accountkey" or "sharedaccesskey" or "accesskey" or "key" ||
-           normalized.Contains("secret") || normalized.Contains("token") || normalized.Contains("password");
-}
-
-// Cache sub directory name for a connection: database type + hash of the full connection identity.
-// Only a truncated SHA-256 of the identity appears in the path.
-static string ComputeConnectionKey(ConnectionTarget target)
-{
-    // Identity = redacted description (host, port, database, user, account endpoint, ...). Secrets are not part of it,
-    // so rotating a password keeps the cache; a different server or database gets its own cache.
-    var description = DescribeConnection(target);
-    var identity = description == UnparsableConnection
-        ? $"{target.DatabaseType}\n{target.ConnectionString}\n{target.CosmosDatabaseName}"
-        : $"{target.DatabaseType}\n{description}";
-    var hash = SHA256.HashData(Encoding.UTF8.GetBytes(identity));
-    return $"{target.DatabaseType}-{Convert.ToHexString(hash)[..16].ToLowerInvariant()}";
-}
+// Cache sub directory name for a connection: "<database type>-<16 hex>" (see ConnectionIdentity.ComputeKey).
+static string ComputeConnectionKey(ConnectionTarget target) =>
+    ConnectionIdentity.ComputeKey(target.DatabaseType, target.ConnectionString, target.CosmosDatabaseName);
 
 static string GetCachePath(string cacheDir, ConnectionTarget target) =>
     Path.Combine(GetCacheRoot(cacheDir), ComputeConnectionKey(target), "events.db");
@@ -812,6 +772,55 @@ static void DeleteCacheFiles(string cachePath)
     }
 }
 
+// Opens a SQLite file read-only (never creates or changes it) and checks whether a table exists.
+static bool SqliteTableExists(string path, string tableName)
+{
+    var connectionString = new SqliteConnectionStringBuilder
+    {
+        DataSource = path,
+        Mode = SqliteOpenMode.ReadOnly,
+        Pooling = false
+    }.ToString();
+    try
+    {
+        using var connection = new SqliteConnection(connectionString);
+        connection.Open();
+        using var command = connection.CreateCommand();
+        command.CommandText = "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = $name";
+        command.Parameters.AddWithValue("$name", tableName);
+        return Convert.ToInt64(command.ExecuteScalar()) > 0;
+    }
+    catch (SqliteException)
+    {
+        // Not a SQLite database (or unreadable)
+        return false;
+    }
+}
+
+// Throws unless the file exists and is a Sekiban DCB SQLite event store (has the dcb_events table).
+static void EnsureSekibanSqliteStore(string path)
+{
+    if (!File.Exists(path))
+    {
+        throw new CliException($"SQLite database not found: {path}");
+    }
+    if (!SqliteTableExists(path, "dcb_events"))
+    {
+        throw new CliException($"'{path}' is not a Sekiban DCB SQLite event store (no dcb_events table). The file was not modified.");
+    }
+}
+
+// SQLite "database path" for the Sekiban stores that opens the file read-only. The stores build
+// "Data Source={path}", so the read-only mode is appended as another connection string keyword.
+static string ToReadOnlySqlitePath(string path)
+{
+    if (path.IndexOfAny([';', '"', '\'', '=']) >= 0)
+    {
+        throw new CliException($"SQLite path must not contain ';', '=' or quotes: {path}");
+    }
+    return $"{path};Mode=ReadOnly";
+}
+
 static void PrintTarget(ConnectionTarget target)
 {
     Console.WriteLine($"Database: {target.DatabaseType}");
@@ -833,6 +842,40 @@ static void EnsureProjectorExists(DcbDomainTypes domainTypes, string? projectorN
             $"Unknown projector '{projectorName}'.\n" +
             $"Registered projectors: {string.Join(", ", names)}");
     }
+}
+
+// For storage-management commands (save, delete, projection): a projector name is accepted when it is
+// registered in the domain OR has stored states (e.g. a renamed or removed projector). Returns the matching states.
+static IReadOnlyList<ProjectorStateInfo> FilterStoredStates(
+    IReadOnlyList<ProjectorStateInfo> states,
+    string? projectorName)
+{
+    if (string.IsNullOrEmpty(projectorName))
+    {
+        return states;
+    }
+
+    var matching = states.Where(s => s.ProjectorName == projectorName).ToList();
+    var registered = DomainType.GetDomainTypes().MultiProjectorTypes.GetAllProjectorNames();
+    if (matching.Count == 0 && !registered.Contains(projectorName))
+    {
+        throw new CliException(
+            $"Unknown projector '{projectorName}': it is neither registered nor stored.\n" +
+            $"Registered projectors: {string.Join(", ", registered)}\n" +
+            $"Stored projectors: {string.Join(", ", states.Select(s => s.ProjectorName).Distinct())}");
+    }
+    return matching;
+}
+
+// Lists stored projection states. A SQLite event store without the state table simply has no states
+// (the read-only commands do not create the table).
+static async Task<IReadOnlyList<ProjectorStateInfo>> ListStoredStatesAsync(ServiceProvider services, ConnectionTarget target)
+{
+    if (target.DatabaseType == "sqlite" && !SqliteTableExists(target.ConnectionString, "dcb_multi_projection_states"))
+    {
+        return [];
+    }
+    return await services.GetRequiredService<IMultiProjectionStateStore>().ListAllAsync();
 }
 
 // File-name safe form of a name or version (e.g. projector version "1.0.0" stays as is).
@@ -864,7 +907,7 @@ static async Task<int> BuildProjectionStatesAsync(
     }
     Console.WriteLine();
 
-    var services = BuildServices(target, cachePath: cachePath);
+    var services = BuildServices(target, cachePath: cachePath, readOnly: false);
     var builder = services.GetRequiredService<MultiProjectionStateBuilder>();
 
     var options = new MultiProjectionBuildOptions
@@ -945,7 +988,6 @@ static async Task<int> ShowStatusAsync(ConnectionTarget target, CacheOptions cac
     Console.WriteLine();
 
     var services = BuildServices(target, cachePath: cachePath);
-    var stateStore = services.GetRequiredService<IMultiProjectionStateStore>();
     var eventStore = services.GetRequiredService<IEventStore>();
     var domainTypes = services.GetRequiredService<DcbDomainTypes>();
 
@@ -954,7 +996,7 @@ static async Task<int> ShowStatusAsync(ConnectionTarget target, CacheOptions cac
     Console.WriteLine($"Total Events in Store: {totalEvents:N0}\n");
 
     // List all states
-    var states = await stateStore.ListAllAsync();
+    var states = await ListStoredStatesAsync(services, target);
     if (states.Count == 0)
     {
         Console.WriteLine("No projection states found.\n");
@@ -1033,48 +1075,39 @@ static string FormatBytes(long bytes)
     return $"{len:0.##} {sizes[order]}";
 }
 
-static async Task<byte[]?> TryReadStateDataAsync(IMultiProjectionStateStore stateStore, MultiProjectionStateRecord state)
+// Reads the state bytes. Error is set when reading failed (an empty state is Data = [] with no error).
+static async Task<(byte[]? Data, string? Error)> ReadStateDataAsync(IMultiProjectionStateStore stateStore, MultiProjectionStateRecord state)
 {
-    Stream stateStream;
     try
     {
-        stateStream = await stateStore.OpenStateDataReadStreamAsync(state).ConfigureAwait(false);
+        await using var stateStream = await stateStore.OpenStateDataReadStreamAsync(state).ConfigureAwait(false);
+        using var ms = new MemoryStream();
+        await stateStream.CopyToAsync(ms).ConfigureAwait(false);
+        return (ms.ToArray(), null);
     }
-    catch (Exception)
+    catch (Exception ex)
     {
-        return null;
+        return (null, ex.Message);
     }
-
-    await using var _ = stateStream;
-    using var ms = new MemoryStream();
-    await stateStream.CopyToAsync(ms).ConfigureAwait(false);
-    return ms.ToArray();
 }
 
 static async Task<int> SaveStateJsonAsync(ConnectionTarget target, string? projectorName, string outputDir)
 {
-    EnsureProjectorExists(DomainType.GetDomainTypes(), projectorName);
-
     Console.WriteLine("=== Save Projection State JSON ===\n");
     PrintTarget(target);
     Console.WriteLine($"Output Directory: {outputDir}");
     Console.WriteLine();
 
     var services = BuildServices(target);
-    var stateStore = services.GetRequiredService<IMultiProjectionStateStore>();
 
     // Get list of states (summary info)
-    IReadOnlyList<ProjectorStateInfo> stateInfos = await stateStore.ListAllAsync();
-    if (!string.IsNullOrEmpty(projectorName))
-    {
-        stateInfos = stateInfos.Where(s => s.ProjectorName == projectorName).ToList();
-    }
-
+    var stateInfos = FilterStoredStates(await ListStoredStatesAsync(services, target), projectorName);
     if (stateInfos.Count == 0)
     {
         Console.WriteLine("No projection states found.");
         return 0;
     }
+    var stateStore = services.GetRequiredService<IMultiProjectionStateStore>();
 
     // Create output directory
     Directory.CreateDirectory(outputDir);
@@ -1134,7 +1167,21 @@ static async Task<int> SaveStateJsonAsync(ConnectionTarget target, string? proje
         Console.WriteLine($"  Metadata: {metadataFileName}");
 
         // Save decompressed state data
-        var stateData = await TryReadStateDataAsync(stateStore, state);
+        var (stateData, readError) = await ReadStateDataAsync(stateStore, state);
+        if (readError != null)
+        {
+            if (state.IsOffloaded)
+            {
+                // This CLI has no blob storage access: offloaded state bytes are not downloaded.
+                Console.WriteLine($"  State is offloaded to: {state.OffloadKey} (not downloaded; only metadata saved)");
+                Console.WriteLine();
+                savedCount++;
+                continue;
+            }
+            Console.Error.WriteLine($"  Error: Could not read state data of {state.ProjectorName} (v{state.ProjectorVersion}): {readError}");
+            failedCount++;
+            continue;
+        }
         if (stateData != null)
         {
             var stateFileName = $"{fileBaseName}_state.json";
@@ -1174,10 +1221,6 @@ static async Task<int> SaveStateJsonAsync(ConnectionTarget target, string? proje
                 Console.WriteLine($"  Raw state saved: {rawFileName}");
             }
         }
-        else if (state.IsOffloaded)
-        {
-            Console.WriteLine($"  State is offloaded to: {state.OffloadKey}");
-        }
 
         Console.WriteLine();
         savedCount++;
@@ -1193,21 +1236,15 @@ static async Task<int> SaveStateJsonAsync(ConnectionTarget target, string? proje
 
 static async Task<int> DeleteStateAsync(ConnectionTarget target, string? projectorName, bool assumeYes)
 {
-    EnsureProjectorExists(DomainType.GetDomainTypes(), projectorName);
-
     Console.WriteLine("=== Delete Projection States ===\n");
     PrintTarget(target);
     Console.WriteLine();
 
-    var services = BuildServices(target);
-    var stateStore = services.GetRequiredService<IMultiProjectionStateStore>();
+    // delete writes to the store (the SQLite state store may also upgrade its schema)
+    var services = BuildServices(target, readOnly: false);
 
     // Get states to delete
-    IReadOnlyList<ProjectorStateInfo> states = await stateStore.ListAllAsync();
-    if (!string.IsNullOrEmpty(projectorName))
-    {
-        states = states.Where(s => s.ProjectorName == projectorName).ToList();
-    }
+    var states = FilterStoredStates(await ListStoredStatesAsync(services, target), projectorName);
 
     if (states.Count == 0)
     {
@@ -1227,6 +1264,8 @@ static async Task<int> DeleteStateAsync(ConnectionTarget target, string? project
         Console.WriteLine("Cancelled.");
         return 0;
     }
+
+    var stateStore = services.GetRequiredService<IMultiProjectionStateStore>();
 
     var deleted = 0;
     foreach (var state in states)
@@ -1354,21 +1393,15 @@ static async Task<int> FetchTagEventsAsync(
 static async Task<int> ShowProjectionAsync(ConnectionTarget target, string? projectorName)
 {
     var domainTypes = DomainType.GetDomainTypes();
-    EnsureProjectorExists(domainTypes, projectorName);
 
     Console.WriteLine("=== Projection State ===\n");
     PrintTarget(target);
     Console.WriteLine();
 
     var services = BuildServices(target);
-    var stateStore = services.GetRequiredService<IMultiProjectionStateStore>();
 
     // Get list of states
-    IReadOnlyList<ProjectorStateInfo> stateInfos = await stateStore.ListAllAsync();
-    if (!string.IsNullOrEmpty(projectorName))
-    {
-        stateInfos = stateInfos.Where(s => s.ProjectorName == projectorName).ToList();
-    }
+    var stateInfos = FilterStoredStates(await ListStoredStatesAsync(services, target), projectorName);
 
     if (stateInfos.Count == 0)
     {
@@ -1387,6 +1420,8 @@ static async Task<int> ShowProjectionAsync(ConnectionTarget target, string? proj
         return 0;
     }
 
+    var stateStore = services.GetRequiredService<IMultiProjectionStateStore>();
+    var readFailures = 0;
     foreach (var info in stateInfos)
     {
         Console.WriteLine($"Projector: {info.ProjectorName}");
@@ -1410,8 +1445,13 @@ static async Task<int> ShowProjectionAsync(ConnectionTarget target, string? proj
         Console.WriteLine($"  Build Host: {state.BuildHost}");
         Console.WriteLine($"  Is Offloaded: {state.IsOffloaded}");
 
-        var stateData = await TryReadStateDataAsync(stateStore, state);
-        if (stateData != null)
+        var (stateData, readError) = await ReadStateDataAsync(stateStore, state);
+        if (readError != null && !state.IsOffloaded)
+        {
+            Console.Error.WriteLine($"  Error: Could not read state data: {readError}");
+            readFailures++;
+        }
+        else if (stateData != null)
         {
             try
             {
@@ -1476,6 +1516,10 @@ static async Task<int> ShowProjectionAsync(ConnectionTarget target, string? proj
         }
 
         Console.WriteLine();
+    }
+    if (readFailures > 0)
+    {
+        throw new CliException($"State data of {readFailures} projector(s) could not be read.");
     }
     return 0;
 }
@@ -1555,10 +1599,13 @@ static async Task<int> ShowTagStateAsync(
     return 0;
 }
 
+// readOnly (default): SQLite stores are opened read-only and never created, migrated or switched to WAL.
+// Only build and delete pass readOnly: false.
 static ServiceProvider BuildServices(
     ConnectionTarget target,
     bool enableProgressReporting = true,
-    string? cachePath = null)
+    string? cachePath = null,
+    bool readOnly = true)
 {
     var services = new ServiceCollection();
     var connectionString = target.ConnectionString;
@@ -1571,8 +1618,13 @@ static ServiceProvider BuildServices(
     var useCache = !string.IsNullOrWhiteSpace(cachePath);
     if (useCache)
     {
+        // The cache was created by cache-sync; read it without schema initialization.
         services.AddSingleton<IEventStore>(sp =>
-            new SqliteEventStore(cachePath!, sp.GetRequiredService<DcbDomainTypes>().EventTypes, serviceIdProvider: sp.GetRequiredService<IServiceIdProvider>()));
+            new SqliteEventStore(
+                cachePath!,
+                sp.GetRequiredService<DcbDomainTypes>().EventTypes,
+                new SqliteEventStoreOptions { AutoCreateDatabase = false },
+                serviceIdProvider: sp.GetRequiredService<IServiceIdProvider>()));
     }
 
     if (target.DatabaseType == "cosmos")
@@ -1610,14 +1662,35 @@ static ServiceProvider BuildServices(
     }
     else if (target.DatabaseType == "sqlite")
     {
-        // SQLite event store written by the ApiService (Sekiban:Database=sqlite); connectionString is the file path
+        // SQLite event store written by the ApiService (Sekiban:Database=sqlite); connectionString is the file path.
+        // It must already be a Sekiban store: the CLI never creates one.
+        EnsureSekibanSqliteStore(connectionString);
+        var storePath = readOnly ? ToReadOnlySqlitePath(connectionString) : connectionString;
         if (!useCache)
         {
             services.AddSingleton<IEventStore>(sp =>
-                new SqliteEventStore(connectionString, sp.GetRequiredService<DcbDomainTypes>().EventTypes, serviceIdProvider: sp.GetRequiredService<IServiceIdProvider>()));
+                new SqliteEventStore(
+                    storePath,
+                    sp.GetRequiredService<DcbDomainTypes>().EventTypes,
+                    new SqliteEventStoreOptions { AutoCreateDatabase = false },
+                    serviceIdProvider: sp.GetRequiredService<IServiceIdProvider>()));
         }
+        // The state store always runs its "create if missing" schema step in its constructor (no option to skip it).
+        // On a read-only connection that step is a no-op when the schema is current, and fails (without changing the
+        // file) when an upgrade would be needed.
         services.AddSingleton<IMultiProjectionStateStore>(sp =>
-            new SqliteMultiProjectionStateStore(connectionString, serviceIdProvider: sp.GetRequiredService<IServiceIdProvider>()));
+        {
+            try
+            {
+                return new SqliteMultiProjectionStateStore(storePath, serviceIdProvider: sp.GetRequiredService<IServiceIdProvider>());
+            }
+            catch (SqliteException ex) when (readOnly)
+            {
+                throw new CliException(
+                    "The SQLite projection state tables need a schema upgrade, which this read-only command does not perform. " +
+                    $"Start the ApiService once (it upgrades the schema) and retry. ({ex.Message})");
+            }
+        });
     }
     else
     {
@@ -1762,12 +1835,45 @@ static async Task<int> SyncCacheAsync(ConnectionTarget target, string cacheDir, 
     return 0;
 }
 
+// Cache files of this CLI only: <root>/<database>-<16 hex>/events.db, plus the legacy <root>/events.db when it
+// carries cache-sync metadata. Other SQLite files (for example an ApiService events.db) are never picked up.
 static List<string> FindCacheFiles(string cacheDir)
 {
     var cacheRoot = GetCacheRoot(cacheDir);
-    return Directory.Exists(cacheRoot)
-        ? Directory.GetFiles(cacheRoot, "events.db", SearchOption.AllDirectories).OrderBy(p => p, StringComparer.Ordinal).ToList()
-        : [];
+    if (!Directory.Exists(cacheRoot))
+    {
+        return [];
+    }
+
+    var cacheFolderPattern = new Regex("^(postgres|cosmos|sqlite)-[0-9a-f]{16}$");
+    var files = Directory.GetDirectories(cacheRoot)
+        .Where(dir => cacheFolderPattern.IsMatch(Path.GetFileName(dir)))
+        .Select(dir => Path.Combine(dir, "events.db"))
+        .Where(File.Exists)
+        .Where(path => SqliteTableExists(path, "dcb_events"))
+        .ToList();
+
+    var legacyPath = Path.Combine(cacheRoot, "events.db");
+    if (File.Exists(legacyPath) && IsCacheSyncTarget(legacyPath))
+    {
+        files.Add(legacyPath);
+    }
+    return files.OrderBy(p => p, StringComparer.Ordinal).ToList();
+}
+
+// True when the file is a Sekiban SQLite store that cache-sync wrote metadata to (read-only check).
+static bool IsCacheSyncTarget(string path)
+{
+    if (!SqliteTableExists(path, "dcb_events") || !SqliteTableExists(path, "dcb_meta"))
+    {
+        return false;
+    }
+    var connectionString = new SqliteConnectionStringBuilder { DataSource = path, Mode = SqliteOpenMode.ReadOnly, Pooling = false }.ToString();
+    using var connection = new SqliteConnection(connectionString);
+    connection.Open();
+    using var command = connection.CreateCommand();
+    command.CommandText = "SELECT COUNT(*) FROM dcb_meta WHERE Key = 'remoteEndpoint' OR Key LIKE '%:remoteEndpoint'";
+    return Convert.ToInt64(command.ExecuteScalar()) > 0;
 }
 
 static async Task<int> ShowCacheStatsAsync(string cacheDir)
@@ -1793,8 +1899,12 @@ static async Task<int> ShowCacheStatsAsync(string cacheDir)
         Console.WriteLine($"File Size: {FormatBytes(fileInfo.Length)}");
         Console.WriteLine($"Last Modified: {fileInfo.LastWriteTimeUtc:yyyy-MM-dd HH:mm:ss} UTC");
 
-        // Create a minimal SQLite store to read stats
-        var localStore = new SqliteEventStore(cachePath, domainTypes.EventTypes, serviceIdProvider: CreateServiceIdProvider());
+        // Open the cache read-only without schema initialization
+        var localStore = new SqliteEventStore(
+            ToReadOnlySqlitePath(cachePath),
+            domainTypes.EventTypes,
+            new SqliteEventStoreOptions { AutoCreateDatabase = false },
+            serviceIdProvider: CreateServiceIdProvider());
 
         // Get event count
         try
