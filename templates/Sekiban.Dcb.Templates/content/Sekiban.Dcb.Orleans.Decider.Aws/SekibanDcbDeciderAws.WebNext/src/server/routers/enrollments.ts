@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { router, publicProcedure } from "../api/trpc";
+import { extractErrorMessage } from "../lib/api-error-helpers";
 
 const enrollmentSchema = z.object({
   studentId: z.string().uuid(),
@@ -84,8 +85,7 @@ export const enrollmentsRouter = router({
         }),
       });
       if (!res.ok) {
-        const error = await res.text();
-        throw new Error(error || "Failed to enroll student");
+        throw new Error(await extractErrorMessage(res, "Failed to enroll student"));
       }
       return res.json();
     }),
@@ -103,8 +103,7 @@ export const enrollmentsRouter = router({
       }
     );
     if (!res.ok) {
-      const error = await res.text();
-      throw new Error(error || "Failed to drop student");
+      throw new Error(await extractErrorMessage(res, "Failed to drop student"));
     }
     return res.json();
   }),

@@ -226,7 +226,7 @@
         [Required(ErrorMessage = "Date is required")]
         public DateTime? Date { get; set; } = DateTime.Today;
 
-        [Range(-60, 60, ErrorMessage = "Temperature must be between -60 and 60")]
+        [Range(-50, 50, ErrorMessage = "Temperature must be between -50 and 50")]
         public int TemperatureC { get; set; }
 
         [Required(ErrorMessage = "Summary is required")]
@@ -364,9 +364,13 @@
                 // Stay on current page after edit
                 await LoadForecasts(lastSortableUniqueId);
                 await CloseEditLocationModal();
+            } else if (response?.Success == true)
+            {
+                // Same name as before: the API reports a no-op without writing an event.
+                await CloseEditLocationModal();
             } else
             {
-                editLocationModel.Error = "Failed to update location. Please try again.";
+                editLocationModel.Error = response?.Error ?? "Failed to update location. Please try again.";
             }
         }
         catch (Exception ex)
@@ -399,7 +403,7 @@
                 await CloseAddModal();
             } else
             {
-                forecastModel.Error = "Failed to add weather forecast. Please try again.";
+                forecastModel.Error = response?.Error ?? "Failed to add weather forecast. Please try again.";
             }
         }
         catch (Exception ex)

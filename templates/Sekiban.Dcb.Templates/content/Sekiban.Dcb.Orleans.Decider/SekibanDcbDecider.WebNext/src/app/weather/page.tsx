@@ -398,8 +398,8 @@ export default function WeatherPage() {
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Temperature (°C)</label>
-                  <Input type="number" value={newTemperatureC} onChange={(e) => setNewTemperatureC(Number(e.target.value))} min={-60} max={60} />
-                  <p className="text-xs text-muted-foreground">Enter temperature in Celsius (-60 to 60)</p>
+                  <Input type="number" value={newTemperatureC} onChange={(e) => setNewTemperatureC(Number(e.target.value))} min={-50} max={50} />
+                  <p className="text-xs text-muted-foreground">Enter temperature in Celsius (-50 to 50)</p>
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Weather Condition</label>

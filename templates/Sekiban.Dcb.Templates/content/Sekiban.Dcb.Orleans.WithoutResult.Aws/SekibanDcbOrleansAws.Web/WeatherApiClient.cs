@@ -50,6 +50,10 @@ public class WeatherApiClient(HttpClient httpClient)
             TemperatureC = command.TemperatureC
         };
         var response = await httpClient.PostAsJsonAsync("/api/inputweatherforecast", payload, cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            return new CommandResponse(false, null, null, await ApiErrorReader.ReadAsync(response, cancellationToken), null);
+        }
         return await response.Content.ReadFromJsonAsync<CommandResponse>(cancellationToken) ??
             throw new InvalidOperationException("Failed to deserialize CommandResponse");
     }
@@ -60,6 +64,10 @@ public class WeatherApiClient(HttpClient httpClient)
     {
         var command = new DeleteWeatherForecast { ForecastId = weatherForecastId };
         var response = await httpClient.PostAsJsonAsync("/api/removeweatherforecast", command, cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            return new CommandResponse(false, null, null, await ApiErrorReader.ReadAsync(response, cancellationToken), null);
+        }
         return await response.Content.ReadFromJsonAsync<CommandResponse>(cancellationToken) ??
             throw new InvalidOperationException("Failed to deserialize CommandResponse");
     }
@@ -74,6 +82,10 @@ public class WeatherApiClient(HttpClient httpClient)
             "/api/updateweatherforecastlocation",
             command,
             cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            return new CommandResponse(false, null, null, await ApiErrorReader.ReadAsync(response, cancellationToken), null);
+        }
         return await response.Content.ReadFromJsonAsync<CommandResponse>(cancellationToken) ??
             throw new InvalidOperationException("Failed to deserialize CommandResponse");
     }

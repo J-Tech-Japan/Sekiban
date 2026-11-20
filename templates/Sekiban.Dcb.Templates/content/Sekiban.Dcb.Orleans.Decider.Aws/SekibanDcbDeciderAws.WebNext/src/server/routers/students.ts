@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { router, publicProcedure } from "../api/trpc";
+import { extractErrorMessage } from "../lib/api-error-helpers";
 
 const studentSchema = z.object({
   studentId: z.string().uuid(),
@@ -56,8 +57,7 @@ export const studentsRouter = router({
         }),
       });
       if (!res.ok) {
-        const error = await res.text();
-        throw new Error(error || "Failed to create student");
+        throw new Error(await extractErrorMessage(res, "Failed to create student"));
       }
       return res.json();
     }),

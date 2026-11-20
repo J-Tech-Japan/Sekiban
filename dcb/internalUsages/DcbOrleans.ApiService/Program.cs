@@ -1,3 +1,4 @@
+using DcbOrleans.ApiService;
 using Azure.Data.Tables;
 using Azure.Storage.Blobs;
 using Azure.Storage.Queues;
@@ -451,7 +452,8 @@ var app = builder.Build();
 // Database tables will be created automatically by the DatabaseInitializerService
 // configured in AddSekibanDcbPostgresWithAspire, so no need to run migrations
 
-var apiRoute = app.MapGroup("/api");
+var apiRoute = app.MapGroup("/api")
+    .AddEndpointFilter<QueryParameterValidationFilter>();
 
 // Configure the HTTP request pipeline.
 app.UseExceptionHandler();
@@ -1048,7 +1050,8 @@ apiRoute
             }
         })
     .WithOpenApi()
-    .WithName("PersistProjectionState");
+    .WithName("PersistProjectionState")
+    .AddEndpointFilter<KnownProjectorFilter>();
 
 apiRoute
     .MapPost(
@@ -1067,7 +1070,8 @@ apiRoute
             }
         })
     .WithOpenApi()
-    .WithName("DeactivateProjection");
+    .WithName("DeactivateProjection")
+    .AddEndpointFilter<KnownProjectorFilter>();
 
 apiRoute
     .MapPost(
@@ -1086,7 +1090,8 @@ apiRoute
             }
         })
     .WithOpenApi()
-    .WithName("RefreshProjection");
+    .WithName("RefreshProjection")
+    .AddEndpointFilter<KnownProjectorFilter>();
 
 apiRoute
     .MapGet(
@@ -1113,7 +1118,8 @@ apiRoute
             }
         })
     .WithOpenApi()
-    .WithName("GetProjectionSnapshot");
+    .WithName("GetProjectionSnapshot")
+    .AddEndpointFilter<KnownProjectorFilter>();
 
 apiRoute
     .MapPost(
@@ -1132,7 +1138,8 @@ apiRoute
             }
         })
     .WithOpenApi()
-    .WithName("OverwriteProjectionPersistedVersion");
+    .WithName("OverwriteProjectionPersistedVersion")
+    .AddEndpointFilter<KnownProjectorFilter>();
 
 
 apiRoute

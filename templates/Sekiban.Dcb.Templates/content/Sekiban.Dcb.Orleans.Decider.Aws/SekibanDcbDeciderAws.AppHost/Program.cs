@@ -1,3 +1,4 @@
+using Aspire.Hosting.Utils;
 using Projects;
 
 var builder = DistributedApplication.CreateBuilder(args);
@@ -9,10 +10,16 @@ var localstack = builder
     .WithEnvironment("SERVICES", "dynamodb,s3")
     .WithEnvironment("PERSISTENCE", "1")
     .WithEnvironment("AWS_DEFAULT_REGION", "us-east-1");
+// Named volume for LocalStack state. Note: LocalStack restores DynamoDB/S3 state from it only on
+// editions that support persistence; the snapshot bucket is (re)created by the ApiService in Development.
+localstack.WithVolume(VolumeNameGenerator.Generate(localstack, "data"), "/var/lib/localstack");
 
 // Add PostgreSQL for Identity (authentication) database only
 var postgresServer = builder
     .AddPostgres("dcbOrleansPostgres")
+    // Named data volume: users survive an AppHost restart. The generated password is kept in the
+    // AppHost user secrets, so it stays the same across restarts and matches the volume.
+    .WithDataVolume()
     .WithDbGate();
 
 var identityPostgres = postgresServer.AddDatabase("IdentityPostgres");

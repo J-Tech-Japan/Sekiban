@@ -1,3 +1,4 @@
+using Aspire.Hosting.Utils;
 using Projects;
 
 var builder = DistributedApplication.CreateBuilder(args);
@@ -9,12 +10,17 @@ var localstack = builder
     .WithEnvironment("SERVICES", "dynamodb,s3")
     .WithEnvironment("PERSISTENCE", "1")
     .WithEnvironment("AWS_DEFAULT_REGION", "us-east-1");
+// Named volume for LocalStack state. Note: LocalStack restores DynamoDB/S3 state from it only on
+// editions that support persistence; the snapshot bucket is (re)created by the ApiService in Development.
+localstack.WithVolume(VolumeNameGenerator.Generate(localstack, "data"), "/var/lib/localstack");
 
 // Materialized view database (kept separate from the DynamoDB event store so the read-side schema
 // can evolve independently). Optional — the ApiService only enables the MV runtime when the
 // connection string is wired through.
 var materializedViewPostgres = builder
     .AddPostgres("dcbOrleansAwsPostgres")
+    // Named data volume; the generated password is kept in the AppHost user secrets.
+    .WithDataVolume()
     .AddDatabase("DcbMaterializedViewPostgres");
 
 // Add the API Service with DynamoDB configuration

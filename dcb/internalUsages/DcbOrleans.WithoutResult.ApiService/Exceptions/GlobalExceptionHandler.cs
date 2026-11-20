@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
+using Sekiban.Dcb.Validation;
 using Dcb.Domain.WithoutResult.Order;
 
 namespace DcbOrleans.WithoutResult.ApiService.Exceptions;
@@ -70,6 +71,34 @@ public class GlobalExceptionHandler : IExceptionHandler
                 Title = "Bad Request",
                 Detail = orderCommand.Message,
                 Type = "https://tools.ietf.org/html/rfc7231#section-6.5.1"
+            },
+
+            SekibanValidationException sekibanValidation => new ProblemDetails
+            {
+                Status = StatusCodes.Status400BadRequest,
+                Title = "Validation Error",
+                Detail = sekibanValidation.Message,
+                Type = "https://tools.ietf.org/html/rfc7231#section-6.5.1",
+                Extensions =
+                {
+                    ["errors"] = sekibanValidation.Errors
+                        .GroupBy(error => error.PropertyName)
+                        .ToDictionary(group => group.Key, group => group.Select(error => error.ErrorMessage).ToArray())
+                }
+            },
+
+            System.ComponentModel.DataAnnotations.ValidationException dataAnnotations => new ProblemDetails
+            {
+                Status = StatusCodes.Status400BadRequest,
+                Title = "Validation Error",
+                Detail = dataAnnotations.Message,
+                Type = "https://tools.ietf.org/html/rfc7231#section-6.5.1",
+                Extensions =
+                {
+                    ["errors"] = dataAnnotations.ValidationResult.MemberNames
+                        .Distinct()
+                        .ToDictionary(member => member, _ => new[] { dataAnnotations.ValidationResult.ErrorMessage ?? dataAnnotations.Message })
+                }
             },
 
             ApplicationException appEx => new ProblemDetails

@@ -13,6 +13,7 @@
   },
   "sourceName": "SekibanDcbDecider",
   "preferNameDirectory": true,
+  "guids": ["86ab8d85-7d41-472b-905c-bb7335c6a144"],
   "symbols": {
     "IncludeTests": {
       "type": "parameter",

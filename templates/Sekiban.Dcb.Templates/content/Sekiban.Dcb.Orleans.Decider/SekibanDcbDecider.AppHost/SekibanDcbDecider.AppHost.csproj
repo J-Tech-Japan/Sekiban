@@ -8,6 +8,7 @@
         <IsAspireHost>true</IsAspireHost>
         <AspireUseCliBundle>true</AspireUseCliBundle>
         <RootNamespace>SekibanDcbOrleans.AppHost</RootNamespace>
+        <UserSecretsId>86ab8d85-7d41-472b-905c-bb7335c6a144</UserSecretsId>
     </PropertyGroup>
 
     <ItemGroup>

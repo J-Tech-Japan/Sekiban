@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { router, publicProcedure } from "../api/trpc";
+import { extractErrorMessage } from "../lib/api-error-helpers";
 
 const classroomSchema = z.object({
   classRoomId: z.string().uuid(),
@@ -58,8 +59,7 @@ export const classroomsRouter = router({
         }),
       });
       if (!res.ok) {
-        const error = await res.text();
-        throw new Error(error || "Failed to create classroom");
+        throw new Error(await extractErrorMessage(res, "Failed to create classroom"));
       }
       return res.json();
     }),

@@ -317,6 +317,11 @@ if (databaseType != "dynamodb")
 builder.Services.AddSekibanDcbDynamoDbWithAspire();
 builder.Services.AddSingleton<IMultiProjectionStateStore, DynamoMultiProjectionStateStore>();
 builder.Services.AddSekibanDcbS3BlobStorage(builder.Configuration);
+// LocalStack starts without the snapshot bucket; create it in local development (never against real AWS).
+if (builder.Environment.IsDevelopment() && !string.IsNullOrWhiteSpace(builder.Configuration["S3BlobStorage:ServiceUrl"]))
+{
+    builder.Services.AddHostedService<LocalS3BucketInitializer>();
+}
 
 builder.Services.AddTransient<IGrainStorageSerializer, NewtonsoftJsonDcbOrleansSerializer>();
 builder.Services.AddTransient<NewtonsoftJsonDcbOrleansSerializer>();
@@ -354,7 +359,8 @@ var app = builder.Build();
 var startupLogger = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("Startup");
 startupLogger.LogInformation("Database type: {DatabaseType}", databaseType);
 
-var apiRoute = app.MapGroup("/api");
+var apiRoute = app.MapGroup("/api")
+    .AddEndpointFilter<QueryParameterValidationFilter>();
 
 // Configure the HTTP request pipeline.
 app.UseExceptionHandler();

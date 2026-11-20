@@ -14,38 +14,6 @@ public class EnrollmentApiClient(HttpClient httpClient)
         public string? message { get; set; }
     }
     
-    private class ErrorResponse
-    {
-        public string? error { get; set; }
-    }
-
-    public class EnrollmentView
-    {
-        public Guid StudentId { get; set; }
-        public string StudentName { get; set; } = string.Empty;
-        public int Grade { get; set; }
-        public Guid ClassRoomId { get; set; }
-        public string ClassName { get; set; } = string.Empty;
-        public DateTime EnrollmentDate { get; set; }
-    }
-
-    public async Task<EnrollmentView[]> GetEnrollmentsAsync(
-        string? waitForSortableUniqueId = null,
-        CancellationToken cancellationToken = default)
-    {
-        var queryParams = new List<string>();
-
-        if (!string.IsNullOrEmpty(waitForSortableUniqueId))
-            queryParams.Add($"waitForSortableUniqueId={Uri.EscapeDataString(waitForSortableUniqueId)}");
-
-        var requestUri = queryParams.Count > 0
-            ? $"/api/enrollments?{string.Join("&", queryParams)}"
-            : "/api/enrollments";
-
-        var enrollments = await httpClient.GetFromJsonAsync<List<EnrollmentView>>(requestUri, cancellationToken);
-
-        return enrollments?.ToArray() ?? [];
-    }
 
     public async Task<CommandResponse> EnrollStudentAsync(
         EnrollStudentInClassRoom command,
@@ -70,8 +38,7 @@ public class EnrollmentApiClient(HttpClient httpClient)
             }
             else
             {
-                var errorResult = await response.Content.ReadFromJsonAsync<ErrorResponse>(cancellationToken);
-                return new CommandResponse(false, null, null, errorResult?.error ?? "Unknown error", null);
+                return new CommandResponse(false, null, null, await ApiErrorReader.ReadAsync(response, cancellationToken), null);
             }
         }
         catch (Exception ex)
@@ -105,8 +72,7 @@ public class EnrollmentApiClient(HttpClient httpClient)
             }
             else
             {
-                var errorResult = await response.Content.ReadFromJsonAsync<ErrorResponse>(cancellationToken);
-                return new CommandResponse(false, null, null, errorResult?.error ?? "Unknown error", null);
+                return new CommandResponse(false, null, null, await ApiErrorReader.ReadAsync(response, cancellationToken), null);
             }
         }
         catch (Exception ex)
