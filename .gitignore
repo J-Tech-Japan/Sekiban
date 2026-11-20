@@ -418,6 +418,12 @@ dev.log
 # SQLite database files
 events.db
 events.db-*
+# DCB CLI cache root: HMAC key, sync lock and sync temp files
+.cache-key
+.cache-key.*.tmp
+.cache-key.lock
+.sync.lock
+events.db.sync-*
 dcb/internalUsages/DcbOrleansDynamoDB.Infrastructure/config/dev2.json
 
 # Local configuration files

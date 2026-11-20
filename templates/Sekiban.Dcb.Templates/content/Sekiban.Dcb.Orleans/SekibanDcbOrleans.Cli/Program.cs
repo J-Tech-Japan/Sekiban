@@ -414,11 +414,6 @@ static async Task<int> RunAsync(Func<Task<int>> action)
         WriteError(ex.Message);
         return 1;
     }
-    catch (OperationCanceledException)
-    {
-        WriteError("Cancelled.");
-        return 130;
-    }
     catch (Exception ex)
     {
         var message = ex.InnerException is null || ex.InnerException.Message == ex.Message
@@ -703,36 +698,85 @@ static byte[]? ReadOrCreateCacheKey(string cacheRoot, bool create)
             {
                 return null;
             }
+
+            // Concurrent first runs: only one creates the key (under an exclusive lock, re-checking existence); the key
+            // is written to a temporary file and renamed into place, so readers never see a partial key.
             Directory.CreateDirectory(cacheRoot);
-            var newKey = System.Security.Cryptography.RandomNumberGenerator.GetBytes(32);
-            var fileOptions = new FileStreamOptions { Mode = FileMode.CreateNew, Access = FileAccess.Write };
-            if (!OperatingSystem.IsWindows())
+            using var keyLock = AcquireLockWithRetry(Path.Combine(cacheRoot, ".cache-key.lock"), TimeSpan.FromSeconds(10));
+            if (!File.Exists(keyPath))
             {
-                fileOptions.UnixCreateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite;
-            }
-            try
-            {
-                using var stream = new FileStream(keyPath, fileOptions);
-                stream.Write(newKey);
-                return newKey;
-            }
-            catch (IOException) when (File.Exists(keyPath))
-            {
-                // Created concurrently by another run: read it below.
+                var tempKeyPath = Path.Combine(cacheRoot, $".cache-key.{Guid.NewGuid():N}.tmp");
+                var fileOptions = new FileStreamOptions { Mode = FileMode.CreateNew, Access = FileAccess.Write };
+                if (!OperatingSystem.IsWindows())
+                {
+                    fileOptions.UnixCreateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite;
+                }
+                using (var stream = new FileStream(tempKeyPath, fileOptions))
+                {
+                    stream.Write(System.Security.Cryptography.RandomNumberGenerator.GetBytes(32));
+                }
+                File.Move(tempKeyPath, keyPath);
             }
         }
 
-        var key = File.ReadAllBytes(keyPath);
-        if (key.Length != 32)
+        // A key file is always written completely before it appears; retry briefly anyway.
+        for (var attempt = 0; ; attempt++)
         {
-            throw new CliException($"Cache key file {keyPath} is invalid (expected 32 bytes). Delete it together with the cache folders.");
+            var key = File.ReadAllBytes(keyPath);
+            if (key.Length == 32)
+            {
+                return key;
+            }
+            if (attempt >= 4)
+            {
+                throw new CliException($"Cache key file {keyPath} is invalid (expected 32 bytes). Delete it together with the cache folders.");
+            }
+            Thread.Sleep(50);
         }
-        return key;
     }
     catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
     {
         throw new CliException($"Cache key file {keyPath} could not be {(create ? "created or read" : "read")}: {ex.Message}");
     }
+}
+
+// Exclusive lock file, waiting up to the timeout for another process to release it.
+static FileStream AcquireLockWithRetry(string lockPath, TimeSpan timeout)
+{
+    var deadline = DateTime.UtcNow + timeout;
+    while (true)
+    {
+        try
+        {
+            return new FileStream(lockPath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+        }
+        catch (IOException) when (DateTime.UtcNow < deadline)
+        {
+            Thread.Sleep(50);
+        }
+    }
+}
+
+// Exclusive per-folder lock held for a whole cache-sync (and by cache-clear while it deletes). Null when another
+// process holds it.
+static FileStream? TryAcquireCacheLock(string cacheFolder)
+{
+    try
+    {
+        return new FileStream(Path.Combine(cacheFolder, ".sync.lock"), FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+    }
+    catch (IOException)
+    {
+        return null;
+    }
+}
+
+// Connection to an existing SQLite file that is never created by opening it.
+static SqliteConnection OpenExistingSqlite(string path)
+{
+    var connection = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = path, Mode = SqliteOpenMode.ReadWrite, Pooling = false }.ToString());
+    connection.Open();
+    return connection;
 }
 
 // <cache root>/<database type>-<16 hex>/events.db (see ConnectionIdentity.ComputeKey). Null when no key exists yet
@@ -1350,11 +1394,11 @@ static async Task<int> DeleteStateAsync(ConnectionTarget target, string? project
     PrintTarget(target);
     Console.WriteLine();
 
-    // delete writes to the store (the SQLite state store may also upgrade its schema)
-    var services = BuildServices(target, readOnly: false);
+    // List through the read-only path first; the store is opened for writing only after confirmation.
+    var readServices = BuildServices(target);
 
     // Get states to delete
-    var states = FilterStoredStates(await ListStoredStatesAsync(services, target), projectorName);
+    var states = FilterStoredStates(await ListStoredStatesAsync(readServices, target), projectorName);
 
     if (states.Count == 0)
     {
@@ -1375,7 +1419,8 @@ static async Task<int> DeleteStateAsync(ConnectionTarget target, string? project
         return 0;
     }
 
-    var stateStore = services.GetRequiredService<IMultiProjectionStateStore>();
+    // delete writes to the store (the SQLite state store may also upgrade its schema)
+    var stateStore = BuildServices(target, readOnly: false).GetRequiredService<IMultiProjectionStateStore>();
 
     var deleted = 0;
     foreach (var state in states)
@@ -1623,7 +1668,8 @@ static async Task<int> ShowProjectionAsync(ConnectionTarget target, string? proj
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"  Could not parse state data: {ex.Message}");
+                Console.Error.WriteLine($"  Error: Could not decode state data of {info.ProjectorName} (v{info.ProjectorVersion}): {ex.Message}");
+                readFailures++;
             }
         }
 
@@ -1913,6 +1959,10 @@ static async Task<int> SyncCacheAsync(ConnectionTarget target, string cacheDir, 
     var cachePath = GetCachePath(cacheDir, target, createKey: true)!;
     var cacheFolder = Path.GetDirectoryName(cachePath)!;
     Directory.CreateDirectory(cacheFolder);
+    using var cacheLock = TryAcquireCacheLock(cacheFolder)
+        ?? throw new CliException($"Another cache-sync (or cache-clear) is running for this cache: {cacheFolder}");
+
+    // Holding the lock, any temp files left in the folder are from interrupted runs.
     DeleteSyncTempFiles(cacheFolder);
 
     // Sync into a temporary file and replace events.db only after a complete, successful sync, so a failed or
@@ -1931,9 +1981,8 @@ static async Task<int> SyncCacheAsync(ConnectionTarget target, string cacheDir, 
 
         // Make the temp file a single self-contained file, then atomically move it over events.db.
         SqliteConnection.ClearAllPools();
-        using (var connection = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = tempPath, Pooling = false }.ToString()))
+        using (var connection = OpenExistingSqlite(tempPath))
         {
-            connection.Open();
             using var command = connection.CreateCommand();
             command.CommandText = "PRAGMA wal_checkpoint(TRUNCATE); PRAGMA journal_mode=DELETE;";
             command.ExecuteNonQuery();
@@ -1953,11 +2002,11 @@ static async Task<int> SyncCacheAsync(ConnectionTarget target, string cacheDir, 
     }
     finally
     {
+        // Only this run's temp files (other runs cannot hold the lock at the same time, but stay strict anyway).
         SqliteConnection.ClearAllPools();
-        DeleteSyncTempFiles(cacheFolder);
-        if (!File.Exists(cachePath) && !Directory.EnumerateFileSystemEntries(cacheFolder).Any())
+        foreach (var suffix in new[] { "", "-journal", "-wal", "-shm" })
         {
-            Directory.Delete(cacheFolder);
+            DeleteFileIfExists(tempPath + suffix);
         }
     }
 }
@@ -2011,9 +2060,8 @@ static async Task<CacheSyncResult> SyncIntoFileAsync(ConnectionTarget target, st
     }
 
     // CLI-owned completion marker, written only after a successful sync.
-    using (var connection = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = path, Pooling = false }.ToString()))
+    using (var connection = OpenExistingSqlite(path))
     {
-        connection.Open();
         using var command = connection.CreateCommand();
         command.CommandText = "INSERT OR REPLACE INTO dcb_meta (Key, Value) VALUES ($key, $value)";
         command.Parameters.AddWithValue("$key", CacheCompletionKey);
@@ -2242,17 +2290,19 @@ static Task<int> ClearCacheAsync(string cacheDir, bool assumeYes)
     Console.WriteLine($"Cache Directory: {cacheDir}");
     Console.WriteLine();
 
-    // Cache folders are CLI-owned and are deleted even when unreadable. A legacy <root>/events.db is deleted only when
-    // its metadata identifies it as a cache; an unreadable one is reported and kept.
-    var toDelete = new List<string>();
+    // Cache folders are CLI-owned: events.db (even when unreadable) and leftover sync temp files are deleted while
+    // holding the folder's sync lock; a folder whose lock is held by a running cache-sync is skipped. A legacy
+    // <root>/events.db is deleted only when its metadata identifies it as a cache; an unreadable one is kept.
+    var folderFiles = GetCacheFolders(cacheDir)
+        .Select(folder => (Folder: folder, Files: Directory.GetFiles(folder, "events.db")
+            .Concat(Directory.GetFiles(folder, "events.db.sync-*.tmp*")).ToList()))
+        .Where(entry => entry.Files.Count > 0)
+        .ToList();
+
+    string? legacyToDelete = null;
     var unreadableLegacy = 0;
-    foreach (var (path, isLegacy) in FindCacheFiles(cacheDir))
+    foreach (var (path, _) in FindCacheFiles(cacheDir).Where(file => file.IsLegacy))
     {
-        if (!isLegacy)
-        {
-            toDelete.Add(path);
-            continue;
-        }
         var (isCache, error) = GetCacheSyncStatus(path);
         if (error != null)
         {
@@ -2261,17 +2311,12 @@ static Task<int> ClearCacheAsync(string cacheDir, bool assumeYes)
         }
         else if (isCache)
         {
-            toDelete.Add(path);
+            legacyToDelete = path;
         }
     }
 
-    // Leftover temp files of failed or interrupted syncs in the cache folders
-    var tempFiles = GetCacheFolders(cacheDir)
-        .SelectMany(folder => Directory.GetFiles(folder, "events.db.sync-*.tmp*"))
-        .ToList();
-    toDelete.AddRange(tempFiles);
-
-    if (toDelete.Count == 0)
+    var fileCount = folderFiles.Sum(entry => entry.Files.Count) + (legacyToDelete != null ? 1 : 0);
+    if (fileCount == 0)
     {
         Console.WriteLine("No cache file found. Nothing to clear.");
         return unreadableLegacy > 0
@@ -2279,31 +2324,49 @@ static Task<int> ClearCacheAsync(string cacheDir, bool assumeYes)
             : Task.FromResult(0);
     }
 
-    foreach (var cachePath in toDelete)
+    foreach (var file in folderFiles.SelectMany(entry => entry.Files).Append(legacyToDelete).OfType<string>())
     {
-        Console.WriteLine($"Cache file: {cachePath} ({FormatBytes(new FileInfo(cachePath).Length)})");
+        Console.WriteLine($"Cache file: {file}");
     }
     Console.WriteLine();
 
-    if (!Confirm($"Are you sure you want to delete {toDelete.Count} cache file(s)? (y/N): ", assumeYes))
+    if (!Confirm($"Are you sure you want to delete {fileCount} cache file(s)? (y/N): ", assumeYes))
     {
         Console.WriteLine("Cancelled.");
         return Task.FromResult(0);
     }
 
-    // Delete the cache files and their WAL/SHM files
-    foreach (var cachePath in toDelete)
+    var skipped = 0;
+    foreach (var (folder, _) in folderFiles)
     {
-        DeleteCacheFiles(cachePath);
+        using var folderLock = TryAcquireCacheLock(folder);
+        if (folderLock == null)
+        {
+            Console.Error.WriteLine($"  Skipped {folder}: a cache-sync is running for it.");
+            skipped++;
+            continue;
+        }
+        DeleteCacheFiles(Path.Combine(folder, "events.db"));
+        DeleteSyncTempFiles(folder);
     }
-    foreach (var folder in GetCacheFolders(cacheDir).Where(folder => !Directory.EnumerateFileSystemEntries(folder).Any()))
+    if (legacyToDelete != null)
     {
-        Directory.Delete(folder);
+        DeleteCacheFiles(legacyToDelete);
     }
-    Console.WriteLine("\nCache cleared successfully.");
-    if (unreadableLegacy > 0)
+
+    Console.WriteLine(skipped == 0 ? "\nCache cleared successfully." : "\nCache partially cleared.");
+    if (unreadableLegacy > 0 || skipped > 0)
     {
-        throw new CliException($"{unreadableLegacy} legacy cache file(s) could not be read and were kept.");
+        var problems = new List<string>();
+        if (unreadableLegacy > 0)
+        {
+            problems.Add($"{unreadableLegacy} legacy cache file(s) could not be read and were kept");
+        }
+        if (skipped > 0)
+        {
+            problems.Add($"{skipped} cache folder(s) were skipped because a cache-sync is running");
+        }
+        throw new CliException(string.Join("; ", problems) + ".");
     }
     return Task.FromResult(0);
 }

@@ -10,3 +10,7 @@ secrets.json
 cache/
 output/
 events.db*
+.cache-key
+.cache-key.*.tmp
+.cache-key.lock
+.sync.lock
