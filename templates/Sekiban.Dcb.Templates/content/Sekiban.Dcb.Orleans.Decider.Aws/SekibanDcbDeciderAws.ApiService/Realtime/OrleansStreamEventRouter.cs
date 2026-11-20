@@ -23,7 +23,8 @@ public sealed class OrleansStreamEventRouter : IHostedService, IDisposable
     private static readonly HashSet<string> ApprovalEventTypes = new(StringComparer.Ordinal)
     {
         "ApprovalFlowStarted",
-        "ApprovalDecisionRecorded"
+        "ApprovalDecisionRecorded",
+        "ApprovalRequestWithdrawn"
     };
 
     private readonly IServiceIdProvider _serviceIdProvider;

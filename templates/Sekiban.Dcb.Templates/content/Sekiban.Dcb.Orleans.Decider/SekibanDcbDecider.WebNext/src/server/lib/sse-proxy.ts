@@ -1,9 +1,10 @@
-import { getAccessToken, refreshSessionTokens } from "@/server/lib/auth-helpers";
+import { clearSessionCookiesIfUnchanged, getAccessToken, refreshSessionTokens } from "@/server/lib/auth-helpers";
 
 /**
  * Proxy a server-sent event stream from the API, authenticating with the session's access token.
  * When the API rejects an expired access token, the session is refreshed once and the request is
- * retried, so an open page keeps receiving events after the short-lived token expires.
+ * retried, so an open page keeps receiving events after the short-lived token expires. Cookies are
+ * cleared only when the API rejects the refresh token, never on a transient failure.
  */
 export async function proxyEventStream(request: Request, apiPath: string, label: string): Promise<Response> {
   const accessToken = await getAccessToken();
@@ -24,12 +25,20 @@ export async function proxyEventStream(request: Request, apiPath: string, label:
   let apiRes = await open(accessToken);
   if (apiRes.status === 401) {
     await apiRes.body?.cancel();
-    const refreshedToken = await refreshSessionTokens();
-    if (!refreshedToken) {
-      console.info(`[SSE][${label}] Access token expired and could not be refreshed.`);
+    const refreshed = await refreshSessionTokens();
+    if (refreshed.status === "unavailable") {
+      // Transient failure: keep the session cookies; the client reconnects with backoff.
+      console.warn(`[SSE][${label}] Token refresh unavailable; will retry on reconnect.`);
+      return new Response("Service unavailable", { status: 503 });
+    }
+    if (refreshed.status !== "ok") {
+      if (refreshed.status === "rejected") {
+        await clearSessionCookiesIfUnchanged(refreshed.refreshToken);
+      }
+      console.info(`[SSE][${label}] Access token expired and the session could not be refreshed.`);
       return new Response("Unauthorized", { status: 401 });
     }
-    apiRes = await open(refreshedToken);
+    apiRes = await open(refreshed.accessToken);
   }
 
   if (!apiRes.ok || !apiRes.body) {

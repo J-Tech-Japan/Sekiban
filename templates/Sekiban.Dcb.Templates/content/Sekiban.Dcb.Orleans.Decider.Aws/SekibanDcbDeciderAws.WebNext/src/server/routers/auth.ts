@@ -1,3 +1,4 @@
+import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { router, publicProcedure } from "../api/trpc";
 import {
@@ -178,21 +179,33 @@ export const authRouter = router({
         return userInfoSchema.parse(await res.json());
       }
 
-      // Token might be expired, try to refresh (shared with the SSE proxies; see refreshSessionTokens)
-      const refreshedAccessToken = await refreshSessionTokens();
-      if (refreshedAccessToken) {
-        // Retry getting user info
+      if (res.status !== 401) {
+        // The API is unavailable or failed; the session may still be fine, so keep the cookies.
+        throw new TRPCError({ code: "SERVICE_UNAVAILABLE", message: "Authentication service unavailable" });
+      }
+
+      // The access token expired: refresh (shared with the SSE proxies; see refreshSessionTokens)
+      const refreshed = await refreshSessionTokens();
+      if (refreshed.status === "unavailable") {
+        throw new TRPCError({ code: "SERVICE_UNAVAILABLE", message: "Authentication service unavailable" });
+      }
+
+      if (refreshed.status === "ok") {
         const retryRes = await fetch(`${process.env.API_BASE_URL}/auth/me`, {
-          headers: { Authorization: `Bearer ${refreshedAccessToken}` },
+          headers: { Authorization: `Bearer ${refreshed.accessToken}` },
         });
 
         if (retryRes.ok) {
           return userInfoSchema.parse(await retryRes.json());
         }
+        throw new TRPCError({ code: "SERVICE_UNAVAILABLE", message: "Authentication service unavailable" });
       }
 
-      // Failed to refresh, clean up unless another request already stored newer tokens
-      await clearSessionCookiesIfUnchanged(session.refreshToken);
+      // The API rejected the refresh token: the session is over. Clear the cookies unless another
+      // request already stored newer tokens.
+      if (refreshed.status === "rejected") {
+        await clearSessionCookiesIfUnchanged(refreshed.refreshToken);
+      }
       return {
         id: "",
         email: "",
@@ -200,14 +213,12 @@ export const authRouter = router({
         roles: [] as string[],
         isAuthenticated: false,
       };
-    } catch {
-      return {
-        id: "",
-        email: "",
-        displayName: null,
-        roles: [] as string[],
-        isAuthenticated: false,
-      };
+    } catch (error) {
+      if (error instanceof TRPCError) {
+        throw error;
+      }
+      // Network error reaching the API: report it as retryable and keep the cookies.
+      throw new TRPCError({ code: "SERVICE_UNAVAILABLE", message: "Authentication service unavailable" });
     }
   }),
 });

@@ -115,12 +115,34 @@ const refreshedTokensSchema = z.object({
 // This only coordinates requests inside one WebNext process; across several instances the API accepts a
 // just-rotated refresh token for a short grace period (see the API's refresh endpoint).
 const REFRESH_REUSE_MS = 60_000;
+const REFRESH_TIMEOUT_MS = 10_000;
+
+/**
+ * Result of a refresh:
+ * - "ok": new tokens were stored in the session cookies.
+ * - "rejected": the API refused the refresh token (401/403). The session is over; callers may clear
+ *   the cookies (with clearSessionCookiesIfUnchanged).
+ * - "unavailable": the refresh could not be completed (network error, timeout, 5xx such as 503 while
+ *   the API starts). The session may still be valid, so callers must not clear the cookies.
+ * - "no-session": there are no session cookies.
+ */
+export type RefreshOutcome =
+  | { status: "ok"; accessToken: string }
+  | { status: "rejected"; refreshToken: string }
+  | { status: "unavailable" }
+  | { status: "no-session" };
+
+type ExchangeResult =
+  | { status: "ok"; tokens: SessionTokens }
+  | { status: "rejected" }
+  | { status: "unavailable" };
+
 const refreshStore = globalThis as typeof globalThis & {
-  __sekibanSessionRefreshes?: Map<string, Promise<SessionTokens | null>>;
+  __sekibanSessionRefreshes?: Map<string, Promise<ExchangeResult>>;
 };
 const sessionRefreshes = (refreshStore.__sekibanSessionRefreshes ??= new Map());
 
-async function exchangeRefreshToken(session: SessionTokens): Promise<SessionTokens | null> {
+async function exchangeRefreshToken(session: SessionTokens): Promise<ExchangeResult> {
   try {
     const refreshRes = await fetch(`${process.env.API_BASE_URL}/auth/refresh`, {
       method: "POST",
@@ -130,35 +152,42 @@ async function exchangeRefreshToken(session: SessionTokens): Promise<SessionToke
         refreshToken: session.refreshToken,
       }),
       cache: "no-store",
+      signal: AbortSignal.timeout(REFRESH_TIMEOUT_MS),
     });
+    if (refreshRes.status === 401 || refreshRes.status === 403) {
+      return { status: "rejected" };
+    }
     if (!refreshRes.ok) {
-      return null;
+      return { status: "unavailable" };
     }
 
     const parsed = refreshedTokensSchema.safeParse(await refreshRes.json());
     if (!parsed.success) {
-      return null;
+      return { status: "unavailable" };
     }
 
     return {
-      accessToken: parsed.data.accessToken,
-      refreshToken: parsed.data.refreshToken,
-      refreshExpiresAt: new Date(parsed.data.refreshTokenExpires),
+      status: "ok",
+      tokens: {
+        accessToken: parsed.data.accessToken,
+        refreshToken: parsed.data.refreshToken,
+        refreshExpiresAt: new Date(parsed.data.refreshTokenExpires),
+      },
     };
   } catch {
-    return null;
+    // Network error or timeout
+    return { status: "unavailable" };
   }
 }
 
 /**
  * Exchange the stored refresh token for a new access token and store the new tokens in the
- * session cookies. Returns the new access token, or null when the session cannot be refreshed.
- * Concurrent calls with the same refresh token share one exchange.
+ * session cookies. Concurrent calls with the same refresh token share one exchange.
  */
-export async function refreshSessionTokens(): Promise<string | null> {
+export async function refreshSessionTokens(): Promise<RefreshOutcome> {
   const session = await getSessionTokens();
   if (!session) {
-    return null;
+    return { status: "no-session" };
   }
 
   const key = session.refreshToken;
@@ -167,10 +196,10 @@ export async function refreshSessionTokens(): Promise<string | null> {
     const exchange = exchangeRefreshToken(session);
     pending = exchange;
     sessionRefreshes.set(key, exchange);
-    // Keep only a successful result for reuse; a failed (possibly transient) exchange is forgotten
-    // at once so the next request tries again instead of being logged out for the reuse window.
-    void exchange.then((tokens) => {
-      if (!tokens) {
+    // Keep only a successful result for reuse; a failed exchange is forgotten at once so the next
+    // request tries again.
+    void exchange.then((result) => {
+      if (result.status !== "ok") {
         if (sessionRefreshes.get(key) === exchange) sessionRefreshes.delete(key);
         return;
       }
@@ -180,18 +209,22 @@ export async function refreshSessionTokens(): Promise<string | null> {
     });
   }
 
-  const tokens = await pending;
-  if (!tokens) {
-    return null;
+  const result = await pending;
+  switch (result.status) {
+    case "ok":
+      await setSessionCookies(result.tokens);
+      return { status: "ok", accessToken: result.tokens.accessToken };
+    case "rejected":
+      return { status: "rejected", refreshToken: key };
+    default:
+      return { status: "unavailable" };
   }
-
-  await setSessionCookies(tokens);
-  return tokens.accessToken;
 }
 
 /**
- * Clear the session cookies after a failed refresh, but only when they still hold the refresh token
- * that failed. If another request already stored newer tokens, keep them.
+ * Clear the session cookies after the API rejected the refresh token, but only when they still hold
+ * the token that was rejected. If another request already stored newer tokens, keep them.
+ * Never call this for a transient ("unavailable") refresh failure.
  */
 export async function clearSessionCookiesIfUnchanged(failedRefreshToken: string): Promise<void> {
   const current = await getSessionTokens();

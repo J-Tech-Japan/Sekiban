@@ -1,4 +1,5 @@
 using SekibanDcbDecider.ApiService.Health;
+using Dcb.EventSource.MeetingRoom.Queries;
 using Dcb.EventSource.MeetingRoom.User;
 using Dcb.MeetingRoomModels.States.UserAccess;
 using Dcb.MeetingRoomModels.States.UserDirectory;
@@ -321,8 +322,10 @@ public class AuthDbInitializer : BackgroundService
     }
 
     /// <summary>
-    ///     Idempotently ensures that every Identity user in the Admin role has a user directory entry and
-    ///     domain UserAccess with all of its Identity roles. Failures are logged and retried on the next start.
+    ///     Reconciles the domain UserAccess Admin role with the Identity Admin role in both directions:
+    ///     every Identity administrator gets a user directory entry and UserAccess with all of its Identity
+    ///     roles, and every active domain administrator who is no longer an Identity administrator loses the
+    ///     domain Admin role. Idempotent; failures are logged and retried on the next start.
     /// </summary>
     private async Task SyncAdministratorsToUserAccessAsync(UserManager<ApplicationUser> userManager, ISekibanExecutor executor)
     {
@@ -341,6 +344,55 @@ public class AuthDbInitializer : BackgroundService
         {
             await EnsureUserDirectoryAsync(executor, administrator);
             await EnsureUserAccessAsync(executor, administrator, await userManager.GetRolesAsync(administrator));
+        }
+
+        List<Guid> domainAdministrators;
+        try
+        {
+            domainAdministrators = await ListDomainAdministratorsAsync(executor);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to list domain administrators; demotions are retried on the next start");
+            return;
+        }
+
+        var identityAdministrators = administrators
+            .Select(user => Guid.TryParse(user.Id, out var id) ? id : Guid.Empty)
+            .Where(id => id != Guid.Empty);
+        var plan = AdministratorReconciliation.Create(identityAdministrators, domainAdministrators);
+        foreach (var userId in plan.Revoke)
+        {
+            try
+            {
+                _logger.LogInformation("Revoking domain Admin role from {UserId}: not an Identity administrator", userId);
+                await executor.ExecuteAsync(new RevokeUserRole { UserId = userId, Role = AdministratorReconciliation.AdminRole });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to revoke domain Admin role from {UserId}; retried on the next start", userId);
+            }
+        }
+    }
+
+    private static async Task<List<Guid>> ListDomainAdministratorsAsync(ISekibanExecutor executor)
+    {
+        const int pageSize = 500;
+        var result = new List<Guid>();
+        for (var page = 1; ; page++)
+        {
+            var items = (await executor.QueryAsync(new GetUserAccessListQuery
+            {
+                ActiveOnly = true,
+                RoleFilter = AdministratorReconciliation.AdminRole,
+                PageNumber = page,
+                PageSize = pageSize
+            })).Items.ToList();
+            result.AddRange(items.Select(item => item.UserId));
+            if (items.Count < pageSize)
+            {
+                return result;
+            }
         }
     }
 
