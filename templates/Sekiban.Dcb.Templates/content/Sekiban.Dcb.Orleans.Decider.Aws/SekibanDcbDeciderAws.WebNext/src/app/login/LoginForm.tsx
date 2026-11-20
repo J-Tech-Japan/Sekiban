@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { trpc } from "@/lib/trpc";
+import { useAuthStatus } from "@/components/auth/use-auth-status";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,7 +14,7 @@ export default function LoginForm({ development }: { development: boolean }) {
   const [error, setError] = useState<string | null>(null);
 
   const utils = trpc.useUtils();
-  const { data: authStatus, isLoading: isStatusLoading } = trpc.auth.status.useQuery();
+  const { data: authStatus, isLoading: isStatusLoading } = useAuthStatus();
 
   const loginMutation = trpc.auth.login.useMutation({
     onSuccess: async () => {
