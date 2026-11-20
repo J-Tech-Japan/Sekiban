@@ -83,6 +83,10 @@ public class AuthDbInitializer : BackgroundService
                 else
                     await SeedInitialAdminAsync(userManager, executor);
 
+                // The API policies read the Identity role; the domain (cancel/hold override, monthly limit)
+                // reads UserAccess. Bring every Identity administrator's UserAccess roles up to date on each start.
+                await SyncAdministratorsToUserAccessAsync(userManager, executor);
+
                 _readiness.MarkInitialized();
                 _logger.LogInformation("Authentication database initialization completed successfully");
                 return;
@@ -147,6 +151,10 @@ public class AuthDbInitializer : BackgroundService
         if (tableExists)
         {
             _logger.LogInformation("Identity tables already exist");
+            // Columns added after the tables were first created
+            await context.Database.ExecuteSqlRawAsync(
+                "ALTER TABLE identity.\"RefreshTokens\" ADD COLUMN IF NOT EXISTS \"ReplacedByToken\" text NULL",
+                cancellationToken);
             return;
         }
 
@@ -309,6 +317,30 @@ public class AuthDbInitializer : BackgroundService
                 var roles = await userManager.GetRolesAsync(existingUser);
                 await EnsureUserAccessAsync(executor, existingUser, roles);
             }
+        }
+    }
+
+    /// <summary>
+    ///     Idempotently ensures that every Identity user in the Admin role has a user directory entry and
+    ///     domain UserAccess with all of its Identity roles. Failures are logged and retried on the next start.
+    /// </summary>
+    private async Task SyncAdministratorsToUserAccessAsync(UserManager<ApplicationUser> userManager, ISekibanExecutor executor)
+    {
+        IList<ApplicationUser> administrators;
+        try
+        {
+            administrators = await userManager.GetUsersInRoleAsync("Admin");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to list administrators for the UserAccess sync; it is retried on the next start");
+            return;
+        }
+
+        foreach (var administrator in administrators)
+        {
+            await EnsureUserDirectoryAsync(executor, administrator);
+            await EnsureUserAccessAsync(executor, administrator, await userManager.GetRolesAsync(administrator));
         }
     }
 

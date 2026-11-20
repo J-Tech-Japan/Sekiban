@@ -110,8 +110,10 @@ const refreshedTokensSchema = z.object({
 
 // Refresh tokens are single use. Several server requests can find the same expired access token at
 // once (auth.status, the SSE proxies, and requests sent before the browser received the new cookies),
-// so every refresh of one refresh token shares a single exchange, and its result is reused for a short
-// while. Without this, a second exchange of the already used token fails and logs the user out.
+// so every refresh of one refresh token shares a single exchange, and a successful result is reused for a
+// short while. Without this, a second exchange of the already used token fails and logs the user out.
+// This only coordinates requests inside one WebNext process; across several instances the API accepts a
+// just-rotated refresh token for a short grace period (see the API's refresh endpoint).
 const REFRESH_REUSE_MS = 60_000;
 const refreshStore = globalThis as typeof globalThis & {
   __sekibanSessionRefreshes?: Map<string, Promise<SessionTokens | null>>;
@@ -162,9 +164,20 @@ export async function refreshSessionTokens(): Promise<string | null> {
   const key = session.refreshToken;
   let pending = sessionRefreshes.get(key);
   if (!pending) {
-    pending = exchangeRefreshToken(session);
-    sessionRefreshes.set(key, pending);
-    setTimeout(() => sessionRefreshes.delete(key), REFRESH_REUSE_MS).unref?.();
+    const exchange = exchangeRefreshToken(session);
+    pending = exchange;
+    sessionRefreshes.set(key, exchange);
+    // Keep only a successful result for reuse; a failed (possibly transient) exchange is forgotten
+    // at once so the next request tries again instead of being logged out for the reuse window.
+    void exchange.then((tokens) => {
+      if (!tokens) {
+        if (sessionRefreshes.get(key) === exchange) sessionRefreshes.delete(key);
+        return;
+      }
+      setTimeout(() => {
+        if (sessionRefreshes.get(key) === exchange) sessionRefreshes.delete(key);
+      }, REFRESH_REUSE_MS).unref?.();
+    });
   }
 
   const tokens = await pending;

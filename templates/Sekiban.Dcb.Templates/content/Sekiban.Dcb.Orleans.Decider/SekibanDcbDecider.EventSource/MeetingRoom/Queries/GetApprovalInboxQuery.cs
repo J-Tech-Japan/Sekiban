@@ -77,6 +77,18 @@ public record GetApprovalInboxQuery :
                 "Rejected",
                 rejected.DecidedAt,
                 rejected.Comment),
+            // The reservation was cancelled before a decision; shown as "Cancelled" like other closed reservations
+            ApprovalRequestState.ApprovalRequestWithdrawn withdrawn => new ApprovalInboxItem(
+                withdrawn.ApprovalRequestId,
+                withdrawn.ReservationId,
+                withdrawn.RoomId,
+                withdrawn.RequesterId,
+                withdrawn.RequestComment,
+                withdrawn.ApproverIds,
+                withdrawn.RequestedAt,
+                "Cancelled",
+                withdrawn.WithdrawnAt,
+                withdrawn.Reason),
             _ => null
         })
         .Where(x => x != null)

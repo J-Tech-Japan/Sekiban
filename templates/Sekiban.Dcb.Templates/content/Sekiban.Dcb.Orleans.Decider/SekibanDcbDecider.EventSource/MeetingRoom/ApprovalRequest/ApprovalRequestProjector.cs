@@ -7,7 +7,7 @@ namespace Dcb.EventSource.MeetingRoom.ApprovalRequest;
 
 public class ApprovalRequestProjector : ITagProjector<ApprovalRequestProjector>
 {
-    public static string ProjectorVersion => "1.1.0";
+    public static string ProjectorVersion => "1.2.0";
     public static string ProjectorName => nameof(ApprovalRequestProjector);
 
     public static ITagStatePayload Project(ITagStatePayload current, Event ev)
@@ -18,6 +18,7 @@ public class ApprovalRequestProjector : ITagProjector<ApprovalRequestProjector>
         {
             ApprovalFlowStarted started => state.Evolve(started),
             ApprovalDecisionRecorded decision => state.Evolve(decision),
+            ApprovalRequestWithdrawn withdrawn => state.Evolve(withdrawn),
             _ => state
         };
     }

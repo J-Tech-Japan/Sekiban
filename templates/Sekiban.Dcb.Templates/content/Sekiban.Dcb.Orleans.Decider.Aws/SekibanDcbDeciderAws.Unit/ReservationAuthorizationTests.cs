@@ -106,6 +106,21 @@ public class ReservationAuthorizationTests
     }
 
     [Test]
+    public async Task Cancel_WhileAwaitingApproval_WithdrawsTheApprovalRequest()
+    {
+        var (reservationId, approvalRequestId) = await QuickReserveWithApprovalAsync();
+        await CancelAsync(reservationId, _organizerId);
+
+        var withdrawn = await ApprovalStateAsync(approvalRequestId) as ApprovalRequestState.ApprovalRequestWithdrawn;
+        Assert.That(withdrawn, Is.Not.Null);
+        Assert.That(withdrawn!.Reason, Is.EqualTo("No longer needed"));
+        var inboxItem = (await InboxAsync()).Single(i => i.ApprovalRequestId == approvalRequestId);
+        Assert.That(inboxItem.Status, Is.EqualTo("Cancelled"));
+        var pending = await _executor.QueryAsync(new GetApprovalInboxQuery { PendingOnly = true });
+        Assert.That(pending.Items.Select(i => i.ApprovalRequestId), Does.Not.Contain(approvalRequestId));
+    }
+
+    [Test]
     public async Task Cancel_ByAdministrator_Succeeds()
     {
         var reservationId = await QuickReserveAsync(_openRoomId);
@@ -132,8 +147,8 @@ public class ReservationAuthorizationTests
         await CancelAsync(reservationId, _organizerId);
 
         var error = Assert.ThrowsAsync<ApplicationException>(() => RejectAsync(reservationId, approvalRequestId));
-        Assert.That(error!.Message, Does.Contain("not awaiting approval"));
-        Assert.That(await ApprovalStateAsync(approvalRequestId), Is.InstanceOf<ApprovalRequestState.ApprovalRequestPending>());
+        Assert.That(error!.Message, Does.Contain("not pending"));
+        Assert.That(await ApprovalStateAsync(approvalRequestId), Is.InstanceOf<ApprovalRequestState.ApprovalRequestWithdrawn>());
         Assert.That(await ReservationStateAsync(reservationId), Is.InstanceOf<ReservationState.ReservationCancelled>());
     }
 
@@ -171,15 +186,15 @@ public class ReservationAuthorizationTests
     }
 
     [Test]
-    public async Task Decision_OnCancelledReservation_IsRejected_AndNothingIsRecorded()
+    public async Task Decision_OnCancelledReservation_IsRejected_BecauseCancelWithdrewTheRequest()
     {
         var (reservationId, approvalRequestId) = await QuickReserveWithApprovalAsync();
         await CancelAsync(reservationId, _organizerId);
 
         var error = Assert.ThrowsAsync<ApplicationException>(() =>
             DecideAsync(approvalRequestId, reservationId, ApprovalDecision.Approved));
-        Assert.That(error!.Message, Does.Contain("not awaiting approval"));
-        Assert.That(await ApprovalStateAsync(approvalRequestId), Is.InstanceOf<ApprovalRequestState.ApprovalRequestPending>());
+        Assert.That(error!.Message, Does.Contain("not pending"));
+        Assert.That(await ApprovalStateAsync(approvalRequestId), Is.InstanceOf<ApprovalRequestState.ApprovalRequestWithdrawn>());
         Assert.That(await ReservationStateAsync(reservationId), Is.InstanceOf<ReservationState.ReservationCancelled>());
     }
 

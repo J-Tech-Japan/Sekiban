@@ -43,6 +43,12 @@ public class RefreshToken
     public DateTime? RevokedAt { get; set; }
 
     /// <summary>
+    ///     The refresh token issued when this one was rotated (null when it was revoked by logout or
+    ///     never rotated). Lets a just-rotated token be accepted for a short grace period.
+    /// </summary>
+    public string? ReplacedByToken { get; set; }
+
+    /// <summary>
     ///     Check if the token is still valid
     /// </summary>
     public bool IsValid => !IsRevoked && DateTime.UtcNow < ExpiresAt;

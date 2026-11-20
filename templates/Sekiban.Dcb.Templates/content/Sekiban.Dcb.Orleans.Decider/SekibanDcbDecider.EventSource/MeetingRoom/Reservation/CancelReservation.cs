@@ -1,4 +1,7 @@
+using Dcb.EventSource.MeetingRoom.ApprovalRequest;
+using Dcb.MeetingRoomModels.Events.ApprovalRequest;
 using Dcb.MeetingRoomModels.Events.Reservation;
+using Dcb.MeetingRoomModels.States.ApprovalRequest;
 using Dcb.MeetingRoomModels.States.Reservation;
 using Dcb.MeetingRoomModels.Tags;
 using Sekiban.Dcb.Commands;
@@ -54,12 +57,29 @@ public record CancelReservation : ICommandWithHandler<CancelReservation>
             throw new UnauthorizedAccessException("Only the organizer or an administrator can cancel this reservation.");
         }
 
-        return new ReservationCancelled(
+        var cancelled = new ReservationCancelled(
             command.ReservationId,
             roomId,
             startTime,
             endTime,
             command.Reason,
             DateTime.UtcNow).GetEventWithTags();
+
+        // A held reservation that is still waiting for approval also closes its approval request,
+        // in the same command, so the request does not stay pending.
+        if (state is ReservationState.ReservationHeld { RequiresApproval: true, ApprovalRequestId: { } approvalRequestId })
+        {
+            var approvalState = await context.GetStateAsync<ApprovalRequestProjector>(new ApprovalRequestTag(approvalRequestId));
+            if (approvalState.Payload is ApprovalRequestState.ApprovalRequestPending)
+            {
+                await context.AppendEvent(new ApprovalRequestWithdrawn(
+                    approvalRequestId,
+                    command.ReservationId,
+                    command.Reason,
+                    DateTime.UtcNow).GetEventWithTags());
+            }
+        }
+
+        return await context.AppendEvent(cancelled);
     }
 }
