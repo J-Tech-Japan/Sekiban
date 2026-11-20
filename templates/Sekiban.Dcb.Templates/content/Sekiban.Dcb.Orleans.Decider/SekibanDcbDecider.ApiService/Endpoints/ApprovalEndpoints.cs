@@ -189,7 +189,7 @@ public static class ApprovalEndpoints
             ApproverId = approverId,
             Decision = request.Decision,
             Comment = request.Comment
-        });
+        }, CancellationToken.None);
 
         return Results.Ok(new
         {

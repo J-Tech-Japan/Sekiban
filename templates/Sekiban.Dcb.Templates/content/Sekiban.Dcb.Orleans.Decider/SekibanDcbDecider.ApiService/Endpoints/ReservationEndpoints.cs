@@ -101,7 +101,7 @@ public static class ReservationEndpoints
 
         var organizer = organizerResult.Organizer!.Value;
         var updatedCommand = ActingUserCommands.ForActingUser(command, organizer);
-        var result = await executor.ExecuteAsync(updatedCommand);
+        var result = await executor.ExecuteAsync(updatedCommand, CancellationToken.None);
         var createdEvent = result.Events.FirstOrDefault(m => m.Payload is ReservationDraftCreated)?.Payload.As<ReservationDraftCreated>();
         return Results.Ok(new
         {
@@ -138,7 +138,7 @@ public static class ReservationEndpoints
             ApprovalRequestId = request.ApprovalRequestId,
             ApprovalRequestComment = request.ApprovalRequestComment
         };
-        var result = await executor.ExecuteAsync(command);
+        var result = await executor.ExecuteAsync(command, CancellationToken.None);
         return Results.Ok(new
         {
             success = true,
@@ -158,7 +158,7 @@ public static class ReservationEndpoints
             ReservationId = reservationId,
             RoomId = request.RoomId
         };
-        var result = await executor.ExecuteAsync(command);
+        var result = await executor.ExecuteAsync(command, CancellationToken.None);
         return Results.Ok(new
         {
             success = true,
@@ -190,7 +190,7 @@ public static class ReservationEndpoints
             RequestedByUserId = requesterResult.Organizer!.Value.OrganizerId,
             ActingUserIsAdmin = requesterResult.Organizer!.Value.IsAdmin
         };
-        var result = await executor.ExecuteAsync(command);
+        var result = await executor.ExecuteAsync(command, CancellationToken.None);
         return Results.Ok(new
         {
             success = true,
@@ -223,7 +223,7 @@ public static class ReservationEndpoints
             ApprovalRequestId = request.ApprovalRequestId,
             Reason = request.Reason
         };
-        var result = await executor.ExecuteAsync(command);
+        var result = await executor.ExecuteAsync(command, CancellationToken.None);
         return Results.Ok(new
         {
             success = true,

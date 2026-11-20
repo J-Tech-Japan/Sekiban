@@ -7,9 +7,10 @@ FROM node:22-alpine AS builder
 
 WORKDIR /app
 
-# Install dependencies
+# Install the exact dependency versions from package-lock.json. The lockfile is created by the first
+# `npm install` (the AppHost runs it when WebNext starts); commit it before building this image.
 COPY SekibanDcbDeciderAws.WebNext/package*.json ./
-RUN npm install
+RUN npm ci
 
 # Copy source and build
 COPY SekibanDcbDeciderAws.WebNext/ ./
