@@ -320,7 +320,8 @@ builder.Services.AddSekibanDcbDynamoDbWithAspire();
 builder.Services.AddSingleton<IMultiProjectionStateStore, DynamoMultiProjectionStateStore>();
 builder.Services.AddSekibanDcbS3BlobStorage(builder.Configuration);
 // LocalStack starts without the snapshot bucket; create it in local development (never against real AWS).
-if (builder.Environment.IsDevelopment() && !string.IsNullOrWhiteSpace(builder.Configuration["S3BlobStorage:ServiceUrl"]))
+if (builder.Environment.IsDevelopment() &&
+    LocalS3BucketInitializer.IsLocalEndpoint(builder.Configuration["S3BlobStorage:ServiceUrl"]))
 {
     builder.Services.AddHostedService<LocalS3BucketInitializer>();
 }

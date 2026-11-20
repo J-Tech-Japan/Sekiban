@@ -9,8 +9,9 @@ namespace SekibanDcbOrleansAws.ApiService;
 /// <summary>
 ///     Local development only: LocalStack starts without the snapshot bucket (in AWS the CDK stack creates it),
 ///     so snapshot offload would fail with "bucket does not exist". This creates the configured
-///     <c>S3BlobStorage:BucketName</c> once S3 answers. Registered only in Development with
-///     <c>S3BlobStorage:ServiceUrl</c> set, so it never creates buckets in a real AWS account.
+///     <c>S3BlobStorage:BucketName</c> once S3 answers. Registered only in Development when
+///     <c>S3BlobStorage:ServiceUrl</c> is a local emulator endpoint (<see cref="IsLocalEndpoint" />), so it never
+///     creates buckets in a real AWS account.
 /// </summary>
 public sealed class LocalS3BucketInitializer(
     IAmazonS3 s3,
@@ -18,6 +19,24 @@ public sealed class LocalS3BucketInitializer(
     ILogger<LocalS3BucketInitializer> logger) : BackgroundService
 {
     private const int MaxAttempts = 30;
+
+    /// <summary>
+    ///     True only for an emulator endpoint on this machine or in the local container network
+    ///     (localhost, a loopback address, *.localhost, localstack, host.docker.internal).
+    ///     Any other URL, including real AWS endpoints, is never used to create buckets.
+    /// </summary>
+    public static bool IsLocalEndpoint(string? serviceUrl)
+    {
+        if (string.IsNullOrWhiteSpace(serviceUrl) || !Uri.TryCreate(serviceUrl, UriKind.Absolute, out var uri))
+        {
+            return false;
+        }
+
+        var host = uri.Host.Trim('[', ']').ToLowerInvariant();
+        return host is "localhost" or "localstack" or "host.docker.internal"
+            || host.EndsWith(".localhost", StringComparison.Ordinal)
+            || (System.Net.IPAddress.TryParse(host, out var address) && System.Net.IPAddress.IsLoopback(address));
+    }
     private static readonly TimeSpan RetryDelay = TimeSpan.FromSeconds(2);
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)

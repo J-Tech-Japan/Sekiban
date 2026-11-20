@@ -82,7 +82,10 @@ export default function WeatherPage() {
 
   const updateLocationMutation = trpc.weather.updateLocation.useMutation({
     onSuccess: (data) => {
-      setLastSortableUniqueId(data.sortableUniqueId);
+      // An unchanged name writes no event and returns a null sortableUniqueId: keep the last one.
+      if (data.sortableUniqueId) {
+        setLastSortableUniqueId(data.sortableUniqueId);
+      }
       refetch();
       setIsEditModalOpen(false);
     },
