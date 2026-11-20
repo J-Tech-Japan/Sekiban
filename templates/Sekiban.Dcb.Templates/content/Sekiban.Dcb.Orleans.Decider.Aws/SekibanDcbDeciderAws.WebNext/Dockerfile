@@ -9,7 +9,7 @@ WORKDIR /app
 
 # Install dependencies
 COPY SekibanDcbDeciderAws.WebNext/package*.json ./
-RUN npm ci
+RUN npm install
 
 # Copy source and build
 COPY SekibanDcbDeciderAws.WebNext/ ./
