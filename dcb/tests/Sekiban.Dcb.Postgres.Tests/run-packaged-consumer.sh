@@ -201,7 +201,7 @@ for package_name in Sekiban.Dcb.Core.Model Sekiban.Dcb.Core Sekiban.Dcb.Postgres
   assert_package "$feed/$package_name.$version.nupkg"
 done
 postgres_package="$feed/Sekiban.Dcb.Postgres.$version.nupkg"
-assert_nuspec_dependency "$postgres_package" '11.0' '11.0.0-rc.3.26522.148'
+assert_nuspec_dependency "$postgres_package" '11.0' '11.0.0'
 assert_nuspec_dependency "$postgres_package" '10.0' '10.0.15'
 if unzip -p "$postgres_package" '*.nuspec' | grep -q 'Microsoft.EntityFrameworkCore.Design'; then
   echo 'EF Core Design leaked into the Sekiban.Dcb.Postgres nuspec.' >&2
@@ -211,7 +211,7 @@ if unzip -p "$postgres_package" '*.nuspec' | grep -q 'targetFramework="net9.0"';
   echo 'Unexpected net9.0 dependency group.' >&2
   exit 1
 fi
-echo "nuspec: Relational 10.0.15 on net10.0 and 11.0.0-rc.3.26522.148 on net11.0 present; EF Core Design absent"
+echo "nuspec: Relational 10.0.15 on net10.0 and 11.0.0 on net11.0 present; EF Core Design absent"
 
 consumer_project="$repo_root/dcb/tests/Sekiban.Dcb.Postgres.PackagedConsumer/Sekiban.Dcb.Postgres.PackagedConsumer.csproj"
 
@@ -221,11 +221,11 @@ run_consumer() {
   local config="$3"
   local cache="$4"
   local tfm="$5"
-  # Npgsql 11 rc.3 pins Relational exactly (the same rc.3 as the direct reference), so a
-  # missing direct reference stays masked at runtime. Check the direct closure as
+  # Npgsql.EntityFrameworkCore.PostgreSQL 11 brings Relational 11.0.0 transitively (the same
+  # version as the direct reference), so a missing direct reference stays masked at runtime. Check the direct closure as
   # well; the net10 mutant still exercises the assembly failure.
   if [[ "$label" == mutant && "$tfm" == net11.0 ]]; then
-    (assert_nuspec_dependency "$mutant_feed/Sekiban.Dcb.Postgres.$package_version.nupkg" '11.0' '11.0.0-rc.3.26522.148') || return 1
+    (assert_nuspec_dependency "$mutant_feed/Sekiban.Dcb.Postgres.$package_version.nupkg" '11.0' '11.0.0') || return 1
   fi
   local output_root="$temp_root/consumer-$label-$tfm"
   local output="$output_root/Release/$tfm/Sekiban.Dcb.Postgres.PackagedConsumer.dll"
@@ -281,7 +281,7 @@ for project_root in \
 done
 mutant_project="$mutant_root/dcb/src/Sekiban.Dcb.Postgres/Sekiban.Dcb.Postgres.csproj"
 before_mutant_refs="$(grep -c 'Microsoft.EntityFrameworkCore.Relational' "$mutant_project")"
-perl -0pi -e 's/^\s*<PackageReference Include="Microsoft\.EntityFrameworkCore\.Relational" Version="(?:10\.0\.15|11\.0\.0-rc\.3\.26522\.148)"\/>\s*\n//mg' "$mutant_project"
+perl -0pi -e 's/^\s*<PackageReference Include="Microsoft\.EntityFrameworkCore\.Relational" Version="(?:10\.0\.15|11\.0\.0)"\/>\s*\n//mg' "$mutant_project"
 after_mutant_refs="$(grep -c 'Microsoft.EntityFrameworkCore.Relational' "$mutant_project" || true)"
 if [[ "$before_mutant_refs" != 2 || "$after_mutant_refs" != 0 ]]; then
   echo "Omission mutant removed an unexpected number of Relational references: before=$before_mutant_refs after=$after_mutant_refs" >&2
