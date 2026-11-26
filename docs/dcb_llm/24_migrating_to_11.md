@@ -41,9 +41,8 @@ Event data, tag data, snapshots and persisted Orleans grain state did not change
 ## Rebuild and dependencies
 
 - **Targets.** The 11 packages target `net10.0` and `net11.0`. On `net10.0` the dependencies are the same versions as
-  10.25.0. On `net11.0`, `Microsoft.Extensions.*` and `Microsoft.Data.Sqlite` are `11.0.0`, and `Sekiban.Dcb.Postgres`
-  uses `Npgsql.EntityFrameworkCore.PostgreSQL` `11.0.0-rc.3` with Entity Framework Core `11.0.0-rc.3.26522.148`.
-  `Microsoft.Orleans.*` is 10.4.2 on both.
+  10.25.0. On `net11.0`, `Microsoft.Extensions.*`, `Microsoft.Data.Sqlite`, Entity Framework Core, `Npgsql` and
+  `Npgsql.EntityFrameworkCore.PostgreSQL` are `11.0.0` (all GA). `Microsoft.Orleans.*` is 10.4.2 on both.
 - **Rebuild everything.** Assemblies compiled against 10.x are not binary compatible with 11. Rebuild every project that
   references a `Sekiban.Dcb.*` package. For example, `EventOrNone.None`, `EventOrNone.Event(...)` and
   `EventOrNone.EventWithTags(...)` moved from `EventOrNone` to C# extension members in `Sekiban.Dcb.WithResult.Model`

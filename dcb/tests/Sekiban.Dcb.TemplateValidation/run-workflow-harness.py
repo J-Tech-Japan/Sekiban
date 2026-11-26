@@ -258,7 +258,7 @@ class Fixture:
         groups=''
         for framework, relational in [('net10.0','10.0.15'),('net11.0','11.0.0')]:
             deps=[]
-            if id=='Sekiban.Dcb.Postgres': deps=[('Microsoft.EntityFrameworkCore.Relational','10.0.15' if framework=='net10.0' else '11.0.0-rc.3.26522.148')]
+            if id=='Sekiban.Dcb.Postgres': deps=[('Microsoft.EntityFrameworkCore.Relational',relational)]
             if id=='Sekiban.Dcb.Core': deps=[('Microsoft.Extensions.Logging.Abstractions',relational)]
             if id=='Sekiban.Dcb.Sqlite': deps=[('Microsoft.Data.Sqlite',relational)]
             if id=='Sekiban.Dcb.Orleans.AzureQueue': deps=[('Azure.Storage.Queues','12.25.0'),('Microsoft.Orleans.Streaming.AzureStorage','10.4.2')]
@@ -795,8 +795,8 @@ def package_group_cases(source, root):
               b'</dependencies>', b'<group targetFramework="net9.0" /></dependencies>'),
              ('Sekiban.Dcb.Core', 'wrong-net11-version', 'Microsoft.Extensions.Logging.Abstractions in net11.0 must be 11.0.0.',
               b'version="11.0.0"', b'version="10.0.15"'),
-             ('Sekiban.Dcb.Postgres', 'postgres-ga-ef-core-on-net11', 'Microsoft.EntityFrameworkCore.Relational in net11.0 must be 11.0.0-rc.3.26522.148.',
-              b'version="11.0.0-rc.3.26522.148"', b'version="11.0.0"'),
+             ('Sekiban.Dcb.Postgres', 'postgres-rc-ef-core-on-net11', 'Microsoft.EntityFrameworkCore.Relational in net11.0 must be 11.0.0.',
+              b'version="11.0.0"', b'version="11.0.0-rc.3.26522.148"'),
              ('Sekiban.Dcb.Core', 'rc-outside-postgres', 'Microsoft.Extensions.Logging.Abstractions in net11.0 must be 11.0.0.',
               b'version="11.0.0"', b'version="11.0.0-rc.3.26522.148"')]
     for package_id, case, reason, before, after in cases:

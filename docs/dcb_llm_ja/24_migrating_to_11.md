@@ -41,9 +41,9 @@ Orleans.Core、MaterializedView、WithoutResult 系のパッケージは例外�
 ## 再ビルドと依存関係
 
 - **対象フレームワーク。** 11 系のパッケージは `net10.0` と `net11.0` を対象とします。`net10.0` の依存バージョンは
-  10.25.0 と同じです。`net11.0` では `Microsoft.Extensions.*` と `Microsoft.Data.Sqlite` が `11.0.0` で、
-  `Sekiban.Dcb.Postgres` は `Npgsql.EntityFrameworkCore.PostgreSQL` `11.0.0-rc.3` と Entity Framework Core
-  `11.0.0-rc.3.26522.148` を使います。`Microsoft.Orleans.*` はどちらも 10.4.2 です。
+  10.25.0 と同じです。`net11.0` では `Microsoft.Extensions.*`、`Microsoft.Data.Sqlite`、Entity Framework Core、
+  `Npgsql`、`Npgsql.EntityFrameworkCore.PostgreSQL` が `11.0.0`（すべて正式版）です。`Microsoft.Orleans.*` は
+  どちらも 10.4.2 です。
 - **すべて再ビルドしてください。** 10.x に対してコンパイルしたアセンブリは 11 とバイナリ互換ではありません。
   `Sekiban.Dcb.*` を参照するプロジェクトはすべて再ビルドが必要です。たとえば `EventOrNone.None`・
   `EventOrNone.Event(...)`・`EventOrNone.EventWithTags(...)` は `EventOrNone` 本体から `Sekiban.Dcb.WithResult.Model`
