@@ -262,7 +262,7 @@ class Fixture:
             if id=='Sekiban.Dcb.Core': deps=[('Microsoft.Extensions.Logging.Abstractions',relational)]
             if id=='Sekiban.Dcb.Sqlite': deps=[('Microsoft.Data.Sqlite',relational)]
             if id=='Sekiban.Dcb.Orleans.AzureQueue': deps=[('Azure.Storage.Queues','12.25.0'),('Microsoft.Orleans.Streaming.AzureStorage','10.4.2')]
-            if id in self.resultboxes: deps=deps+[('ResultBoxes','0.4.0')]
+            if id in self.resultboxes: deps=deps+[('ResultBoxes','0.4.1')]
             groups+=f'<group targetFramework="{framework}">'+''.join(f'<dependency id="{n}" version="{v}" />' for n,v in deps)+'</group>'
         with zipfile.ZipFile(path,'w') as archive:
             archive.writestr(f'{id}.nuspec',f'<package><metadata><id>{id}</id><version>{version}</version><dependencies>{groups}</dependencies></metadata></package>')
@@ -846,7 +846,7 @@ def resultboxes_ratchet_cases(f, feed, command):
     outside = 'Sekiban.Dcb.WithoutResult'
     outside_transitive = 'Sekiban.Dcb.Orleans.WithoutResult'
     assert outside not in f.resultboxes and outside_transitive not in f.resultboxes
-    direct = b'<dependency id="ResultBoxes" version="0.4.0" />'
+    direct = b'<dependency id="ResultBoxes" version="0.4.1" />'
     path = feed/f'{target}.{f.version}.nupkg'
     original = path.read_bytes()
     # The validator only lets the harness narrow the compiled list, so a narrowed list stands in for
@@ -863,7 +863,7 @@ def resultboxes_ratchet_cases(f, feed, command):
         rejected('resultboxes-transitive-outside-allowed-set', f'{target} reaches ResultBoxes in net10.0 ({target} -> {via} -> ResultBoxes) but is outside the ResultBoxes allowed set', narrowed)
         # NuGet IDs are case-insensitive; a nuspec keeps the csproj's spelling.
         path.write_bytes(original)
-        rewrite(target, direct, b'<dependency id="resultboxes" version="0.4.0" />')
+        rewrite(target, direct, b'<dependency id="resultboxes" version="0.4.1" />')
         rejected('resultboxes-lowercase-direct-outside-allowed-set', f'{target} reaches ResultBoxes in net10.0 ({target} -> resultboxes) but is outside the ResultBoxes allowed set', narrowed)
         path.write_bytes(original)
         rewrite(target, direct, f'<dependency id="{via.lower()}" version="{f.version}" />'.encode())

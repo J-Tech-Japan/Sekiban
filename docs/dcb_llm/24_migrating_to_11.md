@@ -52,7 +52,7 @@ Event data, tag data, snapshots and persisted Orleans grain state did not change
   `ResultBox` types itself (for example in a domain project), reference the package directly:
 
   ```xml
-  <PackageReference Include="ResultBoxes" Version="0.4.0" />
+  <PackageReference Include="ResultBoxes" Version="0.4.1" />
   ```
 
   The WithoutResult and Decider DCB templates do not use `ResultBox` and no longer reference `ResultBoxes`.

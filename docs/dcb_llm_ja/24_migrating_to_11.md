@@ -53,7 +53,7 @@ Orleans.Core、MaterializedView、WithoutResult 系のパッケージは例外�
   プロジェクトなど）が `ResultBox` の型を使っているなら、パッケージを直接参照してください。
 
   ```xml
-  <PackageReference Include="ResultBoxes" Version="0.4.0" />
+  <PackageReference Include="ResultBoxes" Version="0.4.1" />
   ```
 
   DCB の WithoutResult と Decider のテンプレートは `ResultBox` を使っておらず、`ResultBoxes` も参照していません。
