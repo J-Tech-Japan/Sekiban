@@ -41,8 +41,11 @@ Event data, tag data, snapshots and persisted Orleans grain state did not change
 ## Rebuild and dependencies
 
 - **Targets.** The 11 packages target `net10.0` and `net11.0`. On `net10.0` the dependencies are the same versions as
-  10.25.0. On `net11.0`, `Microsoft.Extensions.*`, `Microsoft.Data.Sqlite`, Entity Framework Core, `Npgsql` and
-  `Npgsql.EntityFrameworkCore.PostgreSQL` are `11.0.0` (all GA). `Microsoft.Orleans.*` is 10.4.2 on both.
+  10.25.0, except `ResultBoxes` (see below). On `net11.0`, `Microsoft.Extensions.*`, `Microsoft.Data.Sqlite`, Entity
+  Framework Core, `Npgsql` and `Npgsql.EntityFrameworkCore.PostgreSQL` are `11.0.0` (all GA). If a `net11.0` project
+  references `Microsoft.Data.Sqlite`, Entity Framework Core, `Npgsql` or `Npgsql.EntityFrameworkCore.PostgreSQL`
+  directly at 10.x, update it to 11.0.0 or later; otherwise NuGet reports a package downgrade (NU1605).
+  `Microsoft.Orleans.*` is 10.4.2 on both.
 - **Rebuild everything.** Assemblies compiled against 10.x are not binary compatible with 11. Rebuild every project that
   references a `Sekiban.Dcb.*` package. For example, `EventOrNone.None`, `EventOrNone.Event(...)` and
   `EventOrNone.EventWithTags(...)` moved from `EventOrNone` to C# extension members in `Sekiban.Dcb.WithResult.Model`
@@ -52,10 +55,13 @@ Event data, tag data, snapshots and persisted Orleans grain state did not change
   `ResultBox` types itself (for example in a domain project), reference the package directly:
 
   ```xml
-  <PackageReference Include="ResultBoxes" Version="0.4.0" />
+  <PackageReference Include="ResultBoxes" Version="0.4.1" />
   ```
 
   The WithoutResult and Decider DCB templates do not use `ResultBox` and no longer reference `ResultBoxes`.
+- **`ResultBoxes` 0.4.1.** The WithResult packages depend on `ResultBoxes` 0.4.1 (10.25.x used 0.4.0; 0.4.1 adds a
+  net11.0 build and has the same API). If your project references `ResultBoxes` 0.4.0 directly, as projects made from
+  the 10.x Orleans template do, update it to 0.4.1; otherwise NuGet reports a package downgrade (NU1605).
 
 ## WithResult users
 
