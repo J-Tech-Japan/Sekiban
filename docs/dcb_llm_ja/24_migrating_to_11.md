@@ -43,8 +43,9 @@ Orleans.Core、MaterializedView、WithoutResult 系のパッケージは例外�
 - **対象フレームワーク。** 11 系のパッケージは `net10.0` と `net11.0` を対象とします。`net10.0` の依存バージョンは
   `ResultBoxes`（後述）を除いて 10.25.0 と同じです。`net11.0` では `Microsoft.Extensions.*`、`Microsoft.Data.Sqlite`、
   Entity Framework Core、`Npgsql`、`Npgsql.EntityFrameworkCore.PostgreSQL` が `11.0.0`（すべて正式版）です。
-  `Microsoft.Orleans.*` はどちらも 10.4.2 です。`net11.0` のプロジェクトでこれらを 10.x のまま直接参照している場合は
-  11.0.0 以降に上げてください。そのままだと NuGet がパッケージのダウングレード（NU1605）を報告します。
+  `net11.0` のプロジェクトで `Microsoft.Data.Sqlite`、Entity Framework Core、`Npgsql`、
+  `Npgsql.EntityFrameworkCore.PostgreSQL` を 10.x のまま直接参照している場合は 11.0.0 以降に上げてください。
+  そのままだと NuGet がパッケージのダウングレード（NU1605）を報告します。`Microsoft.Orleans.*` はどちらも 10.4.2 です。
 - **すべて再ビルドしてください。** 10.x に対してコンパイルしたアセンブリは 11 とバイナリ互換ではありません。
   `Sekiban.Dcb.*` を参照するプロジェクトはすべて再ビルドが必要です。たとえば `EventOrNone.None`・
   `EventOrNone.Event(...)`・`EventOrNone.EventWithTags(...)` は `EventOrNone` 本体から `Sekiban.Dcb.WithResult.Model`
