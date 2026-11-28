@@ -41,7 +41,7 @@ Orleans.Core、MaterializedView、WithoutResult 系のパッケージは例外�
 ## 再ビルドと依存関係
 
 - **対象フレームワーク。** 11 系のパッケージは `net10.0` と `net11.0` を対象とします。`net10.0` の依存バージョンは
-  10.25.0 と同じです。`net11.0` では `Microsoft.Extensions.*`、`Microsoft.Data.Sqlite`、Entity Framework Core、
+  `ResultBoxes`（後述）を除いて 10.25.0 と同じです。`net11.0` では `Microsoft.Extensions.*`、`Microsoft.Data.Sqlite`、Entity Framework Core、
   `Npgsql`、`Npgsql.EntityFrameworkCore.PostgreSQL` が `11.0.0`（すべて正式版）です。`Microsoft.Orleans.*` は
   どちらも 10.4.2 です。
 - **すべて再ビルドしてください。** 10.x に対してコンパイルしたアセンブリは 11 とバイナリ互換ではありません。
@@ -57,6 +57,10 @@ Orleans.Core、MaterializedView、WithoutResult 系のパッケージは例外�
   ```
 
   DCB の WithoutResult と Decider のテンプレートは `ResultBox` を使っておらず、`ResultBoxes` も参照していません。
+- **`ResultBoxes` 0.4.1。** WithResult のパッケージは `ResultBoxes` 0.4.1 に依存します（10.25.x は 0.4.0 でした。
+  0.4.1 は net11.0 向けのビルドを追加したもので、API は同じです）。10.x の Orleans テンプレートで作ったプロジェクトのように
+  `ResultBoxes` 0.4.0 を直接参照している場合は、0.4.1 に上げてください。そのままだと NuGet がパッケージのダウングレード
+  （NU1605）を報告します。
 
 ## WithResult を使っている場合
 

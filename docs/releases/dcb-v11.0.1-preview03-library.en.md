@@ -6,8 +6,8 @@
 
 ## Dependencies
 
-- **net11.0, PostgreSQL.** `Sekiban.Dcb.Postgres` references Entity Framework Core and `Microsoft.EntityFrameworkCore.Relational` `11.0.0` and `Npgsql.EntityFrameworkCore.PostgreSQL` `11.0.0` (preview01 and preview02 used the `11.0.0-rc.3` release candidates). `Sekiban.Dcb.MaterializedView.Postgres` references `Npgsql` `11.0.0`. These EF Core and Npgsql EF Core 11.0.0 packages ship only a net11.0 build, so net10.0 keeps its 10.x versions.
-- **net10.0** keeps the same dependency versions as DCB 10.25.x.
+- **net11.0, PostgreSQL.** `Sekiban.Dcb.Postgres` references Entity Framework Core and `Microsoft.EntityFrameworkCore.Relational` `11.0.0` and `Npgsql.EntityFrameworkCore.PostgreSQL` `11.0.0` (preview01 and preview02 used the `11.0.0-rc.3` release candidates). `Sekiban.Dcb.MaterializedView.Postgres` references `Npgsql` `11.0.0` (preview01 and preview02 used 10.0.3 on net11.0). These EF Core and Npgsql EF Core 11.0.0 packages ship only a net11.0 build, so net10.0 keeps its 10.x versions.
+- **net10.0** keeps the same dependency versions as DCB 10.25.x, except `ResultBoxes` (0.4.1 instead of 0.4.0, below).
 - **ResultBoxes 0.4.1.** The four WithResult packages (`Sekiban.Dcb.WithResult`, `Sekiban.Dcb.WithResult.Model`, `Sekiban.Dcb.Orleans.WithResult`, `Sekiban.Dcb.WithResult.Testing`) now depend on `ResultBoxes` `0.4.1` instead of 0.4.0. 0.4.1 adds a net11.0 build; its API is the same as 0.4.0. Other DCB packages still do not depend on `ResultBoxes`.
 - `Microsoft.Orleans` stays at 10.4.2 on both target frameworks.
 
@@ -15,7 +15,7 @@
 
 - No API change and no data migration: update the package versions.
 - If your project references `ResultBoxes` 0.4.0 directly together with a WithResult package, update that reference to 0.4.1. Otherwise NuGet reports a package downgrade (NU1605).
-- On net11.0 with PostgreSQL, your own references to Entity Framework Core or Npgsql EF Core must be 11.0.0 or later.
+- On net11.0 with PostgreSQL, your own references to Entity Framework Core, Npgsql EF Core or `Npgsql` must be 11.0.0 or later. Otherwise NuGet reports a package downgrade (NU1605).
 
 ## Templates
 
